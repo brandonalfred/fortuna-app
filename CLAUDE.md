@@ -68,7 +68,7 @@ Same as `/pr` but creates a draft PR (`gh pr create --draft`).
 The app uses the Claude Agent SDK to provide AI-powered sports betting analysis.
 
 **Key files:**
-- `src/lib/agent/client.ts` - Agent SDK wrapper with streaming, uses `claude-sonnet-4-5-20250929` model
+- `src/lib/agent/client.ts` - Agent SDK wrapper with streaming, uses `claude-opus-4-5-20251101` model
 - `src/lib/agent/workspace.ts` - Per-session workspace management
 - `src/app/api/chat/route.ts` - SSE streaming endpoint
 - `src/hooks/use-chat.ts` - React hook for SSE streaming and message state
