@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Message, ToolUse } from "@/lib/types";
-import { MessageItem } from "./message-item";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ContentSegment, Message } from "@/lib/types";
+import { MessageItem, StreamingMessageItem } from "./message-item";
 
-interface StreamingMessage {
-	content: string;
-	toolUses: ToolUse[];
+export interface StreamingMessage {
+	segments: ContentSegment[];
 	isStreaming: boolean;
 }
 
@@ -18,12 +16,37 @@ interface MessageListProps {
 
 export function MessageList({ messages, streamingMessage }: MessageListProps) {
 	const bottomRef = useRef<HTMLDivElement>(null);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const [isNearBottom, setIsNearBottom] = useState(true);
 	const messagesLength = messages.length;
-	const streamingContent = streamingMessage?.content;
+
+	const userScrollingRef = useRef(false);
+	const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const handleScroll = useCallback(() => {
+		const container = scrollContainerRef.current;
+		if (!container) return;
+
+		userScrollingRef.current = true;
+
+		const threshold = 100;
+		const distanceFromBottom =
+			container.scrollHeight - container.scrollTop - container.clientHeight;
+		setIsNearBottom(distanceFromBottom < threshold);
+
+		if (scrollTimeoutRef.current) {
+			clearTimeout(scrollTimeoutRef.current);
+		}
+		scrollTimeoutRef.current = setTimeout(() => {
+			userScrollingRef.current = false;
+		}, 150);
+	}, []);
 
 	useEffect(() => {
-		bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [messagesLength, streamingContent]);
+		if (isNearBottom && !userScrollingRef.current) {
+			bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+		}
+	}, [messagesLength, isNearBottom]);
 
 	if (messages.length === 0 && !streamingMessage) {
 		return (
@@ -40,26 +63,21 @@ export function MessageList({ messages, streamingMessage }: MessageListProps) {
 	}
 
 	return (
-		<ScrollArea className="h-full">
-			<div className="flex flex-col gap-4 p-4 pb-32">
-				{messages.map((message) => (
-					<MessageItem key={message.id} message={message} />
-				))}
-				{streamingMessage?.isStreaming && (
-					<MessageItem
-						message={{
-							id: "streaming",
-							chatId: "",
-							role: "assistant",
-							content: streamingMessage.content,
-							toolInput: streamingMessage.toolUses,
-							createdAt: new Date().toISOString(),
-						}}
-						isStreaming
-					/>
-				)}
-				<div ref={bottomRef} />
-			</div>
-		</ScrollArea>
+		<div
+			ref={scrollContainerRef}
+			onScroll={handleScroll}
+			className="flex flex-col gap-4 p-4 pb-32 h-full overflow-y-auto"
+		>
+			{messages.map((message) => (
+				<MessageItem key={message.id} message={message} />
+			))}
+			{streamingMessage?.isStreaming && (
+				<StreamingMessageItem
+					segments={streamingMessage.segments}
+					isStreaming
+				/>
+			)}
+			<div ref={bottomRef} />
+		</div>
 	);
 }

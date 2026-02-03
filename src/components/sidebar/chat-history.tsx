@@ -90,26 +90,30 @@ export function ChatHistory({
 					) : (
 						<div className="space-y-1">
 							{chats.map((chat) => (
-								<button
+								<div
 									key={chat.id}
-									type="button"
-									onClick={() => onSelectChat(chat.id)}
 									className={cn(
-										"group flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors",
+										"group flex w-full items-center justify-between rounded-md text-sm transition-colors",
 										currentChatId === chat.id
 											? "bg-bg-tertiary border-l-2 border-accent-primary text-text-primary"
 											: "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
 									)}
 								>
-									<span className="truncate">{chat.title}</span>
+									<button
+										type="button"
+										onClick={() => onSelectChat(chat.id)}
+										className="flex-1 cursor-pointer truncate px-3 py-2 text-left"
+									>
+										{chat.title}
+									</button>
 									<button
 										type="button"
 										onClick={(e) => handleDelete(e, chat.id)}
-										className="ml-2 hidden h-6 w-6 items-center justify-center rounded text-text-tertiary hover:bg-error-subtle hover:text-error group-hover:flex"
+										className="mr-2 hidden h-6 w-6 items-center justify-center rounded text-text-tertiary hover:bg-error-subtle hover:text-error group-hover:flex"
 									>
 										<Trash2 className="h-3.5 w-3.5" />
 									</button>
-								</button>
+								</div>
 							))}
 						</div>
 					)}
