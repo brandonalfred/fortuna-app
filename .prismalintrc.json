@@ -1,0 +1,6 @@
+{
+  "rules": {
+    "field-name-mapping-snake-case": "error",
+    "model-name-mapping-snake-case": "error"
+  }
+}
