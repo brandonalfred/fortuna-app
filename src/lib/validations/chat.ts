@@ -2,8 +2,8 @@ import { z } from "zod";
 
 export const sendMessageSchema = z.object({
 	message: z.string().min(1).max(10000),
-	chatId: z.string().uuid().optional(),
-	sessionId: z.string().optional(),
+	chatId: z.string().uuid().nullish(),
+	sessionId: z.string().nullish(),
 });
 
 export const createChatSchema = z.object({

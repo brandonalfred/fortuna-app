@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { streamAgentResponse } from "@/lib/agent/client";
+import {
+	extractThinkingFromMessage,
+	streamAgentResponse,
+} from "@/lib/agent/client";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import { prisma } from "@/lib/prisma";
 import { sendMessageSchema } from "@/lib/validations/chat";
@@ -8,152 +11,196 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-	const body = await req.json();
-	const parsed = sendMessageSchema.safeParse(body);
+	try {
+		const body = await req.json();
+		const parsed = sendMessageSchema.safeParse(body);
 
-	if (!parsed.success) {
-		return Response.json(
-			{ error: "Invalid request", details: parsed.error.flatten() },
-			{ status: 400 },
-		);
-	}
+		if (!parsed.success) {
+			return Response.json(
+				{ error: "Invalid request", details: parsed.error.flatten() },
+				{ status: 400 },
+			);
+		}
 
-	const { message, chatId, sessionId: existingSessionId } = parsed.data;
+		const { message, chatId } = parsed.data;
 
-	const sessionId = existingSessionId || randomUUID();
-	const workspacePath = await getOrCreateWorkspace(sessionId);
+		// Fetch existing chat if chatId provided
+		const existingChat = chatId
+			? await prisma.chat.findUnique({ where: { id: chatId } })
+			: null;
 
-	let chat = chatId
-		? await prisma.chat.findUnique({ where: { id: chatId } })
-		: null;
+		// Fetch conversation history separately
+		const existingMessages = existingChat
+			? await prisma.message.findMany({
+					where: { chatId: existingChat.id },
+					orderBy: { createdAt: "asc" },
+				})
+			: [];
 
-	if (!chat) {
-		chat = await prisma.chat.create({
+		const sessionId = existingChat?.sessionId || randomUUID();
+		const workspacePath = await getOrCreateWorkspace(sessionId);
+
+		// Build conversation history from existing messages
+		const conversationHistory = existingMessages.map((m) => ({
+			role: m.role as "user" | "assistant",
+			content: m.content,
+		}));
+
+		// Create new chat if doesn't exist
+		const chat =
+			existingChat ||
+			(await prisma.chat.create({
+				data: {
+					sessionId,
+					title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
+				},
+			}));
+
+		// Save user message
+		await prisma.message.create({
 			data: {
-				sessionId,
-				title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
+				chatId: chat.id,
+				role: "user",
+				content: message,
 			},
 		});
-	}
 
-	await prisma.message.create({
-		data: {
-			chatId: chat.id,
-			role: "user",
-			content: message,
-		},
-	});
+		const encoder = new TextEncoder();
+		const abortController = new AbortController();
 
-	const encoder = new TextEncoder();
-	const abortController = new AbortController();
+		const stream = new ReadableStream({
+			async start(controller) {
+				const sendEvent = (event: string, data: unknown) => {
+					controller.enqueue(
+						encoder.encode(
+							`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+						),
+					);
+				};
 
-	const stream = new ReadableStream({
-		async start(controller) {
-			const sendEvent = (event: string, data: unknown) => {
-				controller.enqueue(
-					encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-				);
-			};
+				sendEvent("init", { chatId: chat.id, sessionId });
 
-			sendEvent("init", { chatId: chat.id, sessionId });
+				let fullAssistantContent = "";
+				const toolUses: Array<{ name: string; input: unknown }> = [];
+				let lastEventWasToolUse = false;
+				const sentThinkingIds = new Set<string>();
 
-			let fullAssistantContent = "";
-			const toolUses: Array<{ name: string; input: unknown }> = [];
-
-			try {
-				for await (const msg of streamAgentResponse({
-					prompt: message,
-					workspacePath,
-					resumeSessionId: existingSessionId,
-					abortController,
-				})) {
-					switch (msg.type) {
-						case "assistant": {
-							const content = msg.message.content;
-							for (const block of content) {
-								if (block.type === "text") {
-									fullAssistantContent += block.text;
-									sendEvent("text", { text: block.text });
-								} else if (block.type === "tool_use") {
-									const toolBlock = block as {
-										type: "tool_use";
-										name: string;
-										input: unknown;
-									};
-									toolUses.push({
-										name: toolBlock.name,
-										input: toolBlock.input,
-									});
-									sendEvent("tool_use", {
-										name: toolBlock.name,
-										input: toolBlock.input,
-									});
+				try {
+					for await (const msg of streamAgentResponse({
+						prompt: message,
+						workspacePath,
+						conversationHistory,
+						abortController,
+					})) {
+						switch (msg.type) {
+							case "assistant": {
+								const messageId = msg.message.id;
+								if (!sentThinkingIds.has(messageId)) {
+									const thinking = extractThinkingFromMessage(msg);
+									if (thinking) {
+										sendEvent("thinking", { thinking });
+										sentThinkingIds.add(messageId);
+									}
 								}
+
+								const content = msg.message.content;
+								for (const block of content) {
+									if (block.type === "text") {
+										fullAssistantContent += block.text;
+									} else if (block.type === "tool_use") {
+										lastEventWasToolUse = true;
+										const toolBlock = block as {
+											type: "tool_use";
+											name: string;
+											input: unknown;
+										};
+										toolUses.push({
+											name: toolBlock.name,
+											input: toolBlock.input,
+										});
+										sendEvent("tool_use", {
+											name: toolBlock.name,
+											input: toolBlock.input,
+										});
+									}
+								}
+								break;
 							}
-							break;
-						}
-						case "stream_event": {
-							const event = msg.event;
-							if (
-								event.type === "content_block_delta" &&
-								"delta" in event &&
-								event.delta.type === "text_delta"
-							) {
-								const delta = event.delta as { text: string };
-								sendEvent("delta", { text: delta.text });
+							case "stream_event": {
+								const event = msg.event;
+								if (event.type === "message_start" && lastEventWasToolUse) {
+									sendEvent("delta", { text: "\n\n" });
+									fullAssistantContent += "\n\n";
+									lastEventWasToolUse = false;
+								} else if (
+									event.type === "content_block_delta" &&
+									"delta" in event &&
+									event.delta.type === "text_delta"
+								) {
+									const delta = event.delta as { text: string };
+									sendEvent("delta", { text: delta.text });
+								}
+								break;
 							}
-							break;
-						}
-						case "result": {
-							const resultData: Record<string, unknown> = {
-								subtype: msg.subtype,
-								duration_ms: msg.duration_ms,
-								session_id: msg.session_id,
-							};
-							if ("cost_usd" in msg) {
-								resultData.cost_usd = msg.cost_usd;
+							case "result": {
+								const resultData: Record<string, unknown> = {
+									subtype: msg.subtype,
+									duration_ms: msg.duration_ms,
+									session_id: msg.session_id,
+								};
+								if ("cost_usd" in msg) {
+									resultData.cost_usd = msg.cost_usd;
+								}
+								sendEvent("result", resultData);
+								break;
 							}
-							sendEvent("result", resultData);
-							break;
 						}
 					}
+
+					if (fullAssistantContent || toolUses.length > 0) {
+						await prisma.message.create({
+							data: {
+								chatId: chat.id,
+								role: "assistant",
+								content: fullAssistantContent,
+								toolName: toolUses.length > 0 ? toolUses[0].name : undefined,
+								toolInput:
+									toolUses.length > 0
+										? JSON.parse(JSON.stringify(toolUses))
+										: undefined,
+							},
+						});
+					}
+
+					sendEvent("done", { chatId: chat.id, sessionId });
+				} catch (error) {
+					const errorMessage =
+						error instanceof Error ? error.message : "Unknown error";
+					sendEvent("error", { message: errorMessage });
+				} finally {
+					controller.close();
 				}
+			},
+			cancel() {
+				abortController.abort();
+			},
+		});
 
-				if (fullAssistantContent || toolUses.length > 0) {
-					await prisma.message.create({
-						data: {
-							chatId: chat.id,
-							role: "assistant",
-							content: fullAssistantContent,
-							toolName: toolUses.length > 0 ? toolUses[0].name : undefined,
-							toolInput:
-								toolUses.length > 0
-									? JSON.parse(JSON.stringify(toolUses))
-									: undefined,
-						},
-					});
-				}
-
-				sendEvent("done", { chatId: chat.id, sessionId });
-			} catch (error) {
-				const errorMessage =
-					error instanceof Error ? error.message : "Unknown error";
-				sendEvent("error", { message: errorMessage });
-			} finally {
-				controller.close();
-			}
-		},
-		cancel() {
-			abortController.abort();
-		},
-	});
-
-	return new Response(stream, {
-		headers: {
-			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache, no-transform",
-			Connection: "keep-alive",
-			"X-Accel-Buffering": "no",
-		},
-	});
+		return new Response(stream, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache, no-transform",
+				Connection: "keep-alive",
+				"X-Accel-Buffering": "no",
+			},
+		});
+	} catch (error) {
+		console.error("Chat API error:", error);
+		return Response.json(
+			{
+				error: error instanceof Error ? error.message : "Internal server error",
+			},
+			{ status: 500 },
+		);
+	}
 }
