@@ -4,11 +4,12 @@ import { useCallback, useRef, useState } from "react";
 import type {
 	Chat,
 	ChatInitEvent,
+	ContentSegment,
 	DeltaEvent,
 	DoneEvent,
 	ErrorEvent,
 	Message,
-	TextEvent,
+	ThinkingEvent,
 	ToolUse,
 	ToolUseEvent,
 } from "@/lib/types";
@@ -17,9 +18,8 @@ interface UseChatOptions {
 	onError?: (error: string) => void;
 }
 
-interface StreamingMessage {
-	content: string;
-	toolUses: ToolUse[];
+export interface StreamingMessage {
+	segments: ContentSegment[];
 	isStreaming: boolean;
 }
 
@@ -31,6 +31,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const [currentChat, setCurrentChat] = useState<Chat | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
 	const abortControllerRef = useRef<AbortController | null>(null);
+	const streamingSegmentsRef = useRef<ContentSegment[]>([]);
 
 	const handleEvent = useCallback(
 		(type: string, data: unknown) => {
@@ -38,56 +39,74 @@ export function useChat(options: UseChatOptions = {}) {
 				case "init": {
 					const initData = data as ChatInitEvent;
 					setSessionId(initData.sessionId);
-					setCurrentChat((prev) =>
-						prev ? { ...prev, id: initData.chatId } : null,
-					);
-					break;
-				}
-				case "text": {
-					const textData = data as TextEvent;
-					setStreamingMessage((prev) =>
-						prev ? { ...prev, content: prev.content + textData.text } : null,
-					);
+					setCurrentChat((prev) => ({
+						id: initData.chatId,
+						sessionId: initData.sessionId,
+						title: prev?.title || "",
+						createdAt: prev?.createdAt || new Date().toISOString(),
+						updatedAt: new Date().toISOString(),
+						messages: prev?.messages || [],
+					}));
 					break;
 				}
 				case "delta": {
 					const deltaData = data as DeltaEvent;
-					setStreamingMessage((prev) =>
-						prev ? { ...prev, content: prev.content + deltaData.text } : null,
-					);
+					const segments = streamingSegmentsRef.current;
+					const lastSegment = segments[segments.length - 1];
+
+					if (lastSegment?.type === "text") {
+						lastSegment.text += deltaData.text;
+					} else {
+						segments.push({ type: "text", text: deltaData.text });
+					}
+
+					setStreamingMessage({
+						segments: [...segments],
+						isStreaming: true,
+					});
+					break;
+				}
+				case "thinking": {
+					const thinkingData = data as ThinkingEvent;
+					streamingSegmentsRef.current.push({
+						type: "thinking",
+						thinking: thinkingData.thinking,
+						isComplete: true,
+					});
+					setStreamingMessage({
+						segments: [...streamingSegmentsRef.current],
+						isStreaming: true,
+					});
 					break;
 				}
 				case "tool_use": {
 					const toolData = data as ToolUseEvent;
-					setStreamingMessage((prev) =>
-						prev
-							? {
-									...prev,
-									toolUses: [
-										...prev.toolUses,
-										{
-											name: toolData.name,
-											input: toolData.input,
-											status: "running",
-										},
-									],
-								}
-							: null,
-					);
+					const newTool: ToolUse = {
+						name: toolData.name,
+						input: toolData.input,
+						status: "running",
+					};
+					streamingSegmentsRef.current.push({
+						type: "tool_use",
+						tool: newTool,
+					});
+					setStreamingMessage({
+						segments: [...streamingSegmentsRef.current],
+						isStreaming: true,
+					});
 					break;
 				}
 				case "result": {
-					setStreamingMessage((prev) =>
-						prev
-							? {
-									...prev,
-									toolUses: prev.toolUses.map((t) => ({
-										...t,
-										status: "complete" as const,
-									})),
-								}
-							: null,
-					);
+					const segments = streamingSegmentsRef.current;
+					for (const segment of segments) {
+						if (segment.type === "tool_use") {
+							segment.tool.status = "complete";
+						}
+					}
+					setStreamingMessage({
+						segments: [...segments],
+						isStreaming: true,
+					});
 					break;
 				}
 				case "done": {
@@ -106,20 +125,32 @@ export function useChat(options: UseChatOptions = {}) {
 	);
 
 	const finalizeStreamingMessage = useCallback(() => {
-		setStreamingMessage((prev) => {
-			if (prev?.content) {
-				const assistantMessage: Message = {
-					id: `msg-${Date.now()}`,
-					chatId: currentChat?.id || "",
-					role: "assistant",
-					content: prev.content,
-					toolInput: prev.toolUses.length > 0 ? prev.toolUses : undefined,
-					createdAt: new Date().toISOString(),
-				};
-				setMessages((msgs) => [...msgs, assistantMessage]);
-			}
-			return null;
-		});
+		const segments = streamingSegmentsRef.current;
+		if (segments.length > 0) {
+			const content = segments
+				.filter((s): s is { type: "text"; text: string } => s.type === "text")
+				.map((s) => s.text)
+				.join("");
+
+			const toolUses = segments
+				.filter(
+					(s): s is { type: "tool_use"; tool: ToolUse } =>
+						s.type === "tool_use",
+				)
+				.map((s) => s.tool);
+
+			const assistantMessage: Message = {
+				id: `msg-${crypto.randomUUID()}`,
+				chatId: currentChat?.id || "",
+				role: "assistant",
+				content,
+				toolInput: toolUses.length > 0 ? toolUses : undefined,
+				createdAt: new Date().toISOString(),
+			};
+			setMessages((msgs) => [...msgs, assistantMessage]);
+		}
+		streamingSegmentsRef.current = [];
+		setStreamingMessage(null);
 	}, [currentChat]);
 
 	const sendMessage = useCallback(
@@ -127,7 +158,7 @@ export function useChat(options: UseChatOptions = {}) {
 			if (!content.trim() || isLoading) return;
 
 			const userMessage: Message = {
-				id: `temp-${Date.now()}`,
+				id: `temp-${crypto.randomUUID()}`,
 				chatId: currentChat?.id || "",
 				role: "user",
 				content,
@@ -136,7 +167,8 @@ export function useChat(options: UseChatOptions = {}) {
 
 			setMessages((prev) => [...prev, userMessage]);
 			setIsLoading(true);
-			setStreamingMessage({ content: "", toolUses: [], isStreaming: true });
+			streamingSegmentsRef.current = [];
+			setStreamingMessage({ segments: [], isStreaming: true });
 
 			abortControllerRef.current = new AbortController();
 

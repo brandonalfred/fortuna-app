@@ -23,9 +23,26 @@ export interface ToolUse {
 	status?: "pending" | "running" | "complete";
 }
 
+export type ContentSegment =
+	| { type: "text"; text: string }
+	| { type: "tool_use"; tool: ToolUse }
+	| { type: "thinking"; thinking: string; isComplete?: boolean };
+
 export interface StreamEvent {
-	type: "init" | "text" | "delta" | "tool_use" | "result" | "done" | "error";
+	type:
+		| "init"
+		| "text"
+		| "delta"
+		| "tool_use"
+		| "result"
+		| "done"
+		| "error"
+		| "thinking";
 	data: unknown;
+}
+
+export interface ThinkingEvent {
+	thinking: string;
 }
 
 export interface ChatInitEvent {

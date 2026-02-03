@@ -1,8 +1,10 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import type { Message, ToolUse } from "@/lib/types";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { ContentSegment, Message, ToolUse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface MessageItemProps {
@@ -41,8 +43,12 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
 						))}
 					</div>
 				)}
-				<div className="whitespace-pre-wrap font-body text-sm leading-relaxed">
-					{message.content}
+				<div className="prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline">
+					{isUser ? (
+						<p>{message.content}</p>
+					) : (
+						<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+					)}
 					{isStreaming && (
 						<span className="ml-0.5 inline-block h-4 w-0.5 animate-blink bg-accent-primary" />
 					)}
@@ -50,6 +56,63 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
 			</div>
 		</div>
 	);
+}
+
+interface StreamingMessageItemProps {
+	segments: ContentSegment[];
+	isStreaming?: boolean;
+}
+
+export function StreamingMessageItem({
+	segments,
+	isStreaming,
+}: StreamingMessageItemProps) {
+	return (
+		<div className="animate-message-in flex w-full justify-start">
+			<div className="max-w-[85%] rounded-lg px-4 py-3 text-text-primary">
+				<div className="prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline">
+					{segments.map((segment, idx) => {
+						const key =
+							segment.type === "tool_use"
+								? `tool-${segment.tool.name}-${idx}`
+								: `text-${idx}`;
+						return <SegmentRenderer key={key} segment={segment} />;
+					})}
+					{isStreaming && (
+						<span className="ml-0.5 inline-block h-4 w-0.5 animate-blink bg-accent-primary" />
+					)}
+				</div>
+			</div>
+		</div>
+	);
+}
+
+interface SegmentRendererProps {
+	segment: ContentSegment;
+}
+
+function SegmentRenderer({ segment }: SegmentRendererProps) {
+	if (segment.type === "thinking") {
+		return (
+			<div className="my-2">
+				<ThinkingBlock thinking={segment.thinking} />
+			</div>
+		);
+	}
+
+	if (segment.type === "text") {
+		return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
+	}
+
+	if (segment.type === "tool_use") {
+		return (
+			<div className="my-2">
+				<ToolUsePill tool={segment.tool} />
+			</div>
+		);
+	}
+
+	return null;
 }
 
 interface ToolUsePillProps {
@@ -86,6 +149,54 @@ function ToolUsePill({ tool }: ToolUsePillProps) {
 					<pre className="overflow-x-auto">
 						{JSON.stringify(tool.input, null, 2)}
 					</pre>
+				</div>
+			)}
+		</div>
+	);
+}
+
+interface ThinkingBlockProps {
+	thinking: string;
+}
+
+function generateThinkingSummary(thinking: string): string {
+	const firstLine = thinking.split("\n")[0].trim();
+	if (firstLine.length <= 60) {
+		return firstLine;
+	}
+	return `${firstLine.slice(0, 57)}...`;
+}
+
+function ThinkingBlock({ thinking }: ThinkingBlockProps) {
+	const [expanded, setExpanded] = useState(false);
+	const summary = generateThinkingSummary(thinking);
+
+	return (
+		<div className="my-2">
+			<button
+				type="button"
+				onClick={() => setExpanded(!expanded)}
+				className={cn(
+					"flex items-center gap-2 rounded-lg px-3 py-2 text-sm w-full text-left",
+					"bg-bg-tertiary/50 border border-border-subtle",
+					"transition-colors hover:bg-bg-tertiary",
+				)}
+			>
+				<Brain className="h-4 w-4 text-text-muted shrink-0" />
+				<span className="text-text-secondary flex-1 truncate">
+					{expanded ? "Reasoning" : summary}
+				</span>
+				{expanded ? (
+					<ChevronDown className="h-4 w-4 text-text-muted shrink-0" />
+				) : (
+					<ChevronRight className="h-4 w-4 text-text-muted shrink-0" />
+				)}
+			</button>
+			{expanded && (
+				<div className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3">
+					<div className="text-sm text-text-secondary whitespace-pre-wrap font-body leading-relaxed">
+						{thinking}
+					</div>
 				</div>
 			)}
 		</div>

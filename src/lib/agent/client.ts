@@ -44,21 +44,38 @@ Always cite your sources and explain your reasoning. Compare odds across multipl
 
 export type AgentMessage = SDKMessage;
 
+interface ConversationMessage {
+	role: "user" | "assistant";
+	content: string;
+}
+
 export interface StreamAgentOptions {
 	prompt: string;
 	workspacePath: string;
-	resumeSessionId?: string;
+	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
 }
 
 export async function* streamAgentResponse({
 	prompt,
 	workspacePath,
-	resumeSessionId,
+	conversationHistory,
 	abortController,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
+	let fullPrompt = prompt;
+
+	if (conversationHistory && conversationHistory.length > 0) {
+		const historyText = conversationHistory
+			.map(
+				(msg) =>
+					`${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`,
+			)
+			.join("\n\n");
+		fullPrompt = `Previous conversation:\n${historyText}\n\nUser: ${prompt}`;
+	}
+
 	const generator = query({
-		prompt,
+		prompt: fullPrompt,
 		options: {
 			cwd: workspacePath,
 			model: "claude-sonnet-4-5-20250929",
@@ -78,9 +95,9 @@ export async function* streamAgentResponse({
 				preset: "claude_code",
 				append: SYSTEM_PROMPT_APPEND,
 			},
-			resume: resumeSessionId,
 			abortController: abortController ?? new AbortController(),
 			includePartialMessages: true,
+			maxThinkingTokens: 10000,
 		},
 	});
 
@@ -94,6 +111,12 @@ interface TextBlock {
 	text: string;
 }
 
+interface ThinkingBlock {
+	type: "thinking";
+	thinking: string;
+	signature: string;
+}
+
 interface ToolUseBlock {
 	type: "tool_use";
 	id: string;
@@ -101,7 +124,7 @@ interface ToolUseBlock {
 	input: unknown;
 }
 
-type ContentBlock = TextBlock | ToolUseBlock | { type: string };
+type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | { type: string };
 
 export function extractTextFromMessage(message: SDKMessage): string | null {
 	if (message.type !== "assistant") {
@@ -133,4 +156,21 @@ export function extractToolUseFromMessage(
 		name: block.name,
 		input: block.input,
 	}));
+}
+
+export function extractThinkingFromMessage(message: SDKMessage): string | null {
+	if (message.type !== "assistant") {
+		return null;
+	}
+
+	const content = message.message.content as ContentBlock[];
+	const thinkingBlocks = content.filter(
+		(block): block is ThinkingBlock => block.type === "thinking",
+	);
+
+	if (thinkingBlocks.length === 0) {
+		return null;
+	}
+
+	return thinkingBlocks.map((block) => block.thinking).join("\n\n");
 }
