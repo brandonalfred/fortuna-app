@@ -126,51 +126,41 @@ interface ToolUseBlock {
 
 type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | { type: string };
 
-export function extractTextFromMessage(message: SDKMessage): string | null {
+function getAssistantContent(message: SDKMessage): ContentBlock[] | null {
 	if (message.type !== "assistant") {
 		return null;
 	}
+	return message.message.content as ContentBlock[];
+}
 
-	const content = message.message.content as ContentBlock[];
-	const textBlocks = content.filter(
-		(block): block is TextBlock => block.type === "text",
-	);
+export function extractTextFromMessage(message: SDKMessage): string | null {
+	const content = getAssistantContent(message);
+	if (!content) return null;
 
-	return textBlocks.map((block) => block.text).join("");
+	return content
+		.filter((block): block is TextBlock => block.type === "text")
+		.map((block) => block.text)
+		.join("");
 }
 
 export function extractToolUseFromMessage(
 	message: SDKMessage,
 ): Array<{ id: string; name: string; input: unknown }> | null {
-	if (message.type !== "assistant") {
-		return null;
-	}
+	const content = getAssistantContent(message);
+	if (!content) return null;
 
-	const content = message.message.content as ContentBlock[];
-	const toolUseBlocks = content.filter(
-		(block): block is ToolUseBlock => block.type === "tool_use",
-	);
-
-	return toolUseBlocks.map((block) => ({
-		id: block.id,
-		name: block.name,
-		input: block.input,
-	}));
+	return content
+		.filter((block): block is ToolUseBlock => block.type === "tool_use")
+		.map(({ id, name, input }) => ({ id, name, input }));
 }
 
 export function extractThinkingFromMessage(message: SDKMessage): string | null {
-	if (message.type !== "assistant") {
-		return null;
-	}
+	const content = getAssistantContent(message);
+	if (!content) return null;
 
-	const content = message.message.content as ContentBlock[];
-	const thinkingBlocks = content.filter(
-		(block): block is ThinkingBlock => block.type === "thinking",
-	);
+	const thinkingTexts = content
+		.filter((block): block is ThinkingBlock => block.type === "thinking")
+		.map((block) => block.thinking);
 
-	if (thinkingBlocks.length === 0) {
-		return null;
-	}
-
-	return thinkingBlocks.map((block) => block.thinking).join("\n\n");
+	return thinkingTexts.length > 0 ? thinkingTexts.join("\n\n") : null;
 }

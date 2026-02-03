@@ -46,13 +46,12 @@ export async function POST(req: Request) {
 			content: m.content,
 		}));
 
-		// Create new chat if doesn't exist
 		const chat =
 			existingChat ||
 			(await prisma.chat.create({
 				data: {
 					sessionId,
-					title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
+					title: message.length > 50 ? `${message.slice(0, 50)}...` : message,
 				},
 			}));
 
@@ -103,25 +102,14 @@ export async function POST(req: Request) {
 									}
 								}
 
-								const content = msg.message.content;
-								for (const block of content) {
+								for (const block of msg.message.content) {
 									if (block.type === "text") {
 										fullAssistantContent += block.text;
 									} else if (block.type === "tool_use") {
 										lastEventWasToolUse = true;
-										const toolBlock = block as {
-											type: "tool_use";
-											name: string;
-											input: unknown;
-										};
-										toolUses.push({
-											name: toolBlock.name,
-											input: toolBlock.input,
-										});
-										sendEvent("tool_use", {
-											name: toolBlock.name,
-											input: toolBlock.input,
-										});
+										const { name, input } = block;
+										toolUses.push({ name, input });
+										sendEvent("tool_use", { name, input });
 									}
 								}
 								break;
@@ -163,11 +151,8 @@ export async function POST(req: Request) {
 								chatId: chat.id,
 								role: "assistant",
 								content: fullAssistantContent,
-								toolName: toolUses.length > 0 ? toolUses[0].name : undefined,
-								toolInput:
-									toolUses.length > 0
-										? JSON.parse(JSON.stringify(toolUses))
-										: undefined,
+								toolName: toolUses[0]?.name,
+								toolInput: toolUses.length > 0 ? toolUses : undefined,
 							},
 						});
 					}
