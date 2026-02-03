@@ -7,6 +7,9 @@ import remarkGfm from "remark-gfm";
 import type { ContentSegment, Message, ToolUse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+const PROSE_CLASSES =
+	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
+
 interface MessageItemProps {
 	message: Message;
 	isStreaming?: boolean;
@@ -43,15 +46,13 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
 						))}
 					</div>
 				)}
-				<div className="prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline">
+				<div className={PROSE_CLASSES}>
 					{isUser ? (
 						<p>{message.content}</p>
 					) : (
 						<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
 					)}
-					{isStreaming && (
-						<span className="ml-0.5 inline-block h-4 w-0.5 animate-blink bg-accent-primary" />
-					)}
+					{isStreaming && <BlinkingCursor />}
 				</div>
 			</div>
 		</div>
@@ -63,6 +64,13 @@ interface StreamingMessageItemProps {
 	isStreaming?: boolean;
 }
 
+function getSegmentKey(segment: ContentSegment, idx: number): string {
+	if (segment.type === "tool_use") {
+		return `tool-${segment.tool.name}-${idx}`;
+	}
+	return `${segment.type}-${idx}`;
+}
+
 export function StreamingMessageItem({
 	segments,
 	isStreaming,
@@ -70,20 +78,23 @@ export function StreamingMessageItem({
 	return (
 		<div className="animate-message-in flex w-full justify-start">
 			<div className="max-w-[85%] rounded-lg px-4 py-3 text-text-primary">
-				<div className="prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline">
-					{segments.map((segment, idx) => {
-						const key =
-							segment.type === "tool_use"
-								? `tool-${segment.tool.name}-${idx}`
-								: `text-${idx}`;
-						return <SegmentRenderer key={key} segment={segment} />;
-					})}
-					{isStreaming && (
-						<span className="ml-0.5 inline-block h-4 w-0.5 animate-blink bg-accent-primary" />
-					)}
+				<div className={PROSE_CLASSES}>
+					{segments.map((segment, idx) => (
+						<SegmentRenderer
+							key={getSegmentKey(segment, idx)}
+							segment={segment}
+						/>
+					))}
+					{isStreaming && <BlinkingCursor />}
 				</div>
 			</div>
 		</div>
+	);
+}
+
+function BlinkingCursor() {
+	return (
+		<span className="ml-0.5 inline-block h-4 w-0.5 animate-blink bg-accent-primary" />
 	);
 }
 
@@ -92,27 +103,24 @@ interface SegmentRendererProps {
 }
 
 function SegmentRenderer({ segment }: SegmentRendererProps) {
-	if (segment.type === "thinking") {
-		return (
-			<div className="my-2">
-				<ThinkingBlock thinking={segment.thinking} />
-			</div>
-		);
+	switch (segment.type) {
+		case "thinking":
+			return (
+				<div className="my-2">
+					<ThinkingBlock thinking={segment.thinking} />
+				</div>
+			);
+		case "text":
+			return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
+		case "tool_use":
+			return (
+				<div className="my-2">
+					<ToolUsePill tool={segment.tool} />
+				</div>
+			);
+		default:
+			return null;
 	}
-
-	if (segment.type === "text") {
-		return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
-	}
-
-	if (segment.type === "tool_use") {
-		return (
-			<div className="my-2">
-				<ToolUsePill tool={segment.tool} />
-			</div>
-		);
-	}
-
-	return null;
 }
 
 interface ToolUsePillProps {
@@ -161,10 +169,7 @@ interface ThinkingBlockProps {
 
 function generateThinkingSummary(thinking: string): string {
 	const firstLine = thinking.split("\n")[0].trim();
-	if (firstLine.length <= 60) {
-		return firstLine;
-	}
-	return `${firstLine.slice(0, 57)}...`;
+	return firstLine.length <= 60 ? firstLine : `${firstLine.slice(0, 57)}...`;
 }
 
 function ThinkingBlock({ thinking }: ThinkingBlockProps) {

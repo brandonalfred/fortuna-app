@@ -13,6 +13,74 @@ interface ChatHistoryProps {
 	onNewChat: () => void;
 }
 
+interface ChatListContentProps {
+	isLoading: boolean;
+	chats: Chat[];
+	currentChatId?: string;
+	onSelectChat: (chatId: string) => void;
+	onDelete: (e: React.MouseEvent, chatId: string) => void;
+}
+
+function ChatListContent({
+	isLoading,
+	chats,
+	currentChatId,
+	onSelectChat,
+	onDelete,
+}: ChatListContentProps) {
+	if (isLoading) {
+		return (
+			<div className="space-y-2">
+				{[1, 2, 3].map((i) => (
+					<div
+						key={i}
+						className="h-10 rounded-md bg-bg-tertiary animate-shimmer"
+					/>
+				))}
+			</div>
+		);
+	}
+
+	if (chats.length === 0) {
+		return (
+			<p className="p-2 text-center text-sm text-text-tertiary">
+				No conversations yet
+			</p>
+		);
+	}
+
+	return (
+		<div className="space-y-1">
+			{chats.map((chat) => (
+				<div
+					key={chat.id}
+					className={cn(
+						"group flex w-full items-center justify-between rounded-md text-sm transition-colors",
+						currentChatId === chat.id
+							? "bg-bg-tertiary border-l-2 border-accent-primary text-text-primary"
+							: "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
+					)}
+				>
+					<button
+						type="button"
+						onClick={() => onSelectChat(chat.id)}
+						className="flex-1 cursor-pointer truncate px-3 py-2 text-left"
+					>
+						{chat.title}
+					</button>
+					<button
+						type="button"
+						onClick={(e) => onDelete(e, chat.id)}
+						className="mr-2 hidden h-6 w-6 items-center justify-center rounded text-text-tertiary hover:bg-error-subtle hover:text-error group-hover:flex"
+					>
+						<Trash2 className="h-3.5 w-3.5" />
+					</button>
+				</div>
+			))}
+		</div>
+	);
+}
+
 export function ChatHistory({
 	currentChatId,
 	onSelectChat,
@@ -74,49 +142,13 @@ export function ChatHistory({
 			</div>
 			<ScrollArea className="flex-1">
 				<div className="p-2">
-					{isLoading ? (
-						<div className="space-y-2">
-							{[1, 2, 3].map((i) => (
-								<div
-									key={i}
-									className="h-10 rounded-md bg-bg-tertiary animate-shimmer"
-								/>
-							))}
-						</div>
-					) : chats.length === 0 ? (
-						<p className="p-2 text-center text-sm text-text-tertiary">
-							No conversations yet
-						</p>
-					) : (
-						<div className="space-y-1">
-							{chats.map((chat) => (
-								<div
-									key={chat.id}
-									className={cn(
-										"group flex w-full items-center justify-between rounded-md text-sm transition-colors",
-										currentChatId === chat.id
-											? "bg-bg-tertiary border-l-2 border-accent-primary text-text-primary"
-											: "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
-									)}
-								>
-									<button
-										type="button"
-										onClick={() => onSelectChat(chat.id)}
-										className="flex-1 cursor-pointer truncate px-3 py-2 text-left"
-									>
-										{chat.title}
-									</button>
-									<button
-										type="button"
-										onClick={(e) => handleDelete(e, chat.id)}
-										className="mr-2 hidden h-6 w-6 items-center justify-center rounded text-text-tertiary hover:bg-error-subtle hover:text-error group-hover:flex"
-									>
-										<Trash2 className="h-3.5 w-3.5" />
-									</button>
-								</div>
-							))}
-						</div>
-					)}
+					<ChatListContent
+						isLoading={isLoading}
+						chats={chats}
+						currentChatId={currentChatId}
+						onSelectChat={onSelectChat}
+						onDelete={handleDelete}
+					/>
 				</div>
 			</ScrollArea>
 		</div>

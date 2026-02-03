@@ -31,7 +31,6 @@ export type ContentSegment =
 export interface StreamEvent {
 	type:
 		| "init"
-		| "text"
 		| "delta"
 		| "tool_use"
 		| "result"
@@ -48,10 +47,6 @@ export interface ThinkingEvent {
 export interface ChatInitEvent {
 	chatId: string;
 	sessionId: string;
-}
-
-export interface TextEvent {
-	text: string;
 }
 
 export interface DeltaEvent {

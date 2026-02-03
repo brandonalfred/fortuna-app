@@ -126,29 +126,31 @@ export function useChat(options: UseChatOptions = {}) {
 
 	const finalizeStreamingMessage = useCallback(() => {
 		const segments = streamingSegmentsRef.current;
-		if (segments.length > 0) {
-			const content = segments
-				.filter((s): s is { type: "text"; text: string } => s.type === "text")
-				.map((s) => s.text)
-				.join("");
-
-			const toolUses = segments
-				.filter(
-					(s): s is { type: "tool_use"; tool: ToolUse } =>
-						s.type === "tool_use",
-				)
-				.map((s) => s.tool);
-
-			const assistantMessage: Message = {
-				id: `msg-${crypto.randomUUID()}`,
-				chatId: currentChat?.id || "",
-				role: "assistant",
-				content,
-				toolInput: toolUses.length > 0 ? toolUses : undefined,
-				createdAt: new Date().toISOString(),
-			};
-			setMessages((msgs) => [...msgs, assistantMessage]);
+		if (segments.length === 0) {
+			streamingSegmentsRef.current = [];
+			setStreamingMessage(null);
+			return;
 		}
+
+		const content = segments
+			.filter((s) => s.type === "text")
+			.map((s) => (s as { type: "text"; text: string }).text)
+			.join("");
+
+		const toolUses = segments
+			.filter((s) => s.type === "tool_use")
+			.map((s) => (s as { type: "tool_use"; tool: ToolUse }).tool);
+
+		const assistantMessage: Message = {
+			id: `msg-${crypto.randomUUID()}`,
+			chatId: currentChat?.id || "",
+			role: "assistant",
+			content,
+			toolInput: toolUses.length > 0 ? toolUses : undefined,
+			createdAt: new Date().toISOString(),
+		};
+		setMessages((msgs) => [...msgs, assistantMessage]);
+
 		streamingSegmentsRef.current = [];
 		setStreamingMessage(null);
 	}, [currentChat]);
