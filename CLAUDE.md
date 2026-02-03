@@ -26,7 +26,7 @@ bun run type-check   # TypeScript type checking
 
 ## Code Style
 
-Biome enforces formatting. Run `bun run lint` to auto-fix.
+Biome enforces formatting with tabs and double quotes. Run `bun run lint` to auto-fix.
 
 ## Git Workflow
 
@@ -68,15 +68,25 @@ Same as `/pr` but creates a draft PR (`gh pr create --draft`).
 The app uses the Claude Agent SDK to provide AI-powered sports betting analysis.
 
 **Key files:**
-- `src/lib/agent/client.ts` - Agent SDK wrapper with streaming
+- `src/lib/agent/client.ts` - Agent SDK wrapper with streaming, uses `claude-opus-4-5-20251101` model
 - `src/lib/agent/workspace.ts` - Per-session workspace management
 - `src/app/api/chat/route.ts` - SSE streaming endpoint
+- `src/hooks/use-chat.ts` - React hook for SSE streaming and message state
 
 **Agent capabilities:**
 - Web search for real-time sports data
-- The Odds API integration for betting odds
+- The Odds API integration for betting odds (via bash curl)
 - Code execution for analysis scripts
 - File operations within sandboxed workspace
+- Extended thinking with `maxThinkingTokens: 10000`
+
+**SSE Event Types:**
+- `init` - Chat ID and session ID
+- `delta` - Text streaming chunks
+- `thinking` - Extended thinking content
+- `tool_use` - Tool execution events
+- `result` - Completion with cost/duration
+- `done` - Stream completion
 
 ## Environment Variables
 
@@ -96,6 +106,10 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - Add `@map("snake_case")` for database columns
 - Add `@@map("table_name")` for table names
 - Run `bun run lint:prisma` to verify naming conventions
+
+**Database models:**
+- `Chat` - Stores chat sessions with unique `sessionId`
+- `Message` - Stores messages with `role`, `content`, and optional `toolName`/`toolInput`
 
 **Commands:**
 ```bash

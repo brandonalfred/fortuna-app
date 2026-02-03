@@ -78,7 +78,7 @@ export async function* streamAgentResponse({
 		prompt: fullPrompt,
 		options: {
 			cwd: workspacePath,
-			model: "claude-sonnet-4-5-20250929",
+			model: "claude-opus-4-5-20251101",
 			allowedTools: [
 				"Read",
 				"Write",
