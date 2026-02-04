@@ -1,0 +1,82 @@
+# Refresh Sandbox Snapshot
+#
+# Automatically creates a fresh Vercel Sandbox snapshot before the 7-day expiration.
+# The snapshot includes: Node.js 22, Claude Agent SDK, Python 3, pip, and data analysis packages.
+#
+# Required secrets:
+#   VERCEL_TOKEN      - Vercel API token (create at vercel.com/account/tokens)
+#   VERCEL_ORG_ID     - Your Vercel team/org ID (from .vercel/project.json or dashboard URL)
+#   VERCEL_PROJECT_ID - Your Vercel project ID (from .vercel/project.json or dashboard URL)
+
+name: Refresh Sandbox Snapshot
+
+on:
+  schedule:
+    # Run every 5 days at 3am UTC (snapshots expire after 7 days)
+    - cron: "0 3 */5 * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  refresh-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Create new sandbox snapshot
+        id: snapshot
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          output=$(bunx tsx scripts/create-sandbox-snapshot.ts 2>&1)
+          exit_code=$?
+          echo "$output"
+
+          if [ $exit_code -ne 0 ]; then
+            echo "::error::Failed to create snapshot"
+            exit 1
+          fi
+
+          # Extract snapshot ID from output
+          snapshot_id=$(echo "$output" | grep "AGENT_SANDBOX_SNAPSHOT_ID=" | cut -d'=' -f2)
+
+          if [ -z "$snapshot_id" ]; then
+            echo "::error::Could not extract snapshot ID from output"
+            exit 1
+          fi
+
+          echo "snapshot_id=$snapshot_id" >> $GITHUB_OUTPUT
+          echo "::notice::Created snapshot: $snapshot_id"
+
+      - name: Update Vercel environment variable
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npm install -g vercel@latest
+
+          # Remove old env var (ignore error if it doesn't exist)
+          vercel env rm AGENT_SANDBOX_SNAPSHOT_ID production --yes --token=$VERCEL_TOKEN 2>/dev/null || true
+
+          # Add new env var
+          echo "${{ steps.snapshot.outputs.snapshot_id }}" | vercel env add AGENT_SANDBOX_SNAPSHOT_ID production --token=$VERCEL_TOKEN
+
+          echo "::notice::Updated AGENT_SANDBOX_SNAPSHOT_ID to ${{ steps.snapshot.outputs.snapshot_id }}"
+
+      - name: Trigger production redeploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel deploy --prod --token=$VERCEL_TOKEN --yes
+          echo "::notice::Triggered production redeploy to use new snapshot"

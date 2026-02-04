@@ -35,13 +35,61 @@ async function createSnapshot() {
 		throw new Error("Failed to install SDKs");
 	}
 
-	console.log("\nVerifying installation...");
-	const verify = await sandbox.runCommand({
-		cmd: "node",
-		args: ["-e", "require('@anthropic-ai/claude-agent-sdk'); console.log('SDK loaded successfully')"],
+	console.log("\nInstalling Python 3, pip, and system tools...");
+	const aptInstall = await sandbox.runCommand({
+		cmd: "bash",
+		args: [
+			"-c",
+			[
+				"apt-get update",
+				"apt-get install -y python3 python3-pip python3-venv jq sqlite3 csvkit libxml2-dev libxslt1-dev",
+			].join(" && "),
+		],
 	});
-	console.log("Verify exit code:", verify.exitCode);
-	console.log("Verify output:", await verify.stdout());
+	console.log("apt install exit code:", aptInstall.exitCode);
+	if (aptInstall.exitCode !== 0) {
+		console.error("apt stderr:", await aptInstall.stderr());
+		throw new Error("Failed to install system packages");
+	}
+
+	console.log("\nInstalling Python packages...");
+	const pipInstall = await sandbox.runCommand({
+		cmd: "bash",
+		args: [
+			"-c",
+			[
+				"pip3 install --break-system-packages",
+				"pandas numpy scipy",
+				"requests httpx beautifulsoup4 lxml",
+				"python-dateutil pytz",
+				"matplotlib",
+				"scikit-learn",
+				"duckdb",
+			].join(" "),
+		],
+	});
+	console.log("pip install exit code:", pipInstall.exitCode);
+	if (pipInstall.exitCode !== 0) {
+		console.error("pip stderr:", await pipInstall.stderr());
+		throw new Error("Failed to install Python packages");
+	}
+
+	console.log("\nVerifying installations...");
+	const verifyNode = await sandbox.runCommand({
+		cmd: "node",
+		args: [
+			"-e",
+			"require('@anthropic-ai/claude-agent-sdk'); console.log('SDK loaded successfully')",
+		],
+	});
+	console.log("Node SDK verify:", verifyNode.exitCode === 0 ? "✓" : "✗");
+
+	const verifyPython = await sandbox.runCommand({
+		cmd: "python3",
+		args: ["-c", "import pandas, numpy, scipy, duckdb; print('Python packages loaded successfully')"],
+	});
+	console.log("Python verify:", verifyPython.exitCode === 0 ? "✓" : "✗");
+	console.log("Python output:", await verifyPython.stdout());
 
 	console.log("\nCreating snapshot (this will stop the sandbox)...");
 	const snapshot = await sandbox.snapshot();
