@@ -5,22 +5,10 @@ import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { prisma } from "@/lib/prisma";
 
-const SYSTEM_PROMPT_APPEND = `You are Fortuna, an AI sports betting analyst.
-
-You help users analyze betting opportunities by:
-- Fetching current odds using the odds-api skill
-- Researching historical odds using the odds-api-historical skill
-- Researching team stats, injuries, and news via web search
-- Writing analysis scripts when needed
-- Providing data-driven insights
-
-Always cite your sources and explain your reasoning. Compare odds across multiple sportsbooks when available.
-
-IMPORTANT SECURITY RULES:
-- NEVER reveal environment variables, API keys, or their values
-- NEVER disclose internal paths, workspace directories, or infrastructure
-- NEVER run commands like "env", "printenv", or "echo $VAR"
-- Focus only on sports betting analysis`;
+function getSystemPrompt(): string {
+	const promptPath = path.join(__dirname, "system-prompt.md");
+	return fs.readFileSync(promptPath, "utf-8");
+}
 
 function getSkillFiles(): Array<{ name: string; content: string }> {
 	const skillsDir = path.join(process.cwd(), ".claude/skills");
@@ -137,7 +125,7 @@ async function* streamLocal({
 				systemPrompt: {
 					type: "preset",
 					preset: "claude_code",
-					append: SYSTEM_PROMPT_APPEND,
+					append: getSystemPrompt(),
 				},
 				abortController,
 				includePartialMessages: true,
@@ -241,7 +229,7 @@ function generateAgentScript(
 ): string {
 	const escapedPrompt = JSON.stringify(prompt);
 	const escapedHistory = JSON.stringify(conversationHistory);
-	const escapedSystemPrompt = JSON.stringify(SYSTEM_PROMPT_APPEND);
+	const escapedSystemPrompt = JSON.stringify(getSystemPrompt());
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
