@@ -215,6 +215,34 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 				`Failed to install SDKs (exit code ${npmResult.exitCode})`,
 			);
 		}
+
+		console.log("[Sandbox] Installing Python 3, pip, and system tools...");
+		const aptResult = await sandbox.runCommand({
+			cmd: "bash",
+			args: [
+				"-c",
+				"apt-get update && apt-get install -y python3 python3-pip python3-venv jq sqlite3",
+			],
+		});
+		if (aptResult.exitCode !== 0) {
+			console.warn(
+				`[Sandbox] Warning: Failed to install system packages (exit code ${aptResult.exitCode})`,
+			);
+		}
+
+		console.log("[Sandbox] Installing Python packages...");
+		const pipResult = await sandbox.runCommand({
+			cmd: "bash",
+			args: [
+				"-c",
+				"pip3 install --break-system-packages pandas numpy requests httpx python-dateutil pytz",
+			],
+		});
+		if (pipResult.exitCode !== 0) {
+			console.warn(
+				`[Sandbox] Warning: Failed to install Python packages (exit code ${pipResult.exitCode})`,
+			);
+		}
 	}
 
 	// Copy all skill files to sandbox
@@ -321,6 +349,7 @@ async function* streamViaSandbox({
 			env: {
 				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
 				ODDS_API_KEY: process.env.ODDS_API_KEY || "",
+				API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
 			},
 			detached: true,
 		});
