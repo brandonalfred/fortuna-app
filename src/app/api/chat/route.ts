@@ -3,12 +3,9 @@ import {
 	extractThinkingFromMessage,
 	streamAgentResponse,
 } from "@/lib/agent/client";
-import { streamAgentResponseViaSandbox } from "@/lib/agent/sandbox-client";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import { prisma } from "@/lib/prisma";
 import { sendMessageSchema } from "@/lib/validations/chat";
-
-const usesSandbox = !!process.env.VERCEL;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,23 +87,15 @@ export async function POST(req: Request) {
 				const sentThinkingIds = new Set<string>();
 
 				try {
-					console.log(
-						"[Chat API] Starting agent stream...",
-						usesSandbox ? "(sandbox)" : "(local)",
-					);
+					console.log("[Chat API] Starting agent stream...");
 
-					const agentStream = usesSandbox
-						? streamAgentResponseViaSandbox({
-								prompt: message,
-								chatId: chat.id,
-								conversationHistory,
-							})
-						: streamAgentResponse({
-								prompt: message,
-								workspacePath,
-								conversationHistory,
-								abortController,
-							});
+					const agentStream = streamAgentResponse({
+						prompt: message,
+						workspacePath,
+						chatId: chat.id,
+						conversationHistory,
+						abortController,
+					});
 
 					for await (const msg of agentStream) {
 						console.log("[Chat API] Received message type:", msg.type);
