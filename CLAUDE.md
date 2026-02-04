@@ -59,6 +59,9 @@ Fetches current sports betting odds from The Odds API.
 ### /odds-api-historical - Historical Odds
 Queries historical betting odds snapshots. Critical: always use 10:00 AM ET (15:00 UTC) as snapshot time to capture all games before any start.
 
+### api-sports (Agent-Internal)
+Player and team statistics from API-Sports.io for NBA, NFL, MLB, and NHL. Used by the agent for data-driven betting analysis - calculates hit rates, trends, and matchup performance.
+
 ## Architecture
 
 ```
@@ -135,6 +138,7 @@ The agent runs differently based on environment:
 | `DATABASE_URL` | PostgreSQL connection string (Prisma format) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Agent SDK OAuth token (Max subscription) |
 | `ODDS_API_KEY` | The Odds API key for betting odds |
+| `API_SPORTS_KEY` | API-Sports.io key for player/team statistics |
 | `WORKSPACE_ROOT` | Agent workspace root (default: `./workspace`) |
 | `AGENT_SANDBOX_SNAPSHOT_ID` | Optional Vercel Sandbox snapshot for faster cold starts |
 
