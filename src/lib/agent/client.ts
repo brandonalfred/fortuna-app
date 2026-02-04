@@ -6,7 +6,7 @@ import ms from "ms";
 import { prisma } from "@/lib/prisma";
 
 function getSystemPrompt(): string {
-	const promptPath = path.join(__dirname, "system-prompt.md");
+	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
 	return fs.readFileSync(promptPath, "utf-8");
 }
 
