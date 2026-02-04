@@ -17,44 +17,74 @@ export interface SandboxAgentOptions {
 const SYSTEM_PROMPT_APPEND = `You are Fortuna, an AI sports betting analyst.
 
 You help users analyze betting opportunities by:
-- Fetching current odds from The Odds API using bash curl commands
+- Fetching current odds using the odds-api skill (invoke it when users ask about odds)
 - Researching team stats, injuries, and news via web search
 - Writing analysis scripts when needed
 - Providing data-driven insights
 
-## The Odds API
-
-The ODDS_API_KEY environment variable is available. Use it with curl to fetch data:
-
-### List Available Sports
-\`\`\`bash
-curl -s "https://api.the-odds-api.com/v4/sports/?apiKey=\${ODDS_API_KEY}"
-\`\`\`
-
-Common sport keys:
-- basketball_nba - NBA
-- americanfootball_nfl - NFL
-- baseball_mlb - MLB
-- icehockey_nhl - NHL
-- soccer_epl - English Premier League
-- soccer_usa_mls - MLS
-
-### Get Odds for a Sport
-\`\`\`bash
-curl -s "https://api.the-odds-api.com/v4/sports/{SPORT_KEY}/odds/?apiKey=\${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american"
-\`\`\`
-
-### Get Scores (live & recent)
-\`\`\`bash
-curl -s "https://api.the-odds-api.com/v4/sports/{SPORT_KEY}/scores/?apiKey=\${ODDS_API_KEY}&daysFrom=1"
-\`\`\`
-
-### Markets Available
-- h2h - Moneyline/head-to-head
-- spreads - Point spreads/handicaps
-- totals - Over/under totals
-
 Always cite your sources and explain your reasoning. Compare odds across multiple sportsbooks when available.`;
+
+// Odds API skill content to copy to sandbox
+const ODDS_API_SKILL = `---
+name: odds-api
+description: Fetch sports betting odds, scores, and lines from The Odds API. Use when users ask about betting odds, spreads, totals, moneylines, or want to compare sportsbook prices.
+---
+
+# The Odds API
+
+The \\\`ODDS_API_KEY\\\` environment variable is available. Use it with curl to fetch data.
+
+## List Available Sports
+
+\\\`\\\`\\\`bash
+curl -s "https://api.the-odds-api.com/v4/sports/?apiKey=\\\${ODDS_API_KEY}"
+\\\`\\\`\\\`
+
+### Common Sport Keys
+
+| Key | Sport |
+|-----|-------|
+| \\\`basketball_nba\\\` | NBA |
+| \\\`americanfootball_nfl\\\` | NFL |
+| \\\`baseball_mlb\\\` | MLB |
+| \\\`icehockey_nhl\\\` | NHL |
+| \\\`soccer_epl\\\` | English Premier League |
+| \\\`soccer_usa_mls\\\` | MLS |
+
+## Get Odds for a Sport
+
+\\\`\\\`\\\`bash
+curl -s "https://api.the-odds-api.com/v4/sports/{SPORT_KEY}/odds/?apiKey=\\\${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american"
+\\\`\\\`\\\`
+
+### Parameters
+
+- \\\`regions\\\`: \\\`us\\\`, \\\`us2\\\`, \\\`uk\\\`, \\\`eu\\\`, \\\`au\\\` (comma-separated for multiple)
+- \\\`markets\\\`: \\\`h2h\\\`, \\\`spreads\\\`, \\\`totals\\\` (comma-separated for multiple)
+- \\\`oddsFormat\\\`: \\\`american\\\` or \\\`decimal\\\`
+- \\\`bookmakers\\\`: Filter to specific books (e.g., \\\`draftkings,fanduel\\\`)
+
+## Get Scores (Live & Recent)
+
+\\\`\\\`\\\`bash
+curl -s "https://api.the-odds-api.com/v4/sports/{SPORT_KEY}/scores/?apiKey=\\\${ODDS_API_KEY}&daysFrom=1"
+\\\`\\\`\\\`
+
+## Markets Reference
+
+| Market | Description |
+|--------|-------------|
+| \\\`h2h\\\` | Moneyline / head-to-head winner |
+| \\\`spreads\\\` | Point spreads / handicaps |
+| \\\`totals\\\` | Over/under totals |
+
+## Best Practices
+
+1. **Compare odds across sportsbooks** - Look for the best line/price
+2. **Check for line movement** - Note if odds have shifted
+3. **Cite your sources** - Always mention which sportsbooks you're quoting
+4. **Explain the odds** - Help users understand American odds format (+150 means $100 wins $150, -150 means bet $150 to win $100)
+`;
 
 async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 	const chat = await prisma.chat.findUnique({ where: { id: chatId } });
@@ -94,15 +124,37 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 			cmd: "bash",
 			args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
 		});
-		console.log("[Sandbox] CLI install exit code:", installResult.exitCode);
+		if (installResult.exitCode !== 0) {
+			throw new Error(
+				`Failed to install Claude Code CLI (exit code ${installResult.exitCode})`,
+			);
+		}
 
 		console.log("[Sandbox] Installing SDKs...");
 		const npmResult = await sandbox.runCommand({
 			cmd: "npm",
 			args: ["install", "@anthropic-ai/claude-agent-sdk", "@anthropic-ai/sdk"],
 		});
-		console.log("[Sandbox] npm install exit code:", npmResult.exitCode);
+		if (npmResult.exitCode !== 0) {
+			throw new Error(
+				`Failed to install SDKs (exit code ${npmResult.exitCode})`,
+			);
+		}
 	}
+
+	// Create skills directory and copy odds-api skill
+	console.log("[Sandbox] Setting up skills directory...");
+	await sandbox.runCommand({
+		cmd: "mkdir",
+		args: ["-p", "/vercel/sandbox/.claude/skills/odds-api"],
+	});
+
+	await sandbox.writeFiles([
+		{
+			path: "/vercel/sandbox/.claude/skills/odds-api/SKILL.md",
+			content: Buffer.from(ODDS_API_SKILL),
+		},
+	]);
 
 	await prisma.chat.update({
 		where: { id: chatId },
@@ -140,7 +192,8 @@ async function main() {
       options: {
         cwd: '/vercel/sandbox',
         model: 'claude-opus-4-5-20251101',
-        allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
+        settingSources: ['project'],
+        allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch', 'Skill'],
         permissionMode: 'acceptEdits',
         systemPrompt: {
           type: 'preset',
