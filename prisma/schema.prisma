@@ -6,16 +6,33 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  phoneNumber  String   @map("phone_number")
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  chats        Chat[]
+
+  @@map("user")
+}
+
 model Chat {
   id        String    @id @default(uuid())
   title     String    @default("New Chat")
   sessionId String    @unique @map("session_id")
   sandboxId String?   @map("sandbox_id")
+  userId    String    @map("user_id")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
 
   @@index([createdAt])
+  @@index([userId])
   @@map("chat")
 }
 

@@ -4,29 +4,38 @@ import {
 	streamAgentResponse,
 } from "@/lib/agent/client";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
+import {
+	badRequest,
+	getAuthenticatedUser,
+	serverError,
+	unauthorized,
+} from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { sendMessageSchema } from "@/lib/validations/chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
 	try {
+		const user = await getAuthenticatedUser();
+		if (!user) {
+			return unauthorized();
+		}
+
 		const body = await req.json();
 		const parsed = sendMessageSchema.safeParse(body);
 
 		if (!parsed.success) {
-			return Response.json(
-				{ error: "Invalid request", details: parsed.error.flatten() },
-				{ status: 400 },
-			);
+			return badRequest("Invalid request", parsed.error.flatten());
 		}
 
 		const { message, chatId, timezone } = parsed.data;
 
-		// Fetch existing chat if chatId provided
 		const existingChat = chatId
-			? await prisma.chat.findUnique({ where: { id: chatId } })
+			? await prisma.chat.findUnique({
+					where: { id: chatId, userId: user.id },
+				})
 			: null;
 
 		// Fetch conversation history separately
@@ -53,6 +62,7 @@ export async function POST(req: Request) {
 				data: {
 					sessionId,
 					title: message.length > 50 ? `${message.slice(0, 50)}...` : message,
+					userId: user.id,
 				},
 			}));
 
@@ -204,11 +214,6 @@ export async function POST(req: Request) {
 		});
 	} catch (error) {
 		console.error("Chat API error:", error);
-		return Response.json(
-			{
-				error: error instanceof Error ? error.message : "Internal server error",
-			},
-			{ status: 500 },
-		);
+		return serverError(error);
 	}
 }
