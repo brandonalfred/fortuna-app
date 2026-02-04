@@ -221,7 +221,13 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 			cmd: "bash",
 			args: [
 				"-c",
-				"apt-get update && apt-get install -y python3 python3-pip python3-venv jq sqlite3",
+				[
+					"apt-get update",
+					"apt-get install -y",
+					"python3 python3-pip python3-venv",
+					"jq sqlite3 csvkit",
+					"libxml2-dev libxslt1-dev", // for lxml
+				].join(" && "),
 			],
 		});
 		if (aptResult.exitCode !== 0) {
@@ -235,7 +241,21 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 			cmd: "bash",
 			args: [
 				"-c",
-				"pip3 install --break-system-packages pandas numpy requests httpx python-dateutil pytz",
+				[
+					"pip3 install --break-system-packages",
+					// Data analysis
+					"pandas numpy scipy",
+					// HTTP and scraping
+					"requests httpx beautifulsoup4 lxml",
+					// Date/time handling
+					"python-dateutil pytz",
+					// Visualization
+					"matplotlib",
+					// Machine learning
+					"scikit-learn",
+					// Database
+					"duckdb",
+				].join(" "),
 			],
 		});
 		if (pipResult.exitCode !== 0) {
