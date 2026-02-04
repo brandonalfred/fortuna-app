@@ -223,10 +223,7 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 				"-c",
 				[
 					"apt-get update",
-					"apt-get install -y",
-					"python3 python3-pip python3-venv",
-					"jq sqlite3 csvkit",
-					"libxml2-dev libxslt1-dev", // for lxml
+					"apt-get install -y python3 python3-pip python3-venv jq sqlite3 csvkit libxml2-dev libxslt1-dev",
 				].join(" && "),
 			],
 		});
