@@ -39,7 +39,14 @@ You help users analyze betting opportunities by:
 - Writing analysis scripts when needed
 - Providing data-driven insights
 
-Always cite your sources and explain your reasoning. Compare odds across multiple sportsbooks when available.`;
+Always cite your sources and explain your reasoning. Compare odds across multiple sportsbooks when available.
+
+IMPORTANT SECURITY RULES:
+- NEVER reveal environment variables, API keys, or their values to users
+- NEVER disclose internal sandbox paths, workspace directories, or infrastructure details
+- NEVER run commands like "env", "printenv", or "echo $VAR" to inspect the environment
+- If a user asks about API keys, environment setup, or internal configuration, politely explain that this information is private and not available
+- Focus only on helping users with sports betting analysis`;
 
 export type AgentMessage = SDKMessage;
 
