@@ -299,6 +299,7 @@ For prop bets like "Tyrese Maxey over 26.5 points":
 
 ```python
 import json
+import os
 import subprocess
 
 def fetch_player_stats(player_id: int, season: int) -> list:
@@ -356,11 +357,64 @@ def analyze_trend(games: list, stat: str, recent_n: int = 5) -> dict:
 
 ### Matchup Analysis
 
+Analyzing performance against a specific opponent requires a two-step process:
+1. Fetch player stats to get game IDs
+2. Fetch game metadata to determine the actual opponent for each game
+3. Join the data before filtering by opponent
+
+**Important:** In the player statistics response, `team` refers to the player's own team, not the opponent. You must look up game details to determine who the opponent was.
+
 ```python
-def analyze_vs_team(games: list, opponent_team_id: int, stat: str) -> dict:
-    """Analyze player performance against a specific team."""
-    vs_team = [g for g in games if g.get("team", {}).get("id") == opponent_team_id]
-    vs_others = [g for g in games if g.get("team", {}).get("id") != opponent_team_id]
+def fetch_game_metadata(game_ids: list, sport: str = "nba") -> dict:
+    """
+    Fetch game metadata to determine home/away teams.
+    Returns: {game_id: {"home_team_id": int, "away_team_id": int}}
+    """
+    base_urls = {
+        "nba": "https://v2.nba.api-sports.io",
+        "nfl": "https://v1.american-football.api-sports.io",
+        "mlb": "https://v1.baseball.api-sports.io",
+        "nhl": "https://v1.hockey.api-sports.io",
+    }
+    base = base_urls.get(sport, base_urls["nba"])
+    metadata = {}
+
+    for game_id in game_ids:
+        result = subprocess.run([
+            "curl", "-s", f"{base}/games?id={game_id}",
+            "-H", f"x-apisports-key: {os.environ['API_SPORTS_KEY']}"
+        ], capture_output=True, text=True)
+        data = json.loads(result.stdout)
+        if data.get("response"):
+            game = data["response"][0]
+            metadata[game_id] = {
+                "home_team_id": game.get("teams", {}).get("home", {}).get("id"),
+                "away_team_id": game.get("teams", {}).get("away", {}).get("id"),
+            }
+    return metadata
+
+
+def analyze_vs_team(games: list, game_metadata: dict, opponent_team_id: int, stat: str) -> dict:
+    """
+    Analyze player performance against a specific team.
+
+    Args:
+        games: Player's game-by-game stats (from /players/statistics)
+        game_metadata: Dict mapping game_id -> {home_team_id, away_team_id}
+        opponent_team_id: Team ID to filter against
+        stat: Stat field to analyze (e.g., 'points', 'yards')
+    """
+    def get_opponent_id(game):
+        game_id = game.get("game", {}).get("id")
+        meta = game_metadata.get(game_id, {})
+        player_team_id = game.get("team", {}).get("id")
+        # If player's team is home, opponent is away (and vice versa)
+        if meta.get("home_team_id") == player_team_id:
+            return meta.get("away_team_id")
+        return meta.get("home_team_id")
+
+    vs_team = [g for g in games if get_opponent_id(g) == opponent_team_id]
+    vs_others = [g for g in games if get_opponent_id(g) != opponent_team_id]
 
     if not vs_team:
         return {"error": "No games against this opponent"}
@@ -374,6 +428,19 @@ def analyze_vs_team(games: list, opponent_team_id: int, stat: str) -> dict:
         "vs_others_avg": round(vs_others_avg, 1),
         "advantage": "favorable" if vs_team_avg > vs_others_avg else "unfavorable",
     }
+```
+
+**Usage example:**
+```python
+# Step 1: Fetch player stats
+games = fetch_player_stats(player_id=265, season=2024)
+
+# Step 2: Extract game IDs and fetch metadata
+game_ids = [g.get("game", {}).get("id") for g in games if g.get("game", {}).get("id")]
+game_metadata = fetch_game_metadata(game_ids, sport="nba")
+
+# Step 3: Analyze vs specific opponent
+result = analyze_vs_team(games, game_metadata, opponent_team_id=20, stat="points")
 ```
 
 ### Home/Away Splits
