@@ -43,10 +43,11 @@ export async function POST(req: Request) {
 		const sessionId = existingChat?.sessionId || randomUUID();
 		const workspacePath = await getOrCreateWorkspace(sessionId);
 
-		// Build conversation history from existing messages
+		// Build conversation history from existing messages (including thinking for context)
 		const conversationHistory = existingMessages.map((m) => ({
 			role: m.role as "user" | "assistant",
 			content: m.content,
+			thinking: m.thinking,
 		}));
 
 		const chat =
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
 				sendEvent("init", { chatId: chat.id, sessionId });
 
 				let fullAssistantContent = "";
+				let fullThinkingContent = "";
 				const toolUses: Array<{ name: string; input: unknown }> = [];
 				let lastEventWasToolUse = false;
 				const sentThinkingIds = new Set<string>();
@@ -116,6 +118,8 @@ export async function POST(req: Request) {
 									if (thinking) {
 										sendEvent("thinking", { thinking });
 										sentThinkingIds.add(messageId);
+										fullThinkingContent +=
+											(fullThinkingContent ? "\n\n" : "") + thinking;
 									}
 								}
 
@@ -175,6 +179,7 @@ export async function POST(req: Request) {
 								chatId: chat.id,
 								role: "assistant",
 								content: fullAssistantContent,
+								thinking: fullThinkingContent || null,
 								toolName: toolUses[0]?.name,
 								toolInput:
 									toolUses.length > 0

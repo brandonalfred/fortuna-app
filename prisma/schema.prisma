@@ -24,6 +24,7 @@ model Message {
   chatId    String   @map("chat_id")
   role      String
   content   String   @db.Text
+  thinking  String?  @db.Text
   toolName  String?  @map("tool_name")
   toolInput Json?    @map("tool_input")
   createdAt DateTime @default(now()) @map("created_at")

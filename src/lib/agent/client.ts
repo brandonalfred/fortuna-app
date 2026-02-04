@@ -53,6 +53,7 @@ export type AgentMessage = SDKMessage;
 interface ConversationMessage {
 	role: "user" | "assistant";
 	content: string;
+	thinking?: string | null;
 }
 
 export interface StreamAgentOptions {
@@ -73,10 +74,16 @@ export async function* streamAgentResponse({
 
 	if (conversationHistory && conversationHistory.length > 0) {
 		const historyText = conversationHistory
-			.map(
-				(msg) =>
-					`${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`,
-			)
+			.map((msg) => {
+				if (msg.role === "user") {
+					return `User: ${msg.content}`;
+				}
+				// Include thinking for assistant messages if available
+				const thinkingPart = msg.thinking
+					? `[Your internal reasoning]: ${msg.thinking}\n\n`
+					: "";
+				return `${thinkingPart}Assistant: ${msg.content}`;
+			})
 			.join("\n\n");
 		fullPrompt = `Previous conversation:\n${historyText}\n\nUser: ${prompt}`;
 	}

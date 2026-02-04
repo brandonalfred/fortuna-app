@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 interface ConversationMessage {
 	role: "user" | "assistant";
 	content: string;
+	thinking?: string | null;
 }
 
 export interface SandboxAgentOptions {
@@ -182,7 +183,16 @@ async function main() {
 
     if (conversationHistory.length > 0) {
       const historyText = conversationHistory
-        .map((msg) => \`\${msg.role === 'user' ? 'User' : 'Assistant'}: \${msg.content}\`)
+        .map((msg) => {
+          if (msg.role === 'user') {
+            return \`User: \${msg.content}\`;
+          }
+          // Include thinking for assistant messages if available
+          const thinkingPart = msg.thinking
+            ? \`[Your internal reasoning]: \${msg.thinking}\\n\\n\`
+            : '';
+          return \`\${thinkingPart}Assistant: \${msg.content}\`;
+        })
         .join('\\n\\n');
       fullPrompt = \`Previous conversation:\\n\${historyText}\\n\\nUser: \${prompt}\`;
     }
