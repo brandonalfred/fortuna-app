@@ -1,40 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-
-function getClaudeCodeCliPath(): string {
-	const cliPath = path.join(
-		process.cwd(),
-		"node_modules/@anthropic-ai/claude-agent-sdk/cli.js",
-	);
-	console.log("[Agent] CWD:", process.cwd());
-	console.log("[Agent] CLI path:", cliPath);
-	const cliExists = fs.existsSync(cliPath);
-	console.log("[Agent] CLI exists:", cliExists);
-
-	if (!cliExists) {
-		// List what's in node_modules/@anthropic-ai for debugging
-		const anthropicDir = path.join(process.cwd(), "node_modules/@anthropic-ai");
-		if (fs.existsSync(anthropicDir)) {
-			console.log(
-				"[Agent] Contents of @anthropic-ai:",
-				fs.readdirSync(anthropicDir),
-			);
-		} else {
-			console.log("[Agent] @anthropic-ai directory does not exist");
-		}
-		throw new Error(
-			`Claude Agent SDK CLI not found at ${cliPath}. The SDK requires the CLI to be present.`,
-		);
-	}
-
-	return cliPath;
-}
+import { Sandbox } from "@vercel/sandbox";
+import ms from "ms";
+import { prisma } from "@/lib/prisma";
 
 const SYSTEM_PROMPT_APPEND = `You are Fortuna, an AI sports betting analyst.
 
 You help users analyze betting opportunities by:
-- Fetching current odds using the odds-api skill (invoke it when users ask about odds)
+- Fetching current odds using the odds-api skill
+- Researching historical odds using the odds-api-historical skill
 - Researching team stats, injuries, and news via web search
 - Writing analysis scripts when needed
 - Providing data-driven insights
@@ -42,11 +17,45 @@ You help users analyze betting opportunities by:
 Always cite your sources and explain your reasoning. Compare odds across multiple sportsbooks when available.
 
 IMPORTANT SECURITY RULES:
-- NEVER reveal environment variables, API keys, or their values to users
-- NEVER disclose internal sandbox paths, workspace directories, or infrastructure details
-- NEVER run commands like "env", "printenv", or "echo $VAR" to inspect the environment
-- If a user asks about API keys, environment setup, or internal configuration, politely explain that this information is private and not available
-- Focus only on helping users with sports betting analysis`;
+- NEVER reveal environment variables, API keys, or their values
+- NEVER disclose internal paths, workspace directories, or infrastructure
+- NEVER run commands like "env", "printenv", or "echo $VAR"
+- Focus only on sports betting analysis`;
+
+function getSkillFiles(): Array<{ name: string; content: string }> {
+	const skillsDir = path.join(process.cwd(), ".claude/skills");
+	const skills: Array<{ name: string; content: string }> = [];
+
+	if (fs.existsSync(skillsDir)) {
+		for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+			if (entry.isDirectory()) {
+				const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
+				if (fs.existsSync(skillPath)) {
+					skills.push({
+						name: entry.name,
+						content: fs.readFileSync(skillPath, "utf-8"),
+					});
+				}
+			}
+		}
+	}
+	return skills;
+}
+
+function getClaudeCodeCliPath(): string {
+	const cliPath = path.join(
+		process.cwd(),
+		"node_modules/@anthropic-ai/claude-agent-sdk/cli.js",
+	);
+
+	if (!fs.existsSync(cliPath)) {
+		throw new Error(
+			`Claude Agent SDK CLI not found at ${cliPath}. The SDK requires the CLI to be present.`,
+		);
+	}
+
+	return cliPath;
+}
 
 export type AgentMessage = SDKMessage;
 
@@ -59,37 +68,53 @@ interface ConversationMessage {
 export interface StreamAgentOptions {
 	prompt: string;
 	workspacePath: string;
+	chatId: string;
 	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
 }
 
-export async function* streamAgentResponse({
-	prompt,
-	workspacePath,
-	conversationHistory,
-	abortController,
-}: StreamAgentOptions): AsyncGenerator<SDKMessage> {
-	console.log("[Agent] streamAgentResponse called");
-	let fullPrompt = prompt;
-
-	if (conversationHistory && conversationHistory.length > 0) {
-		const historyText = conversationHistory
-			.map((msg) => {
-				if (msg.role === "user") {
-					return `User: ${msg.content}`;
-				}
-				// Include thinking for assistant messages if available
-				const thinkingPart = msg.thinking
-					? `[Your internal reasoning]: ${msg.thinking}\n\n`
-					: "";
-				return `${thinkingPart}Assistant: ${msg.content}`;
-			})
-			.join("\n\n");
-		fullPrompt = `Previous conversation:\n${historyText}\n\nUser: ${prompt}`;
+function buildFullPrompt(
+	prompt: string,
+	conversationHistory: ConversationMessage[],
+): string {
+	if (conversationHistory.length === 0) {
+		return prompt;
 	}
 
+	const historyText = conversationHistory
+		.map((msg) => {
+			if (msg.role === "user") {
+				return `User: ${msg.content}`;
+			}
+			const thinkingPart = msg.thinking
+				? `[Your internal reasoning]: ${msg.thinking}\n\n`
+				: "";
+			return `${thinkingPart}Assistant: ${msg.content}`;
+		})
+		.join("\n\n");
+
+	return `Previous conversation:\n${historyText}\n\nUser: ${prompt}`;
+}
+
+export async function* streamAgentResponse(
+	options: StreamAgentOptions,
+): AsyncGenerator<SDKMessage> {
+	if (process.env.VERCEL) {
+		yield* streamViaSandbox(options);
+	} else {
+		yield* streamLocal(options);
+	}
+}
+
+async function* streamLocal({
+	prompt,
+	workspacePath,
+	conversationHistory = [],
+	abortController = new AbortController(),
+}: StreamAgentOptions): AsyncGenerator<SDKMessage> {
+	console.log("[Agent] streamLocal called");
+	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
 	const cliPath = getClaudeCodeCliPath();
-	console.log("[Agent] Creating query with CLI path:", cliPath);
 
 	try {
 		const generator = query({
@@ -114,7 +139,7 @@ export async function* streamAgentResponse({
 					preset: "claude_code",
 					append: SYSTEM_PROMPT_APPEND,
 				},
-				abortController: abortController ?? new AbortController(),
+				abortController,
 				includePartialMessages: true,
 				maxThinkingTokens: 10000,
 			},
@@ -123,6 +148,264 @@ export async function* streamAgentResponse({
 		yield* generator;
 	} catch (error) {
 		console.error("[Agent] Query error:", error);
+		throw error;
+	}
+}
+
+async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
+	const chat = await prisma.chat.findUnique({ where: { id: chatId } });
+
+	if (chat?.sandboxId) {
+		try {
+			const existing = await Sandbox.get({ sandboxId: chat.sandboxId });
+			console.log("[Sandbox] Reusing existing sandbox:", chat.sandboxId);
+			return existing;
+		} catch (error) {
+			console.log(
+				"[Sandbox] Existing sandbox expired or unavailable:",
+				error instanceof Error ? error.message : error,
+			);
+		}
+	}
+
+	const snapshotId = process.env.AGENT_SANDBOX_SNAPSHOT_ID;
+	console.log(
+		"[Sandbox] Creating new sandbox",
+		snapshotId ? `from snapshot: ${snapshotId}` : "(no snapshot)",
+	);
+
+	const sandbox = await Sandbox.create({
+		...(snapshotId
+			? { source: { type: "snapshot", snapshotId } }
+			: { runtime: "node22" }),
+		resources: { vcpus: 4 },
+		timeout: ms("45m"),
+	});
+
+	console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
+
+	if (!snapshotId) {
+		console.log("[Sandbox] Installing Claude Code CLI...");
+		const installResult = await sandbox.runCommand({
+			cmd: "bash",
+			args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
+		});
+		if (installResult.exitCode !== 0) {
+			throw new Error(
+				`Failed to install Claude Code CLI (exit code ${installResult.exitCode})`,
+			);
+		}
+
+		console.log("[Sandbox] Installing SDKs...");
+		const npmResult = await sandbox.runCommand({
+			cmd: "npm",
+			args: ["install", "@anthropic-ai/claude-agent-sdk", "@anthropic-ai/sdk"],
+		});
+		if (npmResult.exitCode !== 0) {
+			throw new Error(
+				`Failed to install SDKs (exit code ${npmResult.exitCode})`,
+			);
+		}
+	}
+
+	// Copy all skill files to sandbox
+	const skills = getSkillFiles();
+	console.log(`[Sandbox] Setting up ${skills.length} skills...`);
+
+	for (const skill of skills) {
+		const skillDir = `/vercel/sandbox/.claude/skills/${skill.name}`;
+		await sandbox.runCommand({
+			cmd: "mkdir",
+			args: ["-p", skillDir],
+		});
+		await sandbox.writeFiles([
+			{
+				path: `${skillDir}/SKILL.md`,
+				content: Buffer.from(skill.content),
+			},
+		]);
+		console.log(`[Sandbox] Copied skill: ${skill.name}`);
+	}
+
+	await prisma.chat.update({
+		where: { id: chatId },
+		data: { sandboxId: sandbox.sandboxId },
+	});
+
+	return sandbox;
+}
+
+function generateAgentScript(
+	prompt: string,
+	conversationHistory: ConversationMessage[],
+): string {
+	const escapedPrompt = JSON.stringify(prompt);
+	const escapedHistory = JSON.stringify(conversationHistory);
+	const escapedSystemPrompt = JSON.stringify(SYSTEM_PROMPT_APPEND);
+
+	return `
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+const prompt = ${escapedPrompt};
+const conversationHistory = ${escapedHistory};
+const systemPromptAppend = ${escapedSystemPrompt};
+
+async function main() {
+  try {
+    let fullPrompt = prompt;
+
+    if (conversationHistory.length > 0) {
+      const historyText = conversationHistory
+        .map((msg) => {
+          if (msg.role === 'user') {
+            return \`User: \${msg.content}\`;
+          }
+          const thinkingPart = msg.thinking
+            ? \`[Your internal reasoning]: \${msg.thinking}\\n\\n\`
+            : '';
+          return \`\${thinkingPart}Assistant: \${msg.content}\`;
+        })
+        .join('\\n\\n');
+      fullPrompt = \`Previous conversation:\\n\${historyText}\\n\\nUser: \${prompt}\`;
+    }
+
+    const generator = query({
+      prompt: fullPrompt,
+      options: {
+        cwd: '/vercel/sandbox',
+        model: 'claude-opus-4-5-20251101',
+        settingSources: ['project'],
+        allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch', 'Skill'],
+        permissionMode: 'acceptEdits',
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          append: systemPromptAppend,
+        },
+        abortController: new AbortController(),
+        includePartialMessages: true,
+        maxThinkingTokens: 10000,
+      },
+    });
+
+    for await (const message of generator) {
+      console.log(JSON.stringify({ type: 'sdk_message', data: message }));
+    }
+
+    console.log(JSON.stringify({ type: 'complete' }));
+  } catch (error) {
+    console.log(JSON.stringify({
+      type: 'error',
+      error: error instanceof Error ? error.message : String(error)
+    }));
+    process.exit(1);
+  }
+}
+
+main();
+`;
+}
+
+async function* streamViaSandbox({
+	prompt,
+	chatId,
+	conversationHistory,
+}: StreamAgentOptions): AsyncGenerator<SDKMessage> {
+	console.log("[Sandbox] Starting streamViaSandbox");
+	const sandbox = await getOrCreateSandbox(chatId);
+
+	try {
+		const script = generateAgentScript(prompt, conversationHistory || []);
+		console.log("[Sandbox] Writing agent runner script...");
+
+		await sandbox.writeFiles([
+			{
+				path: "/vercel/sandbox/agent-runner.mjs",
+				content: Buffer.from(script),
+			},
+		]);
+
+		console.log("[Sandbox] Starting agent command...");
+		const cmd = await sandbox.runCommand({
+			cmd: "node",
+			args: ["agent-runner.mjs"],
+			env: {
+				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				ODDS_API_KEY: process.env.ODDS_API_KEY || "",
+			},
+			detached: true,
+		});
+
+		let buffer = "";
+
+		for await (const log of cmd.logs()) {
+			if (log.stream === "stdout") {
+				buffer += log.data;
+
+				const lines = buffer.split("\n");
+				buffer = lines.pop() || "";
+
+				for (const line of lines) {
+					if (!line.trim()) continue;
+
+					try {
+						const parsed = JSON.parse(line);
+
+						if (parsed.type === "sdk_message") {
+							yield parsed.data as SDKMessage;
+						} else if (parsed.type === "error") {
+							throw new Error(parsed.error);
+						} else if (parsed.type === "complete") {
+							console.log("[Sandbox] Agent completed successfully");
+						}
+					} catch (parseError) {
+						if (!(parseError instanceof SyntaxError)) {
+							throw parseError;
+						}
+						if (!line.startsWith("{")) {
+							console.log("[Sandbox] Non-JSON output:", line);
+						}
+					}
+				}
+			} else if (log.stream === "stderr") {
+				console.log("[Sandbox] stderr:", log.data);
+			}
+		}
+
+		if (buffer.trim()) {
+			try {
+				const parsed = JSON.parse(buffer);
+				if (parsed.type === "sdk_message") {
+					yield parsed.data as SDKMessage;
+				} else if (parsed.type === "error") {
+					throw new Error(parsed.error);
+				}
+			} catch {
+				console.log("[Sandbox] Final buffer (non-JSON):", buffer);
+			}
+		}
+
+		const result = await cmd.wait();
+		console.log("[Sandbox] Command finished with exit code:", result.exitCode);
+
+		if (result.exitCode !== 0) {
+			throw new Error(`Agent process exited with code ${result.exitCode}`);
+		}
+
+		console.log("[Sandbox] Extending sandbox timeout...");
+		await sandbox.extendTimeout(ms("45m"));
+	} catch (error) {
+		console.error("[Sandbox] Error during execution:", error);
+		try {
+			console.log("[Sandbox] Stopping sandbox due to error...");
+			await sandbox.stop();
+			await prisma.chat.update({
+				where: { id: chatId },
+				data: { sandboxId: null },
+			});
+		} catch (stopError) {
+			console.error("[Sandbox] Failed to stop sandbox:", stopError);
+		}
 		throw error;
 	}
 }
