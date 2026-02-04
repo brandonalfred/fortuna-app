@@ -223,42 +223,20 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 	return sandbox;
 }
 
-function generateAgentScript(
-	prompt: string,
-	conversationHistory: ConversationMessage[],
-): string {
-	const escapedPrompt = JSON.stringify(prompt);
-	const escapedHistory = JSON.stringify(conversationHistory);
+function generateAgentScript(fullPrompt: string): string {
+	const escapedPrompt = JSON.stringify(fullPrompt);
 	const escapedSystemPrompt = JSON.stringify(getSystemPrompt());
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 const prompt = ${escapedPrompt};
-const conversationHistory = ${escapedHistory};
 const systemPromptAppend = ${escapedSystemPrompt};
 
 async function main() {
   try {
-    let fullPrompt = prompt;
-
-    if (conversationHistory.length > 0) {
-      const historyText = conversationHistory
-        .map((msg) => {
-          if (msg.role === 'user') {
-            return \`User: \${msg.content}\`;
-          }
-          const thinkingPart = msg.thinking
-            ? \`[Your internal reasoning]: \${msg.thinking}\\n\\n\`
-            : '';
-          return \`\${thinkingPart}Assistant: \${msg.content}\`;
-        })
-        .join('\\n\\n');
-      fullPrompt = \`Previous conversation:\\n\${historyText}\\n\\nUser: \${prompt}\`;
-    }
-
     const generator = query({
-      prompt: fullPrompt,
+      prompt,
       options: {
         cwd: '/vercel/sandbox',
         model: 'claude-opus-4-5-20251101',
@@ -297,13 +275,14 @@ main();
 async function* streamViaSandbox({
 	prompt,
 	chatId,
-	conversationHistory,
+	conversationHistory = [],
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
 	const sandbox = await getOrCreateSandbox(chatId);
 
 	try {
-		const script = generateAgentScript(prompt, conversationHistory || []);
+		const fullPrompt = buildFullPrompt(prompt, conversationHistory);
+		const script = generateAgentScript(fullPrompt);
 		console.log("[Sandbox] Writing agent runner script...");
 
 		await sandbox.writeFiles([
