@@ -174,6 +174,7 @@ export function useChat(options: UseChatOptions = {}) {
 			setStreamingMessage({ segments: [], isStreaming: true });
 
 			abortControllerRef.current = new AbortController();
+			const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 			try {
 				const response = await fetch("/api/chat", {
@@ -183,6 +184,7 @@ export function useChat(options: UseChatOptions = {}) {
 						message: content,
 						chatId: currentChat?.id,
 						sessionId,
+						timezone: userTimezone,
 					}),
 					signal: abortControllerRef.current.signal,
 				});

@@ -4,6 +4,7 @@ export const sendMessageSchema = z.object({
 	message: z.string().min(1).max(10000),
 	chatId: z.string().uuid().nullish(),
 	sessionId: z.string().nullish(),
+	timezone: z.string().min(1).max(100).optional(),
 });
 
 export const createChatSchema = z.object({

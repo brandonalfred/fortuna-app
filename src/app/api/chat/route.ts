@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 			);
 		}
 
-		const { message, chatId } = parsed.data;
+		const { message, chatId, timezone } = parsed.data;
 
 		// Fetch existing chat if chatId provided
 		const existingChat = chatId
@@ -95,6 +95,7 @@ export async function POST(req: Request) {
 						chatId: chat.id,
 						conversationHistory,
 						abortController,
+						timezone,
 					});
 
 					for await (const msg of agentStream) {
