@@ -2,13 +2,11 @@ import bcrypt from "bcrypt";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+import { authConfig } from "./auth.config";
 import "./types";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-	session: { strategy: "jwt" },
-	pages: {
-		signIn: "/auth/signin",
-	},
+	...authConfig,
 	providers: [
 		Credentials({
 			name: "credentials",
@@ -47,20 +45,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			},
 		}),
 	],
-	callbacks: {
-		jwt({ token, user }) {
-			if (user) {
-				token.id = user.id;
-				token.firstName = user.firstName;
-				token.lastName = user.lastName;
-			}
-			return token;
-		},
-		session({ session, token }) {
-			session.user.id = token.id as string;
-			session.user.firstName = token.firstName as string;
-			session.user.lastName = token.lastName as string;
-			return session;
-		},
-	},
 });

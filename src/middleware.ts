@@ -1,10 +1,12 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "@/lib/auth/auth.config";
 
-export async function middleware(req: NextRequest) {
+const { auth } = NextAuth(authConfig);
+
+export default auth((req) => {
 	const { nextUrl } = req;
-	const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-	const isLoggedIn = !!token;
+	const isLoggedIn = !!req.auth;
 	const isAuthPage = nextUrl.pathname.startsWith("/auth");
 
 	if (isAuthPage) {
@@ -19,7 +21,7 @@ export async function middleware(req: NextRequest) {
 	}
 
 	return NextResponse.next();
-}
+});
 
 export const config = {
 	matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
