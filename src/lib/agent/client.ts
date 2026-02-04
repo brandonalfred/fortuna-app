@@ -381,8 +381,14 @@ async function* streamViaSandbox({
 			throw new Error(`Agent process exited with code ${result.exitCode}`);
 		}
 
+		// Extend timeout in background - don't let failures affect the completed stream
 		console.log("[Sandbox] Extending sandbox timeout...");
-		await sandbox.extendTimeout(ms("45m"));
+		sandbox.extendTimeout(ms("45m")).catch((extendError: unknown) => {
+			console.warn(
+				"[Sandbox] Failed to extend timeout (non-fatal):",
+				extendError instanceof Error ? extendError.message : extendError,
+			);
+		});
 	} catch (error) {
 		console.error("[Sandbox] Error during execution:", error);
 		try {
