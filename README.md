@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fortuna
+
+AI-powered sports betting analysis assistant built with the Claude Agent SDK.
+
+## Features
+
+- Real-time odds fetching from The Odds API
+- Historical odds analysis for line movement tracking
+- Web search for team stats, injuries, and news
+- Extended thinking for complex analysis
+- Sandboxed code execution for custom analysis scripts
+- Persistent chat history with PostgreSQL
+
+## Tech Stack
+
+- **Next.js 16** with App Router and React 19
+- **Claude Agent SDK** with Opus 4.5 model
+- **Tailwind CSS v4** + shadcn/ui
+- **Prisma 7** with Neon PostgreSQL
+- **Vercel Sandbox** for secure agent execution
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+   ```bash
+   bun install
+   ```
+
+2. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   # Add your CLAUDE_CODE_OAUTH_TOKEN and ODDS_API_KEY
+   ```
+
+3. Start the Prisma dev server (in a separate terminal):
+   ```bash
+   bunx prisma dev --port 5434
+   ```
+
+4. Run database migrations:
+   ```bash
+   bunx prisma migrate dev
+   ```
+
+5. Start the development server:
+   ```bash
+   bun dev
+   ```
+
+Open [http://localhost:3000](http://localhost:3000) to start chatting with Fortuna.
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun dev           # Start dev server with Turbopack
+bun run lint      # Lint and auto-fix
+bun run type-check # TypeScript checking
+bun run build     # Production build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The app streams agent responses via Server-Sent Events (SSE). In development, the Claude Agent SDK runs locally. In production on Vercel, agents run inside isolated sandboxes with per-chat persistence.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [CLAUDE.md](./CLAUDE.md) for detailed architecture documentation.
