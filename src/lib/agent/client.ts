@@ -5,9 +5,28 @@ import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { prisma } from "@/lib/prisma";
 
-function getSystemPrompt(): string {
+const DEFAULT_TIMEZONE = "America/New_York";
+
+function formatCurrentDate(timezone: string): string {
+	const formatter = new Intl.DateTimeFormat("en-US", {
+		timeZone: timezone,
+		weekday: "long",
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	});
+	return formatter.format(new Date());
+}
+
+function getSystemPrompt(timezone?: string): string {
 	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
-	return fs.readFileSync(promptPath, "utf-8");
+	const basePrompt = fs.readFileSync(promptPath, "utf-8");
+
+	const tz = timezone || DEFAULT_TIMEZONE;
+	const currentDate = formatCurrentDate(tz);
+	const dateContext = `\n\nIMPORTANT: Today's date is ${currentDate}. Use this as the reference for "today", "yesterday", "tomorrow", etc.\n`;
+
+	return basePrompt + dateContext;
 }
 
 function getSkillFiles(): Array<{ name: string; content: string }> {
@@ -59,6 +78,7 @@ export interface StreamAgentOptions {
 	chatId: string;
 	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
+	timezone?: string;
 }
 
 function buildFullPrompt(
@@ -99,6 +119,7 @@ async function* streamLocal({
 	workspacePath,
 	conversationHistory = [],
 	abortController = new AbortController(),
+	timezone,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Agent] streamLocal called");
 	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
@@ -125,7 +146,7 @@ async function* streamLocal({
 				systemPrompt: {
 					type: "preset",
 					preset: "claude_code",
-					append: getSystemPrompt(),
+					append: getSystemPrompt(timezone),
 				},
 				abortController,
 				includePartialMessages: true,
@@ -223,9 +244,9 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 	return sandbox;
 }
 
-function generateAgentScript(fullPrompt: string): string {
+function generateAgentScript(fullPrompt: string, timezone?: string): string {
 	const escapedPrompt = JSON.stringify(fullPrompt);
-	const escapedSystemPrompt = JSON.stringify(getSystemPrompt());
+	const escapedSystemPrompt = JSON.stringify(getSystemPrompt(timezone));
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -276,13 +297,14 @@ async function* streamViaSandbox({
 	prompt,
 	chatId,
 	conversationHistory = [],
+	timezone,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
 	const sandbox = await getOrCreateSandbox(chatId);
 
 	try {
 		const fullPrompt = buildFullPrompt(prompt, conversationHistory);
-		const script = generateAgentScript(fullPrompt);
+		const script = generateAgentScript(fullPrompt, timezone);
 		console.log("[Sandbox] Writing agent runner script...");
 
 		await sandbox.writeFiles([
