@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function SignUpPage() {
-	const router = useRouter();
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
@@ -17,12 +16,14 @@ export default function SignUpPage() {
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
+		const email = formData.get("email") as string;
+		const password = formData.get("password") as string;
 		const data = {
 			firstName: formData.get("firstName") as string,
 			lastName: formData.get("lastName") as string,
-			email: formData.get("email") as string,
+			email,
 			phoneNumber: formData.get("phoneNumber") as string,
-			password: formData.get("password") as string,
+			password,
 		};
 
 		try {
@@ -45,7 +46,11 @@ export default function SignUpPage() {
 				return;
 			}
 
-			router.push("/auth/signin?registered=true");
+			await signIn("credentials", {
+				email,
+				password,
+				callbackUrl: "/",
+			});
 		} catch {
 			setError("Something went wrong. Please try again.");
 		} finally {
