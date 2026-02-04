@@ -6,10 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 bun dev              # Start development server with Turbopack (localhost:3000)
-bun run build        # Production build
+bun run build        # Production build (runs migrations first)
+bun run build:ci     # Production build without migrations (CI)
 bun run lint         # Lint and auto-fix with Biome
 bun run lint:check   # Lint without fixing (CI)
-bun run lint:prisma  # Lint Prisma schema
+bun run lint:prisma  # Lint Prisma schema naming conventions
 bun run type-check   # TypeScript type checking
 ```
 
@@ -21,8 +22,9 @@ bun run type-check   # TypeScript type checking
 - **Biome** for linting/formatting (not ESLint/Prettier)
 - **Tailwind CSS v4** with `@theme inline` syntax in globals.css
 - **shadcn/ui** components - add via `bunx shadcn@latest add <component>`
-- **Prisma 7** with PostgreSQL for database
+- **Prisma 7** with PostgreSQL (Neon serverless adapter)
 - **Claude Agent SDK** for AI-powered sports betting analysis
+- **Vercel Sandbox** for secure agent code execution in production
 
 ## Code Style
 
@@ -51,49 +53,90 @@ Same as `/pr` but creates a draft PR (`gh pr create --draft`).
 - Use for work-in-progress PRs that aren't ready for review
 - Same description format: "What" and "Why" only, no test plan
 
+### /odds-api - Fetch Live Odds
+Fetches current sports betting odds from The Odds API.
+
+### /odds-api-historical - Historical Odds
+Queries historical betting odds snapshots. Critical: always use 10:00 AM ET (15:00 UTC) as snapshot time to capture all games before any start.
+
 ## Architecture
 
-- `src/app/` - Next.js App Router pages and layouts
-- `src/app/api/chat/` - SSE streaming endpoint for agent responses
-- `src/app/api/chats/` - Chat CRUD operations
-- `src/components/chat/` - Chat UI components (input, messages, tool display)
-- `src/components/sidebar/` - Chat history sidebar
-- `src/components/ui/` - shadcn/ui primitives
-- `src/hooks/` - React hooks (useChat for streaming)
-- `src/lib/agent/` - Claude Agent SDK wrapper and session management
-- `src/lib/validations/` - Zod schemas for API validation
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── chat/route.ts       # SSE streaming endpoint for agent responses
+│   │   └── chats/              # Chat CRUD operations
+│   ├── globals.css             # Tailwind v4 theme with design tokens
+│   ├── layout.tsx              # Root layout with fonts
+│   └── page.tsx                # Main chat interface
+├── components/
+│   ├── chat/                   # Chat UI (input, messages, tool display)
+│   ├── sidebar/                # Chat history sidebar
+│   └── ui/                     # shadcn/ui primitives
+├── hooks/
+│   └── use-chat.ts             # SSE streaming and message state management
+├── lib/
+│   ├── agent/
+│   │   ├── client.ts           # Claude Agent SDK wrapper (local + sandbox modes)
+│   │   ├── system-prompt.md    # Agent persona and capabilities
+│   │   └── workspace.ts        # Per-session workspace isolation
+│   ├── prisma.ts               # Prisma client singleton with Neon adapter
+│   ├── types.ts                # TypeScript types for chat/messages
+│   └── validations/            # Zod schemas for API validation
+└── .claude/skills/             # Agent skills loaded at runtime
+```
 
 ## Agent System
 
-The app uses the Claude Agent SDK to provide AI-powered sports betting analysis.
+The app uses the Claude Agent SDK to provide AI-powered sports betting analysis with the "Fortuna" persona.
 
-**Key files:**
-- `src/lib/agent/client.ts` - Agent SDK wrapper with streaming, uses `claude-opus-4-5-20251101` model
-- `src/lib/agent/workspace.ts` - Per-session workspace management
-- `src/app/api/chat/route.ts` - SSE streaming endpoint
-- `src/hooks/use-chat.ts` - React hook for SSE streaming and message state
+### Dual Execution Modes
 
-**Agent capabilities:**
+The agent runs differently based on environment:
+
+- **Local development**: Direct SDK execution via `@anthropic-ai/claude-agent-sdk`
+- **Vercel production**: Runs inside Vercel Sandbox with per-chat persistence
+
+### Key Components
+
+| File | Purpose |
+|------|---------|
+| `src/lib/agent/client.ts` | SDK wrapper, handles both local and sandbox streaming |
+| `src/lib/agent/workspace.ts` | Creates isolated workspace per session |
+| `src/lib/agent/system-prompt.md` | Agent persona and security rules |
+| `src/app/api/chat/route.ts` | SSE streaming endpoint with conversation history |
+| `src/hooks/use-chat.ts` | React hook for SSE parsing and state |
+
+### Agent Capabilities
+
 - Web search for real-time sports data
-- The Odds API integration for betting odds (via bash curl)
+- The Odds API integration (live and historical odds via skills)
 - Code execution for analysis scripts
 - File operations within sandboxed workspace
 - Extended thinking with `maxThinkingTokens: 10000`
+- Model: `claude-opus-4-5-20251101`
 
-**SSE Event Types:**
-- `init` - Chat ID and session ID
-- `delta` - Text streaming chunks
-- `thinking` - Extended thinking content
-- `tool_use` - Tool execution events
-- `result` - Completion with cost/duration
-- `done` - Stream completion
+### SSE Event Protocol
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `init` | `{ chatId, sessionId }` | Chat initialized |
+| `delta` | `{ text }` | Text streaming chunk |
+| `thinking` | `{ thinking }` | Extended thinking content |
+| `tool_use` | `{ name, input }` | Tool execution |
+| `result` | `{ cost_usd, duration_ms }` | Completion metrics |
+| `done` | `{ chatId, sessionId }` | Stream complete |
 
 ## Environment Variables
 
-- `DATABASE_URL` - PostgreSQL connection string
-- `CLAUDE_CODE_OAUTH_TOKEN` - Claude Agent SDK OAuth token (Max subscription)
-- `ODDS_API_KEY` - The Odds API key for betting odds data
-- `WORKSPACE_ROOT` - Root directory for agent workspaces (default: ./workspace)
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string (Prisma format) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Agent SDK OAuth token (Max subscription) |
+| `ODDS_API_KEY` | The Odds API key for betting odds |
+| `WORKSPACE_ROOT` | Agent workspace root (default: `./workspace`) |
+| `AGENT_SANDBOX_SNAPSHOT_ID` | Optional Vercel Sandbox snapshot for faster cold starts |
 
 ## Path Aliases
 
@@ -108,43 +151,20 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - Run `bun run lint:prisma` to verify naming conventions
 
 **Database models:**
-- `Chat` - Stores chat sessions with unique `sessionId` and optional `sandboxId` for Vercel Sandbox
-- `Message` - Stores messages with `role`, `content`, and optional `toolName`/`toolInput`
+- `Chat` - Chat sessions with `sessionId` (agent session) and optional `sandboxId` (Vercel Sandbox)
+- `Message` - Messages with `role`, `content`, optional `thinking`, and tool metadata
 
-**Local Development Database:**
+**Local Development:**
 
-This project uses Prisma's PGlite for local development. Before running migrations:
+Uses Prisma's PGlite. Start the dev server before running migrations:
 
-1. Start the Prisma dev server (in a separate terminal or background):
-   ```bash
-   bunx prisma dev --port 5434
-   ```
+```bash
+bunx prisma dev --port 5434              # Run in separate terminal
+bunx prisma migrate dev --name <name>    # Create and apply migration
+bunx prisma generate                     # Regenerate client after schema changes
+```
 
-2. Then run migration commands:
-   ```bash
-   bunx prisma migrate dev --name <migration_name>  # Create and apply migration
-   bunx prisma migrate dev --create-only --name <migration_name>  # Create without applying
-   bunx prisma db push                              # Sync schema without migration (dev only)
-   bunx prisma generate                             # Regenerate Prisma client
-   ```
-
-**Important:** The `DATABASE_URL` in `.env` uses `prisma+postgres://` protocol with an embedded API key that contains the actual database and shadow database URLs. The Prisma dev server must be running for migrations to work.
-
-**Schema Change Workflow:**
-
-When modifying `prisma/schema.prisma`, always create a migration:
-
-1. Edit `prisma/schema.prisma` with your changes
-2. Generate migration: `bunx prisma migrate dev --name descriptive_name`
-3. Verify migration file was created in `prisma/migrations/`
-4. Commit both the schema and migration files together
-
-**Common mistakes to avoid:**
-- Using `db push` for changes that will be deployed (no migration file created)
-- Editing schema without generating a migration
-- Deploying code before the migration is applied
-
-**Never use `db push` for production-bound changes** - it syncs the schema without creating migration files, causing deployment failures.
+**Important:** Never use `db push` for production-bound changes - it doesn't create migration files.
 
 ## Design System
 
