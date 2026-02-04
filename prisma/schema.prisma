@@ -10,6 +10,7 @@ model Chat {
   id        String    @id @default(uuid())
   title     String    @default("New Chat")
   sessionId String    @unique @map("session_id")
+  sandboxId String?   @map("sandbox_id")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   messages  Message[]

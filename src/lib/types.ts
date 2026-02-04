@@ -14,6 +14,7 @@ export interface Message {
 	content: string;
 	toolName?: string | null;
 	toolInput?: unknown;
+	segments?: ContentSegment[];
 	createdAt: string;
 }
 

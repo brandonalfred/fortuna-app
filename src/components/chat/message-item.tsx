@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, ChevronDown, ChevronRight } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,19 +12,11 @@ const PROSE_CLASSES =
 
 interface MessageItemProps {
 	message: Message;
-	isStreaming?: boolean;
 }
 
-function getToolUses(toolInput: unknown): ToolUse[] {
-	if (!toolInput || !Array.isArray(toolInput)) {
-		return [];
-	}
-	return toolInput as ToolUse[];
-}
-
-export function MessageItem({ message, isStreaming }: MessageItemProps) {
+export function MessageItem({ message }: MessageItemProps) {
 	const isUser = message.role === "user";
-	const toolUses = getToolUses(message.toolInput);
+	const hasSegments = message.segments && message.segments.length > 0;
 
 	return (
 		<div
@@ -39,20 +31,19 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
 					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
 				)}
 			>
-				{toolUses.length > 0 && (
-					<div className="mb-2 space-y-1">
-						{toolUses.map((tool, idx) => (
-							<ToolUsePill key={`${tool.name}-${idx}`} tool={tool} />
-						))}
-					</div>
-				)}
 				<div className={PROSE_CLASSES}>
 					{isUser ? (
 						<p>{message.content}</p>
+					) : hasSegments ? (
+						message.segments!.map((segment, idx) => (
+							<SegmentRenderer
+								key={getSegmentKey(segment, idx)}
+								segment={segment}
+							/>
+						))
 					) : (
 						<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
 					)}
-					{isStreaming && <BlinkingCursor />}
 				</div>
 			</div>
 		</div>
@@ -85,16 +76,18 @@ export function StreamingMessageItem({
 							segment={segment}
 						/>
 					))}
-					{isStreaming && <BlinkingCursor />}
+					{isStreaming && <LoadingIndicator />}
 				</div>
 			</div>
 		</div>
 	);
 }
 
-function BlinkingCursor() {
+function LoadingIndicator() {
 	return (
-		<span className="ml-0.5 inline-block h-4 w-0.5 animate-blink bg-accent-primary" />
+		<span className="ml-1 inline-flex items-center">
+			<Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
+		</span>
 	);
 }
 

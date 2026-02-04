@@ -147,6 +147,7 @@ export function useChat(options: UseChatOptions = {}) {
 			role: "assistant",
 			content,
 			toolInput: toolUses.length > 0 ? toolUses : undefined,
+			segments: [...segments],
 			createdAt: new Date().toISOString(),
 		};
 		setMessages((msgs) => [...msgs, assistantMessage]);

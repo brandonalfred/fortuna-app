@@ -3,9 +3,12 @@ import {
 	extractThinkingFromMessage,
 	streamAgentResponse,
 } from "@/lib/agent/client";
+import { streamAgentResponseViaSandbox } from "@/lib/agent/sandbox-client";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import { prisma } from "@/lib/prisma";
 import { sendMessageSchema } from "@/lib/validations/chat";
+
+const usesSandbox = !!process.env.VERCEL;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,12 +88,26 @@ export async function POST(req: Request) {
 				const sentThinkingIds = new Set<string>();
 
 				try {
-					for await (const msg of streamAgentResponse({
-						prompt: message,
-						workspacePath,
-						conversationHistory,
-						abortController,
-					})) {
+					console.log(
+						"[Chat API] Starting agent stream...",
+						usesSandbox ? "(sandbox)" : "(local)",
+					);
+
+					const agentStream = usesSandbox
+						? streamAgentResponseViaSandbox({
+								prompt: message,
+								chatId: chat.id,
+								conversationHistory,
+							})
+						: streamAgentResponse({
+								prompt: message,
+								workspacePath,
+								conversationHistory,
+								abortController,
+							});
+
+					for await (const msg of agentStream) {
+						console.log("[Chat API] Received message type:", msg.type);
 						switch (msg.type) {
 							case "assistant": {
 								const messageId = msg.message.id;
@@ -145,6 +162,13 @@ export async function POST(req: Request) {
 						}
 					}
 
+					console.log(
+						"[Chat API] Stream loop completed, content length:",
+						fullAssistantContent.length,
+						"tool uses:",
+						toolUses.length,
+					);
+
 					if (fullAssistantContent || toolUses.length > 0) {
 						await prisma.message.create({
 							data: {
@@ -152,13 +176,17 @@ export async function POST(req: Request) {
 								role: "assistant",
 								content: fullAssistantContent,
 								toolName: toolUses[0]?.name,
-								toolInput: toolUses.length > 0 ? toolUses : undefined,
+								toolInput:
+									toolUses.length > 0
+										? JSON.parse(JSON.stringify(toolUses))
+										: undefined,
 							},
 						});
 					}
 
 					sendEvent("done", { chatId: chat.id, sessionId });
 				} catch (error) {
+					console.error("[Chat API] Stream error:", error);
 					const errorMessage =
 						error instanceof Error ? error.message : "Unknown error";
 					sendEvent("error", { message: errorMessage });
