@@ -7,6 +7,49 @@ description: Query historical betting odds snapshots from The Odds API
 
 The `ODDS_API_KEY` environment variable is available. Use it with curl to fetch historical odds data.
 
+## Critical: Query Time Strategy
+
+**The historical endpoint only returns games that haven't started yet at the snapshot time.** This is the most common source of "missing games" issues.
+
+**Default behavior - ALWAYS follow this:**
+- **Use 10:00 AM ET (15:00 UTC)** as the snapshot time when querying a full day's games
+- This ensures all games are captured before any start (earliest NBA/NFL games are ~12 PM ET)
+- Only use later timestamps when specifically requesting "closing odds" for a particular game
+
+**Why this matters:**
+- Query at 6:55 PM ET → afternoon games (1 PM, 3 PM starts) are **excluded** because they've commenced
+- Query at 10:00 AM ET → **all games** for that day are included
+
+## Full Day Historical Query
+
+When fetching historical odds for an entire day:
+
+1. **Convert the date to 10:00 AM ET (15:00 UTC)** on the target date
+2. Query with that timestamp to get all games scheduled for that day
+3. If user wants closing odds: make a second query at 11:00 PM ET (04:00 UTC next day) and merge results
+
+**Example: All NBA games on Feb 2, 2025**
+```bash
+# Use 10 AM ET (15:00 UTC) to capture all games before any start
+curl -s "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&date=2025-02-02T15:00:00Z&oddsFormat=american"
+```
+
+## Closing Odds Query
+
+**For closing odds of a specific game:**
+- Query 30-60 minutes before its `commence_time`
+- Example: Game at 7:00 PM ET → query at 6:30 PM ET (23:30 UTC)
+
+**For closing odds of all games on a day:**
+- Late games: Query at 11:00 PM ET (04:00 UTC next day)
+- Early games: Query individually using their `commence_time`
+- **Note**: A single late-night query will miss early games that already started
+
+**Full day closing odds workflow:**
+1. Query at 10:00 AM ET to get the list of all games with their `commence_time` values
+2. For each game, query 30-60 min before its `commence_time` to get closing odds
+3. Or accept that a single late query captures late games only
+
 ## Overview
 
 - Historical data available from June 2020 (featured markets), May 2023 (additional markets)
@@ -18,13 +61,15 @@ The `ODDS_API_KEY` environment variable is available. Use it with curl to fetch 
 ### Historical Odds for a Sport
 
 ```bash
-curl -s "https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&date=2024-01-15T18:00:00Z&oddsFormat=american"
+# Use 10 AM ET (15:00 UTC) to capture all games before any start
+curl -s "https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&date=2024-01-15T15:00:00Z&oddsFormat=american"
 ```
 
 ### Historical Odds for a Specific Event
 
 ```bash
-curl -s "https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads&date=2024-01-15T18:00:00Z&oddsFormat=american"
+# For event-specific queries, use 30-60 min before commence_time for closing odds
+curl -s "https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads&date=2024-01-15T23:30:00Z&oddsFormat=american"
 ```
 
 ## Required Parameters
@@ -87,22 +132,32 @@ The response includes `previous_timestamp` and `next_timestamp` for navigating b
 
 ## Example Requests
 
-### NFL Game Odds from Last Week
+### All NFL Games on a Sunday (full slate)
 
 ```bash
-curl -s "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&date=2024-01-07T18:00:00Z&oddsFormat=american"
+# Use 10 AM ET (15:00 UTC) to capture all games before any start
+curl -s "https://api.the-odds-api.com/v4/historical/sports/americanfootball_nfl/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&date=2024-01-07T15:00:00Z&oddsFormat=american"
 ```
 
-### NBA Opening Lines (morning of game day)
+### All NBA Games on a Day (opening lines)
 
 ```bash
-curl -s "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=spreads&date=2024-01-15T12:00:00Z&oddsFormat=american"
+# Use 10 AM ET (15:00 UTC) to get all games including early afternoon tips
+curl -s "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=spreads&date=2024-01-15T15:00:00Z&oddsFormat=american"
 ```
 
-### EPL Match Odds 24 Hours Before Kickoff
+### EPL Match Odds (all Saturday fixtures)
 
 ```bash
-curl -s "https://api.the-odds-api.com/v4/historical/sports/soccer_epl/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h&date=2024-01-14T15:00:00Z&oddsFormat=decimal"
+# Use 10 AM UK time (10:00 UTC) for Premier League - earliest kickoffs are 12:30 PM UK
+curl -s "https://api.the-odds-api.com/v4/historical/sports/soccer_epl/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h&date=2024-01-14T10:00:00Z&oddsFormat=decimal"
+```
+
+### Closing Odds for a Specific Game
+
+```bash
+# For a game at 7:00 PM ET (00:00 UTC next day), query 30 min before
+curl -s "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/events/{event_id}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=spreads&date=2024-01-15T23:30:00Z&oddsFormat=american"
 ```
 
 ## Efficient Querying Tips
