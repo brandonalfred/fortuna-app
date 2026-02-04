@@ -1,13 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ContentSegment, Message } from "@/lib/types";
+import type { StreamingMessage } from "@/hooks/use-chat";
+import type { Message } from "@/lib/types";
 import { MessageItem, StreamingMessageItem } from "./message-item";
-
-export interface StreamingMessage {
-	segments: ContentSegment[];
-	isStreaming: boolean;
-}
 
 interface MessageListProps {
 	messages: Message[];
@@ -17,8 +13,9 @@ interface MessageListProps {
 export function MessageList({ messages, streamingMessage }: MessageListProps) {
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const lastMessageRef = useRef<HTMLDivElement>(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
-	const messagesLength = messages.length;
+	const prevMessagesLengthRef = useRef(0);
 
 	const userScrollingRef = useRef(false);
 	const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -42,11 +39,32 @@ export function MessageList({ messages, streamingMessage }: MessageListProps) {
 		}, 150);
 	}, []);
 
+	// Scroll to last message when a new message is added (user sends)
 	useEffect(() => {
-		if (isNearBottom && !userScrollingRef.current) {
+		if (messages.length > prevMessagesLengthRef.current) {
+			lastMessageRef.current?.scrollIntoView({
+				behavior: "smooth",
+				block: "nearest",
+			});
+		}
+		prevMessagesLengthRef.current = messages.length;
+	}, [messages.length]);
+
+	// Auto-scroll during streaming only if near bottom
+	useEffect(() => {
+		if (
+			streamingMessage?.isStreaming &&
+			streamingMessage.segments.length > 0 &&
+			isNearBottom &&
+			!userScrollingRef.current
+		) {
 			bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 		}
-	}, [messagesLength, isNearBottom]);
+	}, [
+		streamingMessage?.segments.length,
+		streamingMessage?.isStreaming,
+		isNearBottom,
+	]);
 
 	if (messages.length === 0 && !streamingMessage) {
 		return (
@@ -66,10 +84,16 @@ export function MessageList({ messages, streamingMessage }: MessageListProps) {
 		<div
 			ref={scrollContainerRef}
 			onScroll={handleScroll}
-			className="flex flex-col gap-4 p-4 pb-32 h-full overflow-y-auto"
+			className="flex flex-col gap-4 p-4 pb-4 h-full overflow-y-auto"
 		>
-			{messages.map((message) => (
-				<MessageItem key={message.id} message={message} />
+			{messages.map((message, index) => (
+				<div
+					key={message.id}
+					ref={index === messages.length - 1 ? lastMessageRef : undefined}
+					className="scroll-mt-4"
+				>
+					<MessageItem message={message} />
+				</div>
 			))}
 			{streamingMessage?.isStreaming && (
 				<StreamingMessageItem

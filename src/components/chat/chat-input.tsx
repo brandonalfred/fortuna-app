@@ -54,7 +54,13 @@ export function ChatInput({
 	return (
 		<div className="border-t border-border-subtle bg-bg-primary p-4">
 			<div className="mx-auto max-w-3xl">
-				<div className="relative flex items-end gap-2">
+				<div
+					className={cn(
+						"relative flex items-end gap-2 overflow-hidden rounded-lg",
+						"border border-border-default bg-bg-input",
+						"focus-within:border-border-focus focus-within:ring-1 focus-within:ring-border-focus",
+					)}
+				>
 					<Textarea
 						ref={textareaRef}
 						value={value}
@@ -65,9 +71,9 @@ export function ChatInput({
 						rows={1}
 						className={cn(
 							"min-h-[44px] max-h-[200px] resize-none pr-12",
-							"bg-bg-input border-border-default",
+							"border-0 rounded-none bg-transparent shadow-none",
 							"text-text-primary placeholder:text-text-tertiary",
-							"focus:border-border-focus focus:ring-1 focus:ring-border-focus",
+							"focus-visible:ring-0 focus-visible:border-0",
 							"font-body text-sm",
 						)}
 					/>

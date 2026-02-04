@@ -108,15 +108,27 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - Run `bun run lint:prisma` to verify naming conventions
 
 **Database models:**
-- `Chat` - Stores chat sessions with unique `sessionId`
+- `Chat` - Stores chat sessions with unique `sessionId` and optional `sandboxId` for Vercel Sandbox
 - `Message` - Stores messages with `role`, `content`, and optional `toolName`/`toolInput`
 
-**Commands:**
-```bash
-bunx prisma migrate dev --name <migration_name>  # Create and apply migration
-bunx prisma db push                              # Sync schema without migration (dev only)
-bunx prisma generate                             # Regenerate Prisma client
-```
+**Local Development Database:**
+
+This project uses Prisma's PGlite for local development. Before running migrations:
+
+1. Start the Prisma dev server (in a separate terminal or background):
+   ```bash
+   bunx prisma dev --port 5434
+   ```
+
+2. Then run migration commands:
+   ```bash
+   bunx prisma migrate dev --name <migration_name>  # Create and apply migration
+   bunx prisma migrate dev --create-only --name <migration_name>  # Create without applying
+   bunx prisma db push                              # Sync schema without migration (dev only)
+   bunx prisma generate                             # Regenerate Prisma client
+   ```
+
+**Important:** The `DATABASE_URL` in `.env` uses `prisma+postgres://` protocol with an embedded API key that contains the actual database and shadow database URLs. The Prisma dev server must be running for migrations to work.
 
 ## Design System
 

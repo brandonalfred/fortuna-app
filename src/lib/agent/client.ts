@@ -1,4 +1,35 @@
+import fs from "node:fs";
+import path from "node:path";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+
+function getClaudeCodeCliPath(): string {
+	const cliPath = path.join(
+		process.cwd(),
+		"node_modules/@anthropic-ai/claude-agent-sdk/cli.js",
+	);
+	console.log("[Agent] CWD:", process.cwd());
+	console.log("[Agent] CLI path:", cliPath);
+	const cliExists = fs.existsSync(cliPath);
+	console.log("[Agent] CLI exists:", cliExists);
+
+	if (!cliExists) {
+		// List what's in node_modules/@anthropic-ai for debugging
+		const anthropicDir = path.join(process.cwd(), "node_modules/@anthropic-ai");
+		if (fs.existsSync(anthropicDir)) {
+			console.log(
+				"[Agent] Contents of @anthropic-ai:",
+				fs.readdirSync(anthropicDir),
+			);
+		} else {
+			console.log("[Agent] @anthropic-ai directory does not exist");
+		}
+		throw new Error(
+			`Claude Agent SDK CLI not found at ${cliPath}. The SDK requires the CLI to be present.`,
+		);
+	}
+
+	return cliPath;
+}
 
 const SYSTEM_PROMPT_APPEND = `You are Fortuna, an AI sports betting analyst.
 
@@ -62,6 +93,7 @@ export async function* streamAgentResponse({
 	conversationHistory,
 	abortController,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
+	console.log("[Agent] streamAgentResponse called");
 	let fullPrompt = prompt;
 
 	if (conversationHistory && conversationHistory.length > 0) {
@@ -74,35 +106,42 @@ export async function* streamAgentResponse({
 		fullPrompt = `Previous conversation:\n${historyText}\n\nUser: ${prompt}`;
 	}
 
-	const generator = query({
-		prompt: fullPrompt,
-		options: {
-			cwd: workspacePath,
-			model: "claude-opus-4-5-20251101",
-			allowedTools: [
-				"Read",
-				"Write",
-				"Edit",
-				"Glob",
-				"Grep",
-				"Bash",
-				"WebSearch",
-				"WebFetch",
-			],
-			permissionMode: "acceptEdits",
-			systemPrompt: {
-				type: "preset",
-				preset: "claude_code",
-				append: SYSTEM_PROMPT_APPEND,
-			},
-			abortController: abortController ?? new AbortController(),
-			includePartialMessages: true,
-			maxThinkingTokens: 10000,
-		},
-	});
+	const cliPath = getClaudeCodeCliPath();
+	console.log("[Agent] Creating query with CLI path:", cliPath);
 
-	for await (const message of generator) {
-		yield message;
+	try {
+		const generator = query({
+			prompt: fullPrompt,
+			options: {
+				cwd: workspacePath,
+				model: "claude-opus-4-5-20251101",
+				pathToClaudeCodeExecutable: cliPath,
+				allowedTools: [
+					"Read",
+					"Write",
+					"Edit",
+					"Glob",
+					"Grep",
+					"Bash",
+					"WebSearch",
+					"WebFetch",
+				],
+				permissionMode: "acceptEdits",
+				systemPrompt: {
+					type: "preset",
+					preset: "claude_code",
+					append: SYSTEM_PROMPT_APPEND,
+				},
+				abortController: abortController ?? new AbortController(),
+				includePartialMessages: true,
+				maxThinkingTokens: 10000,
+			},
+		});
+
+		yield* generator;
+	} catch (error) {
+		console.error("[Agent] Query error:", error);
+		throw error;
 	}
 }
 
