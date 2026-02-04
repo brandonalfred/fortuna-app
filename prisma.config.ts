@@ -7,6 +7,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"),
+    // Use unpooled connection for migrations (DDL commands)
+    url: env("DATABASE_URL_UNPOOLED") ?? env("DATABASE_URL"),
   },
 });

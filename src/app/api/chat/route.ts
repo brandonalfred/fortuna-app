@@ -176,7 +176,10 @@ export async function POST(req: Request) {
 								role: "assistant",
 								content: fullAssistantContent,
 								toolName: toolUses[0]?.name,
-								toolInput: toolUses.length > 0 ? toolUses : undefined,
+								toolInput:
+									toolUses.length > 0
+										? JSON.parse(JSON.stringify(toolUses))
+										: undefined,
 							},
 						});
 					}

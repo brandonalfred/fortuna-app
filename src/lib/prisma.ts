@@ -1,19 +1,16 @@
+import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "@prisma/client";
-import { withAccelerate } from "@prisma/extension-accelerate";
 
 function createPrismaClient() {
-	const accelerateUrl =
-		process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL;
+	const connectionString = process.env.DATABASE_URL!;
 
-	return new PrismaClient({
-		accelerateUrl,
-	}).$extends(withAccelerate());
+	const adapter = new PrismaNeon({ connectionString });
+
+	return new PrismaClient({ adapter });
 }
 
-type ExtendedPrismaClient = ReturnType<typeof createPrismaClient>;
-
 const globalForPrisma = globalThis as unknown as {
-	prisma: ExtendedPrismaClient | undefined;
+	prisma: PrismaClient | undefined;
 };
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
