@@ -130,6 +130,22 @@ This project uses Prisma's PGlite for local development. Before running migratio
 
 **Important:** The `DATABASE_URL` in `.env` uses `prisma+postgres://` protocol with an embedded API key that contains the actual database and shadow database URLs. The Prisma dev server must be running for migrations to work.
 
+**Schema Change Workflow:**
+
+When modifying `prisma/schema.prisma`, always create a migration:
+
+1. Edit `prisma/schema.prisma` with your changes
+2. Generate migration: `bunx prisma migrate dev --name descriptive_name`
+3. Verify migration file was created in `prisma/migrations/`
+4. Commit both the schema and migration files together
+
+**Common mistakes to avoid:**
+- Using `db push` for changes that will be deployed (no migration file created)
+- Editing schema without generating a migration
+- Deploying code before the migration is applied
+
+**Never use `db push` for production-bound changes** - it syncs the schema without creating migration files, causing deployment failures.
+
 ## Design System
 
 The app uses a "Refined Intelligence" design aesthetic with:
