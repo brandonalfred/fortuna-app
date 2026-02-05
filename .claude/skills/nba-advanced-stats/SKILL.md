@@ -294,8 +294,8 @@ def usage_without_player(team: str, missing_player: str, season: str = "2024-25"
     missing_min = float(missing.iloc[0]["MIN"])
     remaining = team_players[~team_players["PLAYER_NAME"].str.contains(missing_player, case=False)]
 
+    total_remaining_usg = float(remaining["USG_PCT"].sum())
     top_beneficiaries = remaining.head(5)[["PLAYER_NAME", "USG_PCT", "MIN", "PTS", "AST"]].copy()
-    total_remaining_usg = float(top_beneficiaries["USG_PCT"].sum())
 
     top_beneficiaries["PROJECTED_USG_BOOST"] = top_beneficiaries["USG_PCT"].apply(
         lambda u: round(float(u) / total_remaining_usg * missing_usg * 100, 1)
@@ -327,12 +327,8 @@ def defensive_vulnerability(opponent_team: str, player_position: str = "Guard", 
 
     opp_id = find_team_id(opponent_team)
 
-    # Get all players at the position and their stats vs this team
     position_map = {"Guard": ["PG", "SG"], "Forward": ["SF", "PF"], "Center": ["C"]}
     positions = position_map.get(player_position, [player_position])
-
-    # Filter by position
-    pos_players = df[df["PLAYER_POSITION"].isin(positions) if "PLAYER_POSITION" in df.columns else df.index >= 0]
 
     opp_df = safe_request(
         LeagueDashPlayerStats,
@@ -345,8 +341,15 @@ def defensive_vulnerability(opponent_team: str, player_position: str = "Guard", 
     if opp_df is None or opp_df.empty:
         return {"error": "No data for opponent filter"}
 
-    avg_off_rating = float(opp_df["OFF_RATING"].mean()) if "OFF_RATING" in opp_df.columns else None
-    league_avg = float(df["OFF_RATING"].mean()) if "OFF_RATING" in df.columns else None
+    if "PLAYER_POSITION" in opp_df.columns:
+        opp_df = opp_df[opp_df["PLAYER_POSITION"].isin(positions)]
+
+    if "PLAYER_POSITION" in df.columns:
+        league_avg = float(df[df["PLAYER_POSITION"].isin(positions)]["OFF_RATING"].mean())
+    else:
+        league_avg = float(df["OFF_RATING"].mean()) if "OFF_RATING" in df.columns else None
+
+    avg_off_rating = float(opp_df["OFF_RATING"].mean()) if "OFF_RATING" in opp_df.columns and not opp_df.empty else None
 
     return {
         "opponent": opponent_team,
