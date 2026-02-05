@@ -2,27 +2,87 @@
 
 import Link from "next/link";
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+	PASSWORD_MAX_LENGTH,
+	passwordRequirements,
+} from "@/lib/validations/auth";
+
+function formatPhoneNumber(value: string): string {
+	const digits = value.replace(/\D/g, "").slice(0, 10);
+	if (digits.length <= 3) return digits;
+	if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+	return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function stripPhoneFormatting(value: string): string {
+	return value.replace(/\D/g, "");
+}
+
+function parseRegistrationError(
+	res: Response,
+	json: Record<string, unknown>,
+): string {
+	if (res.status === 409) {
+		return "An account with this email already exists";
+	}
+
+	const fieldErrors = (json.details as Record<string, unknown>)?.fieldErrors;
+	if (fieldErrors) {
+		const firstError = Object.values(fieldErrors)[0];
+		return Array.isArray(firstError) ? firstError[0] : "Invalid input";
+	}
+
+	return (json.error as string) || "Something went wrong";
+}
 
 export default function SignUpPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [phoneNumber, setPhoneNumber] = useState("");
+	const [password, setPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [showMaxLengthWarning, setShowMaxLengthWarning] = useState(false);
+	const maxLengthTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+	function handlePasswordChange(value: string) {
+		if (value.length > PASSWORD_MAX_LENGTH) {
+			setShowMaxLengthWarning(true);
+			if (maxLengthTimerRef.current) clearTimeout(maxLengthTimerRef.current);
+			maxLengthTimerRef.current = setTimeout(
+				() => setShowMaxLengthWarning(false),
+				3000,
+			);
+			return;
+		}
+		setPassword(value);
+	}
+
+	const requirementResults = passwordRequirements.map((req) => ({
+		label: req.label,
+		met: req.test(password),
+	}));
+	const allRequirementsMet = requirementResults.every((r) => r.met);
+	const passwordsMatch = password === confirmPassword;
+	const canSubmit =
+		allRequirementsMet && (confirmPassword === "" || passwordsMatch);
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
+		if (!allRequirementsMet || !passwordsMatch) return;
+
 		setError(null);
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
 		const email = formData.get("email") as string;
-		const password = formData.get("password") as string;
 		const data = {
 			firstName: formData.get("firstName") as string,
 			lastName: formData.get("lastName") as string,
 			email,
-			phoneNumber: formData.get("phoneNumber") as string,
+			phoneNumber: stripPhoneFormatting(phoneNumber),
 			password,
 		};
 
@@ -35,14 +95,7 @@ export default function SignUpPage() {
 
 			if (!res.ok) {
 				const json = await res.json();
-				if (res.status === 409) {
-					setError("An account with this email already exists");
-				} else if (json.details?.fieldErrors) {
-					const firstError = Object.values(json.details.fieldErrors)[0];
-					setError(Array.isArray(firstError) ? firstError[0] : "Invalid input");
-				} else {
-					setError(json.error || "Something went wrong");
-				}
+				setError(parseRegistrationError(res, json));
 				return;
 			}
 
@@ -66,7 +119,7 @@ export default function SignUpPage() {
 						Create an account
 					</h1>
 					<p className="mt-2 text-text-secondary">
-						Sign up to start using Fortuna
+						Sign up to start using FortunaBets
 					</p>
 				</div>
 
@@ -136,7 +189,12 @@ export default function SignUpPage() {
 							type="tel"
 							autoComplete="tel"
 							required
-							placeholder="+1 (555) 000-0000"
+							maxLength={14}
+							placeholder="(555) 000-0000"
+							value={phoneNumber}
+							onChange={(e) =>
+								setPhoneNumber(formatPhoneNumber(e.target.value))
+							}
 						/>
 					</div>
 
@@ -144,20 +202,69 @@ export default function SignUpPage() {
 						<label htmlFor="password" className="text-sm text-text-secondary">
 							Password
 						</label>
+						<div className="relative">
+							<Input
+								id="password"
+								name="password"
+								type="password"
+								autoComplete="new-password"
+								required
+								placeholder="Create a password"
+								value={password}
+								onChange={(e) => handlePasswordChange(e.target.value)}
+							/>
+							{showMaxLengthWarning && (
+								<div className="absolute -top-10 left-0 right-0 rounded-md bg-error-subtle border border-error/30 px-3 py-1.5 text-xs text-error text-center animate-in fade-in slide-in-from-bottom-2 duration-200">
+									Password cannot exceed {PASSWORD_MAX_LENGTH} characters
+								</div>
+							)}
+						</div>
+						{password.length > 0 && (
+							<ul className="space-y-1 text-xs mt-2">
+								{requirementResults.map((req) => (
+									<li
+										key={req.label}
+										className={
+											req.met ? "text-green-500" : "text-text-tertiary"
+										}
+									>
+										{req.met ? "\u2713" : "\u2717"} {req.label}
+									</li>
+								))}
+							</ul>
+						)}
+					</div>
+
+					<div className="space-y-2">
+						<label
+							htmlFor="confirmPassword"
+							className="text-sm text-text-secondary"
+						>
+							Confirm password
+						</label>
 						<Input
-							id="password"
-							name="password"
+							id="confirmPassword"
 							type="password"
 							autoComplete="new-password"
 							required
-							minLength={8}
-							placeholder="Minimum 8 characters"
+							placeholder="Confirm your password"
+							value={confirmPassword}
+							onChange={(e) => setConfirmPassword(e.target.value)}
 						/>
+						{confirmPassword.length > 0 && (
+							<p
+								className={`text-xs mt-1 ${passwordsMatch ? "text-green-500" : "text-red-500"}`}
+							>
+								{passwordsMatch
+									? "\u2713 Passwords match"
+									: "\u2717 Passwords don't match"}
+							</p>
+						)}
 					</div>
 
 					<Button
 						type="submit"
-						disabled={loading}
+						disabled={loading || !canSubmit}
 						className="w-full bg-accent-primary hover:bg-accent-hover text-text-inverse disabled:opacity-50"
 					>
 						{loading ? "Creating account..." : "Create account"}
