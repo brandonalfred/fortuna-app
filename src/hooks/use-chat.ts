@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Chat,
 	ChatInitEvent,
@@ -23,6 +23,11 @@ export interface StreamingMessage {
 	isStreaming: boolean;
 }
 
+export interface QueuedMessage {
+	id: string;
+	content: string;
+}
+
 export function useChat(options: UseChatOptions = {}) {
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [streamingMessage, setStreamingMessage] =
@@ -30,8 +35,13 @@ export function useChat(options: UseChatOptions = {}) {
 	const [isLoading, setIsLoading] = useState(false);
 	const [currentChat, setCurrentChat] = useState<Chat | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
+	const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 	const abortControllerRef = useRef<AbortController | null>(null);
+	const dequeuingRef = useRef(false);
 	const streamingSegmentsRef = useRef<ContentSegment[]>([]);
+	const sendMessageRef = useRef<((content: string) => Promise<void>) | null>(
+		null,
+	);
 
 	const handleEvent = useCallback(
 		(type: string, data: unknown) => {
@@ -226,6 +236,7 @@ export function useChat(options: UseChatOptions = {}) {
 				const errorMessage =
 					error instanceof Error ? error.message : "Unknown error";
 				options.onError?.(errorMessage);
+				setMessageQueue([]);
 			} finally {
 				setIsLoading(false);
 				finalizeStreamingMessage();
@@ -244,8 +255,37 @@ export function useChat(options: UseChatOptions = {}) {
 	const stopGeneration = useCallback(() => {
 		abortControllerRef.current?.abort();
 		setIsLoading(false);
+		setMessageQueue([]);
 		finalizeStreamingMessage();
 	}, [finalizeStreamingMessage]);
+
+	const queueMessage = useCallback((content: string) => {
+		setMessageQueue((prev) => [...prev, { id: crypto.randomUUID(), content }]);
+	}, []);
+
+	const removeQueuedMessage = useCallback((id: string) => {
+		setMessageQueue((prev) => prev.filter((msg) => msg.id !== id));
+	}, []);
+
+	useEffect(() => {
+		sendMessageRef.current = sendMessage;
+	}, [sendMessage]);
+
+	// Auto-send next queued message when loading completes
+	useEffect(() => {
+		if (!isLoading && !dequeuingRef.current && messageQueue.length > 0) {
+			const [next, ...rest] = messageQueue;
+			setMessageQueue(rest);
+			dequeuingRef.current = true;
+			setTimeout(async () => {
+				try {
+					await sendMessageRef.current?.(next.content);
+				} finally {
+					dequeuingRef.current = false;
+				}
+			}, 0);
+		}
+	}, [isLoading, messageQueue]);
 
 	const loadChat = useCallback(
 		async (chatId: string) => {
@@ -258,6 +298,7 @@ export function useChat(options: UseChatOptions = {}) {
 				setCurrentChat(chat);
 				setMessages(chat.messages || []);
 				setSessionId(chat.sessionId);
+				setMessageQueue([]);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : "Failed to load chat";
@@ -272,6 +313,7 @@ export function useChat(options: UseChatOptions = {}) {
 		setMessages([]);
 		setSessionId(null);
 		setStreamingMessage(null);
+		setMessageQueue([]);
 	}, []);
 
 	return {
@@ -280,8 +322,11 @@ export function useChat(options: UseChatOptions = {}) {
 		isLoading,
 		currentChat,
 		sessionId,
+		messageQueue,
 		sendMessage,
 		stopGeneration,
+		queueMessage,
+		removeQueuedMessage,
 		loadChat,
 		startNewChat,
 	};
