@@ -256,6 +256,8 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 					"scikit-learn",
 					// Database
 					"duckdb",
+					// Sports analytics
+					"nba_api",
 				].join(" "),
 			],
 		});
@@ -372,6 +374,7 @@ async function* streamViaSandbox({
 				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
 				ODDS_API_KEY: process.env.ODDS_API_KEY || "",
 				API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
+				WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL || "",
 			},
 			detached: true,
 		});
