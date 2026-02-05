@@ -8,9 +8,8 @@ const SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/;
 
 export const passwordRequirements = [
 	{
-		label: "8–128 characters",
-		test: (pw: string) =>
-			pw.length >= PASSWORD_MIN_LENGTH && pw.length <= PASSWORD_MAX_LENGTH,
+		label: "Minimum 8 characters",
+		test: (pw: string) => pw.length >= PASSWORD_MIN_LENGTH,
 	},
 	{
 		label: "At least 1 uppercase letter",

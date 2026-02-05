@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { passwordRequirements } from "@/lib/validations/auth";
+import {
+	PASSWORD_MAX_LENGTH,
+	passwordRequirements,
+} from "@/lib/validations/auth";
 
 function formatPhoneNumber(value: string): string {
 	const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -41,6 +44,21 @@ export default function SignUpPage() {
 	const [phoneNumber, setPhoneNumber] = useState("");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
+	const [showMaxLengthWarning, setShowMaxLengthWarning] = useState(false);
+	const maxLengthTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+	function handlePasswordChange(value: string) {
+		if (value.length > PASSWORD_MAX_LENGTH) {
+			setShowMaxLengthWarning(true);
+			if (maxLengthTimerRef.current) clearTimeout(maxLengthTimerRef.current);
+			maxLengthTimerRef.current = setTimeout(
+				() => setShowMaxLengthWarning(false),
+				3000,
+			);
+			return;
+		}
+		setPassword(value);
+	}
 
 	const requirementResults = passwordRequirements.map((req) => ({
 		label: req.label,
@@ -184,16 +202,23 @@ export default function SignUpPage() {
 						<label htmlFor="password" className="text-sm text-text-secondary">
 							Password
 						</label>
-						<Input
-							id="password"
-							name="password"
-							type="password"
-							autoComplete="new-password"
-							required
-							placeholder="Create a password"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-						/>
+						<div className="relative">
+							<Input
+								id="password"
+								name="password"
+								type="password"
+								autoComplete="new-password"
+								required
+								placeholder="Create a password"
+								value={password}
+								onChange={(e) => handlePasswordChange(e.target.value)}
+							/>
+							{showMaxLengthWarning && (
+								<div className="absolute -top-10 left-0 right-0 rounded-md bg-error-subtle border border-error/30 px-3 py-1.5 text-xs text-error text-center animate-in fade-in slide-in-from-bottom-2 duration-200">
+									Password cannot exceed {PASSWORD_MAX_LENGTH} characters
+								</div>
+							)}
+						</div>
 						{password.length > 0 && (
 							<ul className="space-y-1 text-xs mt-2">
 								{requirementResults.map((req) => (
