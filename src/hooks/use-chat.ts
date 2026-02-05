@@ -277,9 +277,12 @@ export function useChat(options: UseChatOptions = {}) {
 			const [next, ...rest] = messageQueue;
 			setMessageQueue(rest);
 			dequeuingRef.current = true;
-			setTimeout(() => {
-				dequeuingRef.current = false;
-				sendMessageRef.current?.(next.content);
+			setTimeout(async () => {
+				try {
+					await sendMessageRef.current?.(next.content);
+				} finally {
+					dequeuingRef.current = false;
+				}
 			}, 0);
 		}
 	}, [isLoading, messageQueue]);
