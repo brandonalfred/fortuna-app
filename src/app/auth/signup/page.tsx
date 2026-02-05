@@ -1,5 +1,6 @@
 "use client";
 
+import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRef, useState } from "react";
@@ -9,6 +10,28 @@ import {
 	PASSWORD_MAX_LENGTH,
 	passwordRequirements,
 } from "@/lib/validations/auth";
+
+interface PasswordToggleButtonProps {
+	visible: boolean;
+	onToggle: () => void;
+}
+
+function PasswordToggleButton({
+	visible,
+	onToggle,
+}: PasswordToggleButtonProps) {
+	const Icon = visible ? EyeOff : Eye;
+	return (
+		<button
+			type="button"
+			onClick={onToggle}
+			className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
+			tabIndex={-1}
+		>
+			<Icon className="h-4 w-4" />
+		</button>
+	);
+}
 
 function formatPhoneNumber(value: string): string {
 	const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -44,6 +67,8 @@ export default function SignUpPage() {
 	const [phoneNumber, setPhoneNumber] = useState("");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
+	const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 	const [showMaxLengthWarning, setShowMaxLengthWarning] = useState(false);
 	const maxLengthTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -206,12 +231,17 @@ export default function SignUpPage() {
 							<Input
 								id="password"
 								name="password"
-								type="password"
+								type={showPassword ? "text" : "password"}
 								autoComplete="new-password"
 								required
 								placeholder="Create a password"
+								className="pr-10"
 								value={password}
 								onChange={(e) => handlePasswordChange(e.target.value)}
+							/>
+							<PasswordToggleButton
+								visible={showPassword}
+								onToggle={() => setShowPassword(!showPassword)}
 							/>
 							{showMaxLengthWarning && (
 								<div className="absolute -top-10 left-0 right-0 rounded-md bg-error-subtle border border-error/30 px-3 py-1.5 text-xs text-error text-center animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -242,15 +272,22 @@ export default function SignUpPage() {
 						>
 							Confirm password
 						</label>
-						<Input
-							id="confirmPassword"
-							type="password"
-							autoComplete="new-password"
-							required
-							placeholder="Confirm your password"
-							value={confirmPassword}
-							onChange={(e) => setConfirmPassword(e.target.value)}
-						/>
+						<div className="relative">
+							<Input
+								id="confirmPassword"
+								type={showConfirmPassword ? "text" : "password"}
+								autoComplete="new-password"
+								required
+								placeholder="Confirm your password"
+								className="pr-10"
+								value={confirmPassword}
+								onChange={(e) => setConfirmPassword(e.target.value)}
+							/>
+							<PasswordToggleButton
+								visible={showConfirmPassword}
+								onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
+							/>
+						</div>
 						{confirmPassword.length > 0 && (
 							<p
 								className={`text-xs mt-1 ${passwordsMatch ? "text-green-500" : "text-red-500"}`}
