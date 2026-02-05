@@ -254,6 +254,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const stopGeneration = useCallback(() => {
 		abortControllerRef.current?.abort();
 		setIsLoading(false);
+		setMessageQueue([]);
 		finalizeStreamingMessage();
 	}, [finalizeStreamingMessage]);
 
@@ -265,14 +266,16 @@ export function useChat(options: UseChatOptions = {}) {
 		setMessageQueue((prev) => prev.filter((msg) => msg.id !== id));
 	}, []);
 
-	// Store sendMessage in ref for use in effect
-	sendMessageRef.current = sendMessage;
+	useEffect(() => {
+		sendMessageRef.current = sendMessage;
+	}, [sendMessage]);
 
 	// Auto-send next queued message when loading completes
 	useEffect(() => {
 		if (!isLoading && messageQueue.length > 0) {
 			const [next, ...rest] = messageQueue;
 			setMessageQueue(rest);
+			setIsLoading(true);
 			setTimeout(() => {
 				sendMessageRef.current?.(next.content);
 			}, 0);
