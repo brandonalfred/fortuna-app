@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { StreamingMessage } from "@/hooks/use-chat";
+import type { QueuedMessage, StreamingMessage } from "@/hooks/use-chat";
 import type { Message } from "@/lib/types";
 import {
 	MessageItem,
@@ -12,15 +12,15 @@ import {
 interface MessageListProps {
 	messages: Message[];
 	streamingMessage: StreamingMessage | null;
-	queuedMessage: string | null;
-	onClearQueue: () => void;
+	messageQueue: QueuedMessage[];
+	onRemoveQueued: (id: string) => void;
 }
 
 export function MessageList({
 	messages,
 	streamingMessage,
-	queuedMessage,
-	onClearQueue,
+	messageQueue,
+	onRemoveQueued,
 }: MessageListProps) {
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -112,9 +112,13 @@ export function MessageList({
 					isStreaming
 				/>
 			)}
-			{queuedMessage && (
-				<QueuedMessageItem content={queuedMessage} onCancel={onClearQueue} />
-			)}
+			{messageQueue.map((msg) => (
+				<QueuedMessageItem
+					key={msg.id}
+					content={msg.content}
+					onCancel={() => onRemoveQueued(msg.id)}
+				/>
+			))}
 			<div ref={bottomRef} />
 		</div>
 	);

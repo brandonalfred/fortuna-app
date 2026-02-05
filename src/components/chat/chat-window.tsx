@@ -12,11 +12,11 @@ export function ChatWindow() {
 		messages,
 		streamingMessage,
 		isLoading,
-		queuedMessage,
+		messageQueue,
 		sendMessage,
 		stopGeneration,
 		queueMessage,
-		clearQueuedMessage,
+		removeQueuedMessage,
 	} = useChat({
 		onError: setError,
 	});
@@ -35,8 +35,8 @@ export function ChatWindow() {
 				<MessageList
 					messages={messages}
 					streamingMessage={streamingMessage}
-					queuedMessage={queuedMessage}
-					onClearQueue={clearQueuedMessage}
+					messageQueue={messageQueue}
+					onRemoveQueued={removeQueuedMessage}
 				/>
 			</div>
 			{error && (

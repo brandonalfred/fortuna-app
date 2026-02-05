@@ -23,6 +23,11 @@ export interface StreamingMessage {
 	isStreaming: boolean;
 }
 
+export interface QueuedMessage {
+	id: string;
+	content: string;
+}
+
 export function useChat(options: UseChatOptions = {}) {
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [streamingMessage, setStreamingMessage] =
@@ -30,7 +35,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const [isLoading, setIsLoading] = useState(false);
 	const [currentChat, setCurrentChat] = useState<Chat | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
-	const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
+	const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 	const abortControllerRef = useRef<AbortController | null>(null);
 	const streamingSegmentsRef = useRef<ContentSegment[]>([]);
 	const sendMessageRef = useRef<((content: string) => Promise<void>) | null>(
@@ -230,6 +235,7 @@ export function useChat(options: UseChatOptions = {}) {
 				const errorMessage =
 					error instanceof Error ? error.message : "Unknown error";
 				options.onError?.(errorMessage);
+				setMessageQueue([]);
 			} finally {
 				setIsLoading(false);
 				finalizeStreamingMessage();
@@ -252,27 +258,26 @@ export function useChat(options: UseChatOptions = {}) {
 	}, [finalizeStreamingMessage]);
 
 	const queueMessage = useCallback((content: string) => {
-		setQueuedMessage(content);
+		setMessageQueue((prev) => [...prev, { id: crypto.randomUUID(), content }]);
 	}, []);
 
-	const clearQueuedMessage = useCallback(() => {
-		setQueuedMessage(null);
+	const removeQueuedMessage = useCallback((id: string) => {
+		setMessageQueue((prev) => prev.filter((msg) => msg.id !== id));
 	}, []);
 
 	// Store sendMessage in ref for use in effect
 	sendMessageRef.current = sendMessage;
 
-	// Auto-send queued message when loading completes
+	// Auto-send next queued message when loading completes
 	useEffect(() => {
-		if (!isLoading && queuedMessage) {
-			const messageToSend = queuedMessage;
-			setQueuedMessage(null);
-			// Use setTimeout to ensure state updates have propagated
+		if (!isLoading && messageQueue.length > 0) {
+			const [next, ...rest] = messageQueue;
+			setMessageQueue(rest);
 			setTimeout(() => {
-				sendMessageRef.current?.(messageToSend);
+				sendMessageRef.current?.(next.content);
 			}, 0);
 		}
-	}, [isLoading, queuedMessage]);
+	}, [isLoading, messageQueue]);
 
 	const loadChat = useCallback(
 		async (chatId: string) => {
@@ -285,7 +290,7 @@ export function useChat(options: UseChatOptions = {}) {
 				setCurrentChat(chat);
 				setMessages(chat.messages || []);
 				setSessionId(chat.sessionId);
-				setQueuedMessage(null);
+				setMessageQueue([]);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : "Failed to load chat";
@@ -300,7 +305,7 @@ export function useChat(options: UseChatOptions = {}) {
 		setMessages([]);
 		setSessionId(null);
 		setStreamingMessage(null);
-		setQueuedMessage(null);
+		setMessageQueue([]);
 	}, []);
 
 	return {
@@ -309,11 +314,11 @@ export function useChat(options: UseChatOptions = {}) {
 		isLoading,
 		currentChat,
 		sessionId,
-		queuedMessage,
+		messageQueue,
 		sendMessage,
 		stopGeneration,
 		queueMessage,
-		clearQueuedMessage,
+		removeQueuedMessage,
 		loadChat,
 		startNewChat,
 	};
