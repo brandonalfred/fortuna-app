@@ -1,6 +1,7 @@
 "use client";
 
-import { Menu, MessageSquarePlus, X } from "lucide-react";
+import { LogOut, Menu, MessageSquarePlus, User, X } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,8 @@ export function Header({
 	onToggleSidebar,
 	onNewChat,
 }: HeaderProps) {
+	const { data: session } = useSession();
+
 	return (
 		<header className="flex h-14 shrink-0 items-center justify-between border-b border-border-subtle bg-bg-primary px-4">
 			<div className="flex items-center gap-3">
@@ -34,17 +37,40 @@ export function Header({
 					fortuna<span className="text-accent-primary">bets</span>.ai
 				</h1>
 			</div>
-			<Button
-				variant="ghost"
-				size="sm"
-				onClick={onNewChat}
-				className={cn(
-					"gap-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary",
+
+			<div className="flex items-center gap-2">
+				<Button
+					variant="ghost"
+					size="sm"
+					onClick={onNewChat}
+					className={cn(
+						"gap-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary",
+					)}
+				>
+					<MessageSquarePlus className="h-4 w-4" />
+					<span className="hidden sm:inline">New Chat</span>
+				</Button>
+
+				{session?.user && (
+					<>
+						<div className="hidden sm:flex items-center gap-2 text-sm text-text-secondary px-2">
+							<User className="h-4 w-4" />
+							<span>
+								{session.user.firstName} {session.user.lastName}
+							</span>
+						</div>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+							className="h-9 w-9 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+							title="Sign out"
+						>
+							<LogOut className="h-4 w-4" />
+						</Button>
+					</>
 				)}
-			>
-				<MessageSquarePlus className="h-4 w-4" />
-				<span className="hidden sm:inline">New Chat</span>
-			</Button>
+			</div>
 		</header>
 	);
 }
