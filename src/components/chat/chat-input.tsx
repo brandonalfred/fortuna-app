@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Square, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,14 +9,20 @@ import { cn } from "@/lib/utils";
 interface ChatInputProps {
 	onSend: (message: string) => void;
 	onStop: () => void;
+	onQueue: (message: string) => void;
+	onClearQueue: () => void;
 	isLoading: boolean;
+	queuedMessage: string | null;
 	disabled?: boolean;
 }
 
 export function ChatInput({
 	onSend,
 	onStop,
+	onQueue,
+	onClearQueue,
 	isLoading,
+	queuedMessage,
 	disabled,
 }: ChatInputProps) {
 	const [value, setValue] = useState("");
@@ -24,12 +30,21 @@ export function ChatInput({
 
 	const handleSubmit = useCallback(() => {
 		if (!value.trim() || disabled) return;
-		onSend(value);
+		if (isLoading) {
+			// Queue the message to send after current response completes
+			onQueue(value);
+		} else {
+			onSend(value);
+		}
 		setValue("");
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto";
 		}
-	}, [value, disabled, onSend]);
+	}, [value, disabled, isLoading, onSend, onQueue]);
+
+	const handleClearQueue = useCallback(() => {
+		onClearQueue();
+	}, [onClearQueue]);
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -54,6 +69,22 @@ export function ChatInput({
 	return (
 		<div className="border-t border-border-subtle bg-bg-primary p-4">
 			<div className="mx-auto max-w-3xl">
+				{queuedMessage && (
+					<div className="mb-2 flex items-center gap-2 rounded-md bg-accent-primary/10 border border-accent-primary/30 px-3 py-2 text-sm text-text-secondary">
+						<span className="flex-1 truncate">
+							<span className="text-accent-primary font-medium">Queued:</span>{" "}
+							{queuedMessage}
+						</span>
+						<button
+							type="button"
+							onClick={handleClearQueue}
+							className="shrink-0 rounded p-1 hover:bg-accent-primary/20 transition-colors"
+							aria-label="Clear queued message"
+						>
+							<X className="h-4 w-4 text-text-tertiary" />
+						</button>
+					</div>
+				)}
 				<div
 					className={cn(
 						"relative flex items-end gap-2 overflow-hidden rounded-lg",

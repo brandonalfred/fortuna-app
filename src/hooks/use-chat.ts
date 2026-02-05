@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	Chat,
 	ChatInitEvent,
@@ -30,8 +30,12 @@ export function useChat(options: UseChatOptions = {}) {
 	const [isLoading, setIsLoading] = useState(false);
 	const [currentChat, setCurrentChat] = useState<Chat | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
+	const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
 	const abortControllerRef = useRef<AbortController | null>(null);
 	const streamingSegmentsRef = useRef<ContentSegment[]>([]);
+	const sendMessageRef = useRef<((content: string) => Promise<void>) | null>(
+		null,
+	);
 
 	const handleEvent = useCallback(
 		(type: string, data: unknown) => {
@@ -247,6 +251,29 @@ export function useChat(options: UseChatOptions = {}) {
 		finalizeStreamingMessage();
 	}, [finalizeStreamingMessage]);
 
+	const queueMessage = useCallback((content: string) => {
+		setQueuedMessage(content);
+	}, []);
+
+	const clearQueuedMessage = useCallback(() => {
+		setQueuedMessage(null);
+	}, []);
+
+	// Store sendMessage in ref for use in effect
+	sendMessageRef.current = sendMessage;
+
+	// Auto-send queued message when loading completes
+	useEffect(() => {
+		if (!isLoading && queuedMessage) {
+			const messageToSend = queuedMessage;
+			setQueuedMessage(null);
+			// Use setTimeout to ensure state updates have propagated
+			setTimeout(() => {
+				sendMessageRef.current?.(messageToSend);
+			}, 0);
+		}
+	}, [isLoading, queuedMessage]);
+
 	const loadChat = useCallback(
 		async (chatId: string) => {
 			try {
@@ -280,8 +307,11 @@ export function useChat(options: UseChatOptions = {}) {
 		isLoading,
 		currentChat,
 		sessionId,
+		queuedMessage,
 		sendMessage,
 		stopGeneration,
+		queueMessage,
+		clearQueuedMessage,
 		loadChat,
 		startNewChat,
 	};

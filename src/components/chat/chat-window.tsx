@@ -8,10 +8,18 @@ import { MessageList } from "./message-list";
 export function ChatWindow() {
 	const [error, setError] = useState<string | null>(null);
 
-	const { messages, streamingMessage, isLoading, sendMessage, stopGeneration } =
-		useChat({
-			onError: setError,
-		});
+	const {
+		messages,
+		streamingMessage,
+		isLoading,
+		queuedMessage,
+		sendMessage,
+		stopGeneration,
+		queueMessage,
+		clearQueuedMessage,
+	} = useChat({
+		onError: setError,
+	});
 
 	const handleSend = useCallback(
 		(message: string) => {
@@ -34,7 +42,10 @@ export function ChatWindow() {
 			<ChatInput
 				onSend={handleSend}
 				onStop={stopGeneration}
+				onQueue={queueMessage}
+				onClearQueue={clearQueuedMessage}
 				isLoading={isLoading}
+				queuedMessage={queuedMessage}
 			/>
 		</div>
 	);
