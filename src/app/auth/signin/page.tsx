@@ -39,7 +39,7 @@ export default async function SignInPage(props: {
 						Welcome back
 					</h1>
 					<p className="mt-2 text-text-secondary">
-						Sign in to continue to Fortuna
+						Sign in to continue to FortunaBets
 					</p>
 				</div>
 
