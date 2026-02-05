@@ -7,6 +7,20 @@ import { prisma } from "@/lib/prisma";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
+const AGENT_MODEL = "claude-opus-4-6";
+
+const AGENT_ALLOWED_TOOLS = [
+	"Read",
+	"Write",
+	"Edit",
+	"Glob",
+	"Grep",
+	"Bash",
+	"WebSearch",
+	"WebFetch",
+	"Skill",
+];
+
 function formatCurrentDate(timezone: string): string {
 	const formatter = new Intl.DateTimeFormat("en-US", {
 		timeZone: timezone,
@@ -130,18 +144,9 @@ async function* streamLocal({
 			prompt: fullPrompt,
 			options: {
 				cwd: workspacePath,
-				model: "claude-opus-4-5-20251101",
+				model: AGENT_MODEL,
 				pathToClaudeCodeExecutable: cliPath,
-				allowedTools: [
-					"Read",
-					"Write",
-					"Edit",
-					"Glob",
-					"Grep",
-					"Bash",
-					"WebSearch",
-					"WebFetch",
-				],
+				allowedTools: AGENT_ALLOWED_TOOLS,
 				permissionMode: "acceptEdits",
 				systemPrompt: {
 					type: "preset",
@@ -150,7 +155,6 @@ async function* streamLocal({
 				},
 				abortController,
 				includePartialMessages: true,
-				maxThinkingTokens: 10000,
 			},
 		});
 
@@ -292,6 +296,8 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 function generateAgentScript(fullPrompt: string, timezone?: string): string {
 	const escapedPrompt = JSON.stringify(fullPrompt);
 	const escapedSystemPrompt = JSON.stringify(getSystemPrompt(timezone));
+	const escapedModel = JSON.stringify(AGENT_MODEL);
+	const escapedTools = JSON.stringify(AGENT_ALLOWED_TOOLS);
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -305,9 +311,9 @@ async function main() {
       prompt,
       options: {
         cwd: '/vercel/sandbox',
-        model: 'claude-opus-4-5-20251101',
+        model: ${escapedModel},
         settingSources: ['project'],
-        allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch', 'Skill'],
+        allowedTools: ${escapedTools},
         permissionMode: 'acceptEdits',
         systemPrompt: {
           type: 'preset',
@@ -316,7 +322,6 @@ async function main() {
         },
         abortController: new AbortController(),
         includePartialMessages: true,
-        maxThinkingTokens: 10000,
       },
     });
 

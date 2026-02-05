@@ -117,8 +117,8 @@ The agent runs differently based on environment:
 - The Odds API integration (live and historical odds via skills)
 - Code execution for analysis scripts
 - File operations within sandboxed workspace
-- Extended thinking with `maxThinkingTokens: 10000`
-- Model: `claude-opus-4-5-20251101`
+- Adaptive thinking (Opus 4.6 default)
+- Model: `claude-opus-4-6`
 
 ### SSE Event Protocol
 
