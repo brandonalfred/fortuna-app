@@ -37,6 +37,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const [sessionId, setSessionId] = useState<string | null>(null);
 	const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
 	const abortControllerRef = useRef<AbortController | null>(null);
+	const dequeuingRef = useRef(false);
 	const streamingSegmentsRef = useRef<ContentSegment[]>([]);
 	const sendMessageRef = useRef<((content: string) => Promise<void>) | null>(
 		null,
@@ -272,11 +273,12 @@ export function useChat(options: UseChatOptions = {}) {
 
 	// Auto-send next queued message when loading completes
 	useEffect(() => {
-		if (!isLoading && messageQueue.length > 0) {
+		if (!isLoading && !dequeuingRef.current && messageQueue.length > 0) {
 			const [next, ...rest] = messageQueue;
 			setMessageQueue(rest);
-			setIsLoading(true);
+			dequeuingRef.current = true;
 			setTimeout(() => {
+				dequeuingRef.current = false;
 				sendMessageRef.current?.(next.content);
 			}, 0);
 		}
