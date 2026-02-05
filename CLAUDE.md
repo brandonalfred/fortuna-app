@@ -171,6 +171,14 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 
 **Important:** After a fresh `bun install` or any schema change, run `bunx prisma generate` before `bun run type-check` or `bun run lint:check` — the generated Prisma client is not committed and must be regenerated locally.
 
+**Migration requirement:** Every change to `prisma/schema.prisma` MUST include a corresponding migration file. The build runs `prisma migrate deploy` which only applies existing migrations — without a migration file, schema changes will not reach the database. Use `vercel env pull .env --environment preview` to get database credentials, then:
+
+```bash
+bunx prisma migrate dev --create-only --name <name>    # Generate migration SQL
+bunx prisma migrate dev                                 # Apply migration
+bunx prisma generate                                    # Regenerate client
+```
+
 **Local Development:**
 
 Uses Prisma's PGlite. Start the dev server before running migrations:
