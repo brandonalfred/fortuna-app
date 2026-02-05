@@ -80,6 +80,8 @@ export default function SignUpPage() {
 					: error.message || "Something went wrong",
 			);
 			setLoading(false);
+		} else {
+			window.location.href = "/";
 		}
 	}
 
