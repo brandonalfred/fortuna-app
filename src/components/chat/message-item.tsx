@@ -1,6 +1,13 @@
 "use client";
 
-import { Brain, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import {
+	Brain,
+	ChevronDown,
+	ChevronRight,
+	Clock,
+	Loader2,
+	X,
+} from "lucide-react";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -77,6 +84,38 @@ export function StreamingMessageItem({
 						/>
 					))}
 					{isStreaming && <LoadingIndicator />}
+				</div>
+			</div>
+		</div>
+	);
+}
+
+interface QueuedMessageItemProps {
+	content: string;
+	onCancel: () => void;
+}
+
+export function QueuedMessageItem({
+	content,
+	onCancel,
+}: QueuedMessageItemProps) {
+	return (
+		<div className="animate-message-in flex w-full justify-end">
+			<div className="group relative max-w-[85%] rounded-lg px-4 py-3 bg-accent-muted/60 border border-dashed border-accent-primary/30">
+				<p className="font-body text-sm text-text-secondary">{content}</p>
+				<div className="mt-1.5 flex items-center gap-1.5">
+					<Clock className="h-3 w-3 text-text-tertiary" />
+					<span className="text-xs text-text-tertiary">Queued</span>
+					<span className="text-text-tertiary/40 text-xs">·</span>
+					<button
+						type="button"
+						onClick={onCancel}
+						className="flex items-center gap-0.5 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+						aria-label="Cancel queued message"
+					>
+						<X className="h-3 w-3" />
+						Cancel
+					</button>
 				</div>
 			</div>
 		</div>

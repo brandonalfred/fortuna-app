@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 interface ChatInputProps {
 	onSend: (message: string) => void;
 	onStop: () => void;
+	onQueue: (message: string) => void;
 	isLoading: boolean;
 	disabled?: boolean;
 }
@@ -16,6 +17,7 @@ interface ChatInputProps {
 export function ChatInput({
 	onSend,
 	onStop,
+	onQueue,
 	isLoading,
 	disabled,
 }: ChatInputProps) {
@@ -24,12 +26,17 @@ export function ChatInput({
 
 	const handleSubmit = useCallback(() => {
 		if (!value.trim() || disabled) return;
-		onSend(value);
+		if (isLoading) {
+			// Queue the message to send after current response completes
+			onQueue(value);
+		} else {
+			onSend(value);
+		}
 		setValue("");
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto";
 		}
-	}, [value, disabled, onSend]);
+	}, [value, disabled, isLoading, onSend, onQueue]);
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
