@@ -38,12 +38,13 @@ except ImportError:
 
 ## Proxy Configuration
 
-NBA.com blocks cloud provider IPs. Always use the proxy:
+NBA.com blocks cloud provider IPs. `WEBSHARE_PROXY_URL` contains multiple proxies (comma-separated). The `safe_request` helper automatically rotates through them on failure.
 
 ```python
-import os
+import os, random
 
-PROXY = os.environ.get("WEBSHARE_PROXY_URL", "")
+PROXY_LIST = [p.strip() for p in os.environ.get("WEBSHARE_PROXY_URL", "").split(",") if p.strip()]
+random.shuffle(PROXY_LIST)
 
 HEADERS = {
     "x-nba-stats-origin": "stats",
@@ -53,33 +54,31 @@ HEADERS = {
 }
 ```
 
-Pass `proxy=PROXY` and `headers=HEADERS` to every endpoint call.
+## Rate Limiting & Proxy Rotation
 
-## Rate Limiting
-
-Add 2-second delays between requests to avoid throttling:
+The `safe_request` helper rotates through proxies on failure and adds delays to avoid throttling:
 
 ```python
 import time
 
 def safe_request(endpoint_class, **kwargs):
-    """Make an nba_api request with retry logic and rate limiting."""
-    for attempt in range(3):
+    """Make an nba_api request with proxy rotation and retry logic."""
+    proxies_to_try = PROXY_LIST if PROXY_LIST else [""]
+    for proxy in proxies_to_try:
         try:
             time.sleep(2)
             endpoint = endpoint_class(
-                proxy=PROXY,
+                proxy=proxy,
                 headers=HEADERS,
                 timeout=30,
                 **kwargs
             )
             return endpoint.get_data_frames()[0]
         except Exception as e:
-            if attempt == 2:
-                print(f"nba_api failed after 3 attempts: {e}")
-                print("Falling back to web search for this data.")
-                return None
-            time.sleep(3)
+            print(f"Proxy {proxy[:30]}... failed: {e}")
+            time.sleep(2)
+    print("All proxies exhausted. Falling back to web search.")
+    return None
 ```
 
 ---
