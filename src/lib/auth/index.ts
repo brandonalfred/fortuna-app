@@ -1,7 +1,13 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { prisma } from "@/lib/prisma";
+import {
+	PASSWORD_MAX_LENGTH,
+	PASSWORD_MIN_LENGTH,
+	passwordRequirements,
+} from "@/lib/validations/auth";
 
 export const auth = betterAuth({
 	baseURL:
@@ -18,8 +24,8 @@ export const auth = betterAuth({
 	}),
 	emailAndPassword: {
 		enabled: true,
-		minPasswordLength: 8,
-		maxPasswordLength: 128,
+		minPasswordLength: PASSWORD_MIN_LENGTH,
+		maxPasswordLength: PASSWORD_MAX_LENGTH,
 	},
 	user: {
 		additionalFields: {
@@ -27,6 +33,19 @@ export const auth = betterAuth({
 			lastName: { type: "string", required: true },
 			phoneNumber: { type: "string", required: true },
 		},
+	},
+	hooks: {
+		before: createAuthMiddleware(async (ctx) => {
+			if (ctx.path !== "/sign-up/email") return;
+			const password = ctx.body?.password;
+			if (!password) return;
+			const failed = passwordRequirements.find((req) => !req.test(password));
+			if (failed) {
+				throw new APIError("BAD_REQUEST", {
+					message: failed.label,
+				});
+			}
+		}),
 	},
 	plugins: [nextCookies()],
 });
