@@ -285,6 +285,7 @@ export function useChat(options: UseChatOptions = {}) {
 				setCurrentChat(chat);
 				setMessages(chat.messages || []);
 				setSessionId(chat.sessionId);
+				setQueuedMessage(null);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : "Failed to load chat";
@@ -299,6 +300,7 @@ export function useChat(options: UseChatOptions = {}) {
 		setMessages([]);
 		setSessionId(null);
 		setStreamingMessage(null);
+		setQueuedMessage(null);
 	}, []);
 
 	return {

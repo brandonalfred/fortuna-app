@@ -32,7 +32,12 @@ export function ChatWindow() {
 	return (
 		<div className="flex h-full flex-col">
 			<div className="flex-1 overflow-hidden">
-				<MessageList messages={messages} streamingMessage={streamingMessage} />
+				<MessageList
+					messages={messages}
+					streamingMessage={streamingMessage}
+					queuedMessage={queuedMessage}
+					onClearQueue={clearQueuedMessage}
+				/>
 			</div>
 			{error && (
 				<div className="mx-4 mb-2 rounded-md bg-error-subtle border border-error p-3 text-sm text-error">
@@ -43,9 +48,7 @@ export function ChatWindow() {
 				onSend={handleSend}
 				onStop={stopGeneration}
 				onQueue={queueMessage}
-				onClearQueue={clearQueuedMessage}
 				isLoading={isLoading}
-				queuedMessage={queuedMessage}
 			/>
 		</div>
 	);
