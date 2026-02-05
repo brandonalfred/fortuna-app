@@ -1,33 +1,33 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { signIn } from "@/lib/auth";
+import { signIn } from "@/lib/auth/client";
 
-export default async function SignInPage(props: {
-	searchParams: Promise<{ error?: string; callbackUrl?: string }>;
-}) {
-	const searchParams = await props.searchParams;
-	const error = searchParams.error;
-	const callbackUrl = searchParams.callbackUrl || "/";
+export default function SignInPage() {
+	const [error, setError] = useState<string | null>(null);
+	const [loading, setLoading] = useState(false);
 
-	async function handleSignIn(formData: FormData) {
-		"use server";
+	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		setError(null);
+		setLoading(true);
 
+		const formData = new FormData(e.currentTarget);
 		const email = formData.get("email") as string;
 		const password = formData.get("password") as string;
 
-		try {
-			await signIn("credentials", {
-				email,
-				password,
-				redirectTo: callbackUrl,
-			});
-		} catch (error) {
-			if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-				throw error;
-			}
-			redirect("/auth/signin?error=CredentialsSignin");
+		const { error } = await signIn.email({
+			email,
+			password,
+			callbackURL: "/",
+		});
+
+		if (error) {
+			setError("Invalid email or password. Please try again.");
+			setLoading(false);
 		}
 	}
 
@@ -45,11 +45,11 @@ export default async function SignInPage(props: {
 
 				{error && (
 					<div className="rounded-md bg-error-subtle border border-error/30 px-4 py-3 text-sm text-error">
-						Invalid email or password. Please try again.
+						{error}
 					</div>
 				)}
 
-				<form action={handleSignIn} className="space-y-4">
+				<form onSubmit={handleSubmit} className="space-y-4">
 					<div className="space-y-2">
 						<label htmlFor="email" className="text-sm text-text-secondary">
 							Email
@@ -80,9 +80,10 @@ export default async function SignInPage(props: {
 
 					<Button
 						type="submit"
-						className="w-full bg-accent-primary hover:bg-accent-hover text-text-inverse"
+						disabled={loading}
+						className="w-full bg-accent-primary hover:bg-accent-hover text-text-inverse disabled:opacity-50"
 					>
-						Sign in
+						{loading ? "Signing in..." : "Sign in"}
 					</Button>
 				</form>
 

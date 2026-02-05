@@ -1,9 +1,8 @@
 "use client";
 
 import { LogOut, Menu, MessageSquarePlus, User, X } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { signOut, useSession } from "@/lib/auth/client";
 
 interface HeaderProps {
 	isSidebarOpen: boolean;
@@ -43,9 +42,7 @@ export function Header({
 					variant="ghost"
 					size="sm"
 					onClick={onNewChat}
-					className={cn(
-						"gap-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary",
-					)}
+					className="gap-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
 				>
 					<MessageSquarePlus className="h-4 w-4" />
 					<span className="hidden sm:inline">New Chat</span>
@@ -62,7 +59,15 @@ export function Header({
 						<Button
 							variant="ghost"
 							size="icon"
-							onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+							onClick={() =>
+								signOut({
+									fetchOptions: {
+										onSuccess: () => {
+											window.location.href = "/auth/signin";
+										},
+									},
+								})
+							}
 							className="h-9 w-9 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
 							title="Sign out"
 						>

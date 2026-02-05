@@ -1,5 +1,5 @@
-import type { Session } from "next-auth";
-import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { auth, type Session } from "@/lib/auth";
 
 export function unauthorized(): Response {
 	return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -26,7 +26,9 @@ export function serverError(error: unknown): Response {
 }
 
 export async function getAuthenticatedUser(): Promise<Session["user"] | null> {
-	const session = await auth();
+	const session = await auth.api.getSession({
+		headers: await headers(),
+	});
 	if (!session?.user?.id) {
 		return null;
 	}

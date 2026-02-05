@@ -2,10 +2,10 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { signUp } from "@/lib/auth/client";
 import {
 	PASSWORD_MAX_LENGTH,
 	passwordRequirements,
@@ -42,23 +42,6 @@ function formatPhoneNumber(value: string): string {
 
 function stripPhoneFormatting(value: string): string {
 	return value.replace(/\D/g, "");
-}
-
-function parseRegistrationError(
-	res: Response,
-	json: Record<string, unknown>,
-): string {
-	if (res.status === 409) {
-		return "An account with this email already exists";
-	}
-
-	const fieldErrors = (json.details as Record<string, unknown>)?.fieldErrors;
-	if (fieldErrors) {
-		const firstError = Object.values(fieldErrors)[0];
-		return Array.isArray(firstError) ? firstError[0] : "Invalid input";
-	}
-
-	return (json.error as string) || "Something went wrong";
 }
 
 export default function SignUpPage() {
@@ -102,36 +85,31 @@ export default function SignUpPage() {
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
-		const email = formData.get("email") as string;
-		const data = {
-			firstName: formData.get("firstName") as string,
-			lastName: formData.get("lastName") as string,
-			email,
-			phoneNumber: stripPhoneFormatting(phoneNumber),
-			password,
-		};
+		const firstName = formData.get("firstName") as string;
+		const lastName = formData.get("lastName") as string;
 
-		try {
-			const res = await fetch("/api/auth/register", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(data),
-			});
-
-			if (!res.ok) {
-				const json = await res.json();
-				setError(parseRegistrationError(res, json));
-				return;
-			}
-
-			await signIn("credentials", {
-				email,
+		const { error } = await signUp.email(
+			{
+				name: `${firstName} ${lastName}`,
+				email: formData.get("email") as string,
 				password,
-				callbackUrl: "/",
-			});
-		} catch {
-			setError("Something went wrong. Please try again.");
-		} finally {
+				firstName,
+				lastName,
+				phoneNumber: stripPhoneFormatting(phoneNumber),
+			},
+			{
+				onSuccess: () => {
+					window.location.href = "/";
+				},
+			},
+		);
+
+		if (error) {
+			setError(
+				error.code === "USER_ALREADY_EXISTS"
+					? "An account with this email already exists"
+					: error.message || "Something went wrong",
+			);
 			setLoading(false);
 		}
 	}
