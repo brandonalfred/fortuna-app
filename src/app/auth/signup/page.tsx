@@ -63,15 +63,21 @@ export default function SignUpPage() {
 		const firstName = formData.get("firstName") as string;
 		const lastName = formData.get("lastName") as string;
 
-		const { error } = await signUp.email({
-			name: `${firstName} ${lastName}`,
-			email: formData.get("email") as string,
-			password,
-			firstName,
-			lastName,
-			phoneNumber: stripPhoneFormatting(phoneNumber),
-			callbackURL: "/",
-		});
+		const { error } = await signUp.email(
+			{
+				name: `${firstName} ${lastName}`,
+				email: formData.get("email") as string,
+				password,
+				firstName,
+				lastName,
+				phoneNumber: stripPhoneFormatting(phoneNumber),
+			},
+			{
+				onSuccess: () => {
+					window.location.href = "/";
+				},
+			},
+		);
 
 		if (error) {
 			setError(
@@ -80,8 +86,6 @@ export default function SignUpPage() {
 					: error.message || "Something went wrong",
 			);
 			setLoading(false);
-		} else {
-			window.location.href = "/";
 		}
 	}
 
