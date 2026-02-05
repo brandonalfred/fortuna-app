@@ -24,6 +24,7 @@ bunx prisma generate # Regenerate Prisma client (required before type-check/lint
 - **Tailwind CSS v4** with `@theme inline` syntax in globals.css
 - **shadcn/ui** components - add via `bunx shadcn@latest add <component>`
 - **Prisma 7** with PostgreSQL (Neon serverless adapter)
+- **Better Auth** for authentication (email/password, with MFA planned)
 - **Claude Agent SDK** for AI-powered sports betting analysis
 - **Vercel Sandbox** for secure agent code execution in production
 
@@ -85,6 +86,9 @@ src/
 │   │   ├── client.ts           # Claude Agent SDK wrapper (local + sandbox modes)
 │   │   ├── system-prompt.md    # Agent persona and capabilities
 │   │   └── workspace.ts        # Per-session workspace isolation
+│   ├── auth/
+│   │   ├── index.ts            # Better Auth server config (Prisma adapter, additionalFields)
+│   │   └── client.ts           # Better Auth React client (useSession, signIn, signUp, signOut)
 │   ├── prisma.ts               # Prisma client singleton with Neon adapter
 │   ├── types.ts                # TypeScript types for chat/messages
 │   └── validations/            # Zod schemas for API validation
@@ -141,6 +145,8 @@ The agent runs differently based on environment:
 | `ODDS_API_KEY` | The Odds API key for betting odds |
 | `API_SPORTS_KEY` | API-Sports.io key for player/team statistics |
 | `WORKSPACE_ROOT` | Agent workspace root (default: `./workspace`) |
+| `BETTER_AUTH_SECRET` | Secret key for Better Auth session signing |
+| `BETTER_AUTH_URL` | Base URL of the app (e.g., `http://localhost:3000`) |
 | `AGENT_SANDBOX_SNAPSHOT_ID` | Optional Vercel Sandbox snapshot for faster cold starts |
 
 ## Path Aliases
@@ -156,6 +162,10 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - Run `bun run lint:prisma` to verify naming conventions
 
 **Database models:**
+- `User` - Users with email, name, firstName, lastName, phoneNumber, emailVerified
+- `Session` - Database sessions with token, expiry, IP address, user agent
+- `Account` - Auth provider accounts (email/password stored here)
+- `Verification` - Email verification tokens
 - `Chat` - Chat sessions with `sessionId` (agent session) and optional `sandboxId` (Vercel Sandbox)
 - `Message` - Messages with `role`, `content`, optional `thinking`, and tool metadata
 

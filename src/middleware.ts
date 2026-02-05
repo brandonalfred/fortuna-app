@@ -1,27 +1,23 @@
-import { NextResponse } from "next/server";
-import NextAuth from "next-auth";
-import { authConfig } from "@/lib/auth/auth.config";
+import { getSessionCookie } from "better-auth/cookies";
+import { type NextRequest, NextResponse } from "next/server";
 
-const { auth } = NextAuth(authConfig);
-
-export default auth((req) => {
-	const { nextUrl } = req;
-	const isLoggedIn = !!req.auth;
-	const isAuthPage = nextUrl.pathname.startsWith("/auth");
+export function middleware(request: NextRequest) {
+	const sessionCookie = getSessionCookie(request);
+	const isAuthPage = request.nextUrl.pathname.startsWith("/auth");
 
 	if (isAuthPage) {
-		if (isLoggedIn) {
-			return NextResponse.redirect(new URL("/", nextUrl));
+		if (sessionCookie) {
+			return NextResponse.redirect(new URL("/", request.url));
 		}
 		return NextResponse.next();
 	}
 
-	if (!isLoggedIn) {
-		return NextResponse.redirect(new URL("/auth/signin", nextUrl));
+	if (!sessionCookie) {
+		return NextResponse.redirect(new URL("/auth/signin", request.url));
 	}
 
 	return NextResponse.next();
-});
+}
 
 export const config = {
 	matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
