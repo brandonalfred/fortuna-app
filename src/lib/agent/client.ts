@@ -196,17 +196,11 @@ async function runSandboxCommand(
 	sandbox: Sandbox,
 	options: { cmd: string; args: string[] },
 	description: string,
-	opts?: { warnOnly?: boolean },
 ): Promise<void> {
 	console.log(`[Sandbox] ${description}...`);
 	const result = await sandbox.runCommand(options);
 	if (result.exitCode !== 0) {
-		const message = `${description} failed (exit code ${result.exitCode})`;
-		if (opts?.warnOnly) {
-			console.warn(`[Sandbox] Warning: ${message}`);
-		} else {
-			throw new Error(message);
-		}
+		throw new Error(`${description} failed (exit code ${result.exitCode})`);
 	}
 }
 
@@ -286,7 +280,6 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 				],
 			},
 			"Installing Python 3, pip, and system tools",
-			{ warnOnly: true },
 		);
 
 		await runSandboxCommand(
@@ -308,7 +301,6 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 				],
 			},
 			"Installing Python packages",
-			{ warnOnly: true },
 		);
 	}
 
