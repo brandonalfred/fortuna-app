@@ -1,16 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth/client";
 
+function getExistingEmail(): string | null {
+	const params = new URLSearchParams(window.location.search);
+	if (params.get("exists") !== "true") return null;
+	const email = sessionStorage.getItem("signin_email");
+	sessionStorage.removeItem("signin_email");
+	return email;
+}
+
 function SignInForm() {
-	const searchParams = useSearchParams();
-	const existingEmail =
-		searchParams.get("exists") === "true" ? searchParams.get("email") : null;
+	const [existingEmail] = useState(getExistingEmail);
 
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -117,9 +122,7 @@ function SignInForm() {
 export default function SignInPage() {
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
-			<Suspense>
-				<SignInForm />
-			</Suspense>
+			<SignInForm />
 		</div>
 	);
 }

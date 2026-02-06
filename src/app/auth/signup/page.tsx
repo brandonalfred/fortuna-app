@@ -107,7 +107,8 @@ export default function SignUpPage() {
 		if (error) {
 			if (error.code === "USER_ALREADY_EXISTS") {
 				const email = formData.get("email") as string;
-				window.location.href = `/auth/signin?exists=true&email=${encodeURIComponent(email)}`;
+				sessionStorage.setItem("signin_email", email);
+				window.location.href = "/auth/signin?exists=true";
 				return;
 			}
 			setError(error.message || "Something went wrong");
