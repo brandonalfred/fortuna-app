@@ -36,8 +36,7 @@ function getSystemPrompt(timezone?: string): string {
 	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
 
-	const tz = timezone || DEFAULT_TIMEZONE;
-	const currentDate = formatCurrentDate(tz);
+	const currentDate = formatCurrentDate(timezone || DEFAULT_TIMEZONE);
 	const dateContext = `\n\nIMPORTANT: Today's date is ${currentDate}. Use this as the reference for "today", "yesterday", "tomorrow", etc.\n`;
 
 	return basePrompt + dateContext;
@@ -139,30 +138,41 @@ async function* streamLocal({
 	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
 	const cliPath = getClaudeCodeCliPath();
 
-	try {
-		const generator = query({
-			prompt: fullPrompt,
-			options: {
-				cwd: workspacePath,
-				model: AGENT_MODEL,
-				pathToClaudeCodeExecutable: cliPath,
-				settingSources: ["project"],
-				allowedTools: AGENT_ALLOWED_TOOLS,
-				permissionMode: "acceptEdits",
-				systemPrompt: {
-					type: "preset",
-					preset: "claude_code",
-					append: getSystemPrompt(timezone),
-				},
-				abortController,
-				includePartialMessages: true,
+	yield* query({
+		prompt: fullPrompt,
+		options: {
+			cwd: workspacePath,
+			model: AGENT_MODEL,
+			pathToClaudeCodeExecutable: cliPath,
+			settingSources: ["project"],
+			allowedTools: AGENT_ALLOWED_TOOLS,
+			permissionMode: "acceptEdits",
+			systemPrompt: {
+				type: "preset",
+				preset: "claude_code",
+				append: getSystemPrompt(timezone),
 			},
-		});
+			abortController,
+			includePartialMessages: true,
+		},
+	});
+}
 
-		yield* generator;
-	} catch (error) {
-		console.error("[Agent] Query error:", error);
-		throw error;
+async function runSandboxCommand(
+	sandbox: Sandbox,
+	options: { cmd: string; args: string[] },
+	description: string,
+	opts?: { warnOnly?: boolean },
+): Promise<void> {
+	console.log(`[Sandbox] ${description}...`);
+	const result = await sandbox.runCommand(options);
+	if (result.exitCode !== 0) {
+		const message = `${description} failed (exit code ${result.exitCode})`;
+		if (opts?.warnOnly) {
+			console.warn(`[Sandbox] Warning: ${message}`);
+		} else {
+			throw new Error(message);
+		}
 	}
 }
 
@@ -199,77 +209,67 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 	console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
 
 	if (!snapshotId) {
-		console.log("[Sandbox] Installing Claude Code CLI...");
-		const installResult = await sandbox.runCommand({
-			cmd: "bash",
-			args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
-		});
-		if (installResult.exitCode !== 0) {
-			throw new Error(
-				`Failed to install Claude Code CLI (exit code ${installResult.exitCode})`,
-			);
-		}
+		await runSandboxCommand(
+			sandbox,
+			{
+				cmd: "bash",
+				args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
+			},
+			"Installing Claude Code CLI",
+		);
 
-		console.log("[Sandbox] Installing SDKs...");
-		const npmResult = await sandbox.runCommand({
-			cmd: "npm",
-			args: ["install", "@anthropic-ai/claude-agent-sdk", "@anthropic-ai/sdk"],
-		});
-		if (npmResult.exitCode !== 0) {
-			throw new Error(
-				`Failed to install SDKs (exit code ${npmResult.exitCode})`,
-			);
-		}
+		await runSandboxCommand(
+			sandbox,
+			{
+				cmd: "npm",
+				args: [
+					"install",
+					"@anthropic-ai/claude-agent-sdk",
+					"@anthropic-ai/sdk",
+				],
+			},
+			"Installing SDKs",
+		);
 
-		console.log("[Sandbox] Installing Python 3, pip, and system tools...");
-		const aptResult = await sandbox.runCommand({
-			cmd: "bash",
-			args: [
-				"-c",
-				[
-					"apt-get update",
-					"apt-get install -y python3 python3-pip python3-venv jq sqlite3 csvkit libxml2-dev libxslt1-dev",
-				].join(" && "),
-			],
-		});
-		if (aptResult.exitCode !== 0) {
-			console.warn(
-				`[Sandbox] Warning: Failed to install system packages (exit code ${aptResult.exitCode})`,
-			);
-		}
+		await runSandboxCommand(
+			sandbox,
+			{
+				cmd: "bash",
+				args: [
+					"-c",
+					[
+						"apt-get update",
+						"apt-get install -y python3 python3-pip python3-venv jq sqlite3 csvkit libxml2-dev libxslt1-dev",
+					].join(" && "),
+				],
+			},
+			"Installing Python 3, pip, and system tools",
+			{ warnOnly: true },
+		);
 
-		console.log("[Sandbox] Installing Python packages...");
-		const pipResult = await sandbox.runCommand({
-			cmd: "bash",
-			args: [
-				"-c",
-				[
-					"pip3 install --break-system-packages",
-					// Data analysis
-					"pandas numpy scipy",
-					// HTTP and scraping
-					"requests httpx beautifulsoup4 lxml",
-					// Date/time handling
-					"python-dateutil pytz",
-					// Visualization
-					"matplotlib",
-					// Machine learning
-					"scikit-learn",
-					// Database
-					"duckdb",
-					// Sports analytics
-					"nba_api",
-				].join(" "),
-			],
-		});
-		if (pipResult.exitCode !== 0) {
-			console.warn(
-				`[Sandbox] Warning: Failed to install Python packages (exit code ${pipResult.exitCode})`,
-			);
-		}
+		await runSandboxCommand(
+			sandbox,
+			{
+				cmd: "bash",
+				args: [
+					"-c",
+					[
+						"pip3 install --break-system-packages",
+						"pandas numpy scipy",
+						"requests httpx beautifulsoup4 lxml",
+						"python-dateutil pytz",
+						"matplotlib",
+						"scikit-learn",
+						"duckdb",
+						"nba_api",
+					].join(" "),
+				],
+			},
+			"Installing Python packages",
+			{ warnOnly: true },
+		);
 	}
 
-	// Copy all skill files to sandbox
 	const skills = getSkillFiles();
 	console.log(`[Sandbox] Setting up ${skills.length} skills...`);
 
@@ -346,6 +346,39 @@ main();
 `;
 }
 
+interface SandboxLineResult {
+	message?: SDKMessage;
+	error?: string;
+	complete?: boolean;
+}
+
+function parseSandboxLine(line: string): SandboxLineResult | null {
+	if (!line.trim()) return null;
+
+	try {
+		const parsed = JSON.parse(line);
+
+		if (parsed.type === "sdk_message") {
+			return { message: parsed.data as SDKMessage };
+		}
+		if (parsed.type === "error") {
+			return { error: parsed.error };
+		}
+		if (parsed.type === "complete") {
+			return { complete: true };
+		}
+		return null;
+	} catch (parseError) {
+		if (!(parseError instanceof SyntaxError)) {
+			throw parseError;
+		}
+		if (!line.startsWith("{")) {
+			console.log("[Sandbox] Non-JSON output:", line);
+		}
+		return null;
+	}
+}
+
 async function* streamViaSandbox({
 	prompt,
 	chatId,
@@ -360,12 +393,46 @@ async function* streamViaSandbox({
 		const script = generateAgentScript(fullPrompt, timezone);
 		console.log("[Sandbox] Writing agent runner script...");
 
+		const envVars: Record<string, string> = {
+			ODDS_API_KEY: process.env.ODDS_API_KEY || "",
+			API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
+			WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL || "",
+		};
+		const envExports = Object.entries(envVars)
+			.filter(([, v]) => v)
+			.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
+			.join("\n");
+
 		await sandbox.writeFiles([
 			{
 				path: "/vercel/sandbox/agent-runner.mjs",
 				content: Buffer.from(script),
 			},
+			{
+				path: "/vercel/sandbox/.agent-env.sh",
+				content: Buffer.from(`#!/bin/bash\n${envExports}\n`),
+			},
 		]);
+
+		await sandbox.runCommand({
+			cmd: "bash",
+			args: [
+				"-c",
+				"grep -q \"agent-env.sh\" /root/.bashrc 2>/dev/null || echo '[ -f /vercel/sandbox/.agent-env.sh ] && source /vercel/sandbox/.agent-env.sh' >> /root/.bashrc",
+			],
+		});
+
+		console.log("[Sandbox] Verifying Python packages...");
+		const verifyResult = await sandbox.runCommand({
+			cmd: "bash",
+			args: [
+				"-c",
+				"python3 -c 'import nba_api' 2>/dev/null || pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy",
+			],
+		});
+		if (verifyResult.exitCode !== 0) {
+			console.warn("[Sandbox] Warning: Python package verification failed");
+		}
 
 		console.log("[Sandbox] Starting agent command...");
 		const cmd = await sandbox.runCommand({
@@ -373,9 +440,7 @@ async function* streamViaSandbox({
 			args: ["agent-runner.mjs"],
 			env: {
 				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
-				ODDS_API_KEY: process.env.ODDS_API_KEY || "",
-				API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
-				WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL || "",
+				...envVars,
 			},
 			detached: true,
 		});
@@ -390,25 +455,12 @@ async function* streamViaSandbox({
 				buffer = lines.pop() || "";
 
 				for (const line of lines) {
-					if (!line.trim()) continue;
-
-					try {
-						const parsed = JSON.parse(line);
-
-						if (parsed.type === "sdk_message") {
-							yield parsed.data as SDKMessage;
-						} else if (parsed.type === "error") {
-							throw new Error(parsed.error);
-						} else if (parsed.type === "complete") {
-							console.log("[Sandbox] Agent completed successfully");
-						}
-					} catch (parseError) {
-						if (!(parseError instanceof SyntaxError)) {
-							throw parseError;
-						}
-						if (!line.startsWith("{")) {
-							console.log("[Sandbox] Non-JSON output:", line);
-						}
+					const result = parseSandboxLine(line);
+					if (!result) continue;
+					if (result.error) throw new Error(result.error);
+					if (result.message) yield result.message;
+					if (result.complete) {
+						console.log("[Sandbox] Agent completed successfully");
 					}
 				}
 			} else if (log.stream === "stderr") {
@@ -417,26 +469,21 @@ async function* streamViaSandbox({
 		}
 
 		if (buffer.trim()) {
-			try {
-				const parsed = JSON.parse(buffer);
-				if (parsed.type === "sdk_message") {
-					yield parsed.data as SDKMessage;
-				} else if (parsed.type === "error") {
-					throw new Error(parsed.error);
-				}
-			} catch {
-				console.log("[Sandbox] Final buffer (non-JSON):", buffer);
-			}
+			const result = parseSandboxLine(buffer);
+			if (result?.error) throw new Error(result.error);
+			if (result?.message) yield result.message;
 		}
 
-		const result = await cmd.wait();
-		console.log("[Sandbox] Command finished with exit code:", result.exitCode);
+		const exitResult = await cmd.wait();
+		console.log(
+			"[Sandbox] Command finished with exit code:",
+			exitResult.exitCode,
+		);
 
-		if (result.exitCode !== 0) {
-			throw new Error(`Agent process exited with code ${result.exitCode}`);
+		if (exitResult.exitCode !== 0) {
+			throw new Error(`Agent process exited with code ${exitResult.exitCode}`);
 		}
 
-		// Extend timeout in background - don't let failures affect the completed stream
 		console.log("[Sandbox] Extending sandbox timeout...");
 		sandbox.extendTimeout(ms("45m")).catch((extendError: unknown) => {
 			console.warn(
