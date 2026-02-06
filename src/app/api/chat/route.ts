@@ -16,6 +16,35 @@ import {
 import { prisma } from "@/lib/prisma";
 import { sendMessageSchema } from "@/lib/validations/chat";
 
+const TRANSIENT_DB_PATTERNS = [
+	"NeonDbError",
+	"requested endpoint could not be found",
+	"password authentication failed",
+	"Connection terminated",
+	"ECONNRESET",
+];
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function isTransientDbError(error: unknown): boolean {
+	const msg = errorMessage(error);
+	return TRANSIENT_DB_PATTERNS.some((pattern) => msg.includes(pattern));
+}
+
+function toUserFriendlyError(error: unknown): string {
+	if (isTransientDbError(error)) {
+		return "A temporary database issue occurred. Your response may not have been saved. Please try again.";
+	}
+
+	if (errorMessage(error).includes("Agent process exited with code")) {
+		return "The analysis encountered an unexpected error. Please try again.";
+	}
+
+	return "Something went wrong. Please try again.";
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -66,6 +95,10 @@ export async function POST(req: Request): Promise<Response> {
 					userId: user.id,
 				},
 			}));
+
+		console.log(
+			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} history=${conversationHistory.length}`,
+		);
 
 		await prisma.message.create({
 			data: {
@@ -134,11 +167,7 @@ export async function POST(req: Request): Promise<Response> {
 				}
 
 				try {
-					console.log("[Chat API] Starting agent stream...");
-
 					for await (const msg of agentStream) {
-						console.log("[Chat API] Received message type:", msg.type);
-
 						if (
 							lastEventWasToolUse &&
 							(msg.type === "assistant" ||
@@ -204,21 +233,31 @@ export async function POST(req: Request): Promise<Response> {
 					}
 
 					console.log(
-						"[Chat API] Stream loop completed, content length:",
-						fullAssistantContent.length,
-						"tool uses:",
-						toolUses.length,
+						`[Chat API] Stream complete content=${fullAssistantContent.length} tools=${toolUses.length}`,
 					);
 
-					await saveAssistantMessage();
+					try {
+						await saveAssistantMessage();
+					} catch (saveError) {
+						if (!isTransientDbError(saveError)) throw saveError;
+						console.warn(
+							"[Chat API] Transient DB error, retrying save:",
+							saveError,
+						);
+						await new Promise((r) => setTimeout(r, 1000));
+						await saveAssistantMessage();
+					}
+
+					console.log(
+						`[Chat API] Saved message chat=${chat.id} length=${fullAssistantContent.length}`,
+					);
 					sendEvent("done", { chatId: chat.id, sessionId });
 				} catch (error) {
 					if (!abortController.signal.aborted) {
 						console.error("[Chat API] Stream error:", error);
-						const errorMessage =
-							error instanceof Error ? error.message : "Unknown error";
+						const userMessage = toUserFriendlyError(error);
 						try {
-							sendEvent("error", { message: errorMessage });
+							sendEvent("error", { message: userMessage });
 						} catch {
 							/* stream closed */
 						}
