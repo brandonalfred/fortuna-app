@@ -174,3 +174,13 @@ curl -s "https://api.the-odds-api.com/v4/sports/{sport_key}/scores/?apiKey=${ODD
 2. **Check for line movement** - Note if odds have shifted
 3. **Cite your sources** - Always mention which sportsbooks you're quoting
 4. **Explain the odds** - American odds format: +150 means $100 wins $150, -150 means bet $150 to win $100
+
+## Troubleshooting
+
+### Empty results from an API call
+
+Empty results (`[]`) mean the requested market does not exist for that event. This is normal, NOT a credential issue.
+
+**Common causes:** off-season (no events), wrong market type for the game stage (e.g., `outrights` after a championship matchup is set — use `h2h,spreads,totals` instead), or invalid `eventId`.
+
+**NEVER debug credentials when you get empty results.** Adjust your query parameters instead.

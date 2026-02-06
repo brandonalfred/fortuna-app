@@ -425,6 +425,13 @@ async function* streamViaSandbox({
 			.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
 			.join("\n");
 
+		const configuredKeys = Object.entries(envVars)
+			.filter(([, v]) => v)
+			.map(([k]) => k);
+		console.log(
+			`[Sandbox] Writing env vars to .agent-env.sh: ${configuredKeys.join(", ") || "(none)"}`,
+		);
+
 		await sandbox.writeFiles([
 			{
 				path: "/vercel/sandbox/agent-runner.mjs",
@@ -506,12 +513,8 @@ async function* streamViaSandbox({
 			throw new Error(`Agent process exited with code ${exitResult.exitCode}`);
 		}
 
-		console.log("[Sandbox] Extending sandbox timeout...");
-		sandbox.extendTimeout(ms("45m")).catch((extendError: unknown) => {
-			console.warn(
-				"[Sandbox] Failed to extend timeout (non-fatal):",
-				extendError instanceof Error ? extendError.message : extendError,
-			);
+		sandbox.extendTimeout(ms("45m")).catch((err: unknown) => {
+			console.warn("[Sandbox] Failed to extend timeout (non-fatal):", err);
 		});
 	} catch (error) {
 		console.error("[Sandbox] Error during execution:", error);
