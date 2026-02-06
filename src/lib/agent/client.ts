@@ -1,6 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+	type Query,
+	query,
+	type SDKMessage,
+	type SDKUserMessage,
+	type SettingSource,
+} from "@anthropic-ai/claude-agent-sdk";
 import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { prisma } from "@/lib/prisma";
@@ -77,6 +83,7 @@ function getClaudeCodeCliPath(): string {
 	return cliPath;
 }
 
+export type { Query };
 export type AgentMessage = SDKMessage;
 
 interface ConversationMessage {
@@ -120,41 +127,56 @@ function buildFullPrompt(
 export async function* streamAgentResponse(
 	options: StreamAgentOptions,
 ): AsyncGenerator<SDKMessage> {
-	if (process.env.VERCEL) {
-		yield* streamViaSandbox(options);
-	} else {
-		yield* streamLocal(options);
-	}
+	yield* streamViaSandbox(options);
 }
 
-async function* streamLocal({
+async function* singleMessageStream(
+	message: string,
+): AsyncGenerator<SDKUserMessage> {
+	yield {
+		type: "user" as const,
+		session_id: "",
+		message: {
+			role: "user" as const,
+			content: [{ type: "text" as const, text: message }],
+		},
+		parent_tool_use_id: null,
+	};
+}
+
+function buildQueryOptions(
+	workspacePath: string,
+	abortController: AbortController,
+	timezone?: string,
+) {
+	return {
+		cwd: workspacePath,
+		model: AGENT_MODEL,
+		pathToClaudeCodeExecutable: getClaudeCodeCliPath(),
+		settingSources: ["project"] satisfies SettingSource[],
+		allowedTools: AGENT_ALLOWED_TOOLS,
+		permissionMode: "acceptEdits" as const,
+		systemPrompt: {
+			type: "preset" as const,
+			preset: "claude_code" as const,
+			append: getSystemPrompt(timezone),
+		},
+		abortController,
+		includePartialMessages: true,
+	};
+}
+
+export function createLocalAgentQuery({
 	prompt,
 	workspacePath,
 	conversationHistory = [],
 	abortController = new AbortController(),
 	timezone,
-}: StreamAgentOptions): AsyncGenerator<SDKMessage> {
-	console.log("[Agent] streamLocal called");
+}: StreamAgentOptions): Query {
 	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
-	const cliPath = getClaudeCodeCliPath();
-
-	yield* query({
-		prompt: fullPrompt,
-		options: {
-			cwd: workspacePath,
-			model: AGENT_MODEL,
-			pathToClaudeCodeExecutable: cliPath,
-			settingSources: ["project"],
-			allowedTools: AGENT_ALLOWED_TOOLS,
-			permissionMode: "acceptEdits",
-			systemPrompt: {
-				type: "preset",
-				preset: "claude_code",
-				append: getSystemPrompt(timezone),
-			},
-			abortController,
-			includePartialMessages: true,
-		},
+	return query({
+		prompt: singleMessageStream(fullPrompt),
+		options: buildQueryOptions(workspacePath, abortController, timezone),
 	});
 }
 
@@ -528,9 +550,7 @@ interface ToolUseBlock {
 type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | { type: string };
 
 function getAssistantContent(message: SDKMessage): ContentBlock[] | null {
-	if (message.type !== "assistant") {
-		return null;
-	}
+	if (message.type !== "assistant") return null;
 	return message.message.content as ContentBlock[];
 }
 

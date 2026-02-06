@@ -37,7 +37,8 @@ export interface StreamEvent {
 		| "result"
 		| "done"
 		| "error"
-		| "thinking";
+		| "thinking"
+		| "turn_complete";
 	data: unknown;
 }
 
