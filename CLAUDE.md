@@ -141,6 +141,7 @@ Each chat gets its own ephemeral Vercel Sandbox instance (45-minute timeout). Sa
 | `delta` | `{ text }` | Text streaming chunk |
 | `thinking` | `{ thinking }` | Extended thinking content |
 | `tool_use` | `{ name, input }` | Tool execution |
+| `turn_complete` | `{}` | Tool call cycle complete |
 | `result` | `{ cost_usd, duration_ms }` | Completion metrics |
 | `done` | `{ chatId, sessionId }` | Stream complete |
 
