@@ -69,25 +69,32 @@ Player and team statistics from API-Sports.io for NBA, NFL, MLB, and NHL. Used b
 ```
 src/
 ├── app/
+│   ├── (chat)/                    # Chat route group (shared layout with sidebar)
+│   │   ├── layout.tsx             # Chat layout with sidebar management
+│   │   ├── new/
+│   │   │   └── page.tsx           # New chat page
+│   │   └── chat/
+│   │       └── [id]/
+│   │           └── page.tsx       # Existing chat page (by ID)
 │   ├── api/
-│   │   ├── chat/route.ts       # SSE streaming endpoint for agent responses
-│   │   └── chats/              # Chat CRUD operations
-│   ├── globals.css             # Tailwind v4 theme with design tokens
-│   ├── layout.tsx              # Root layout with fonts
-│   └── page.tsx                # Main chat interface
+│   │   ├── chat/route.ts         # SSE streaming endpoint for agent responses
+│   │   └── chats/                # Chat CRUD operations
+│   ├── globals.css               # Tailwind v4 theme with design tokens
+│   ├── layout.tsx                # Root layout with fonts
+│   └── page.tsx                  # Redirects to /new
 ├── components/
-│   ├── chat/                   # Chat UI (input, messages, tool display)
-│   ├── sidebar/                # Chat history sidebar
-│   └── ui/                     # shadcn/ui primitives
+│   ├── chat/                     # Chat UI (input, messages, tool display)
+│   ├── sidebar/                  # Chat history sidebar
+│   └── ui/                      # shadcn/ui primitives
 ├── hooks/
-│   └── use-chat.ts             # SSE streaming and message state management
+│   └── use-chat.ts              # SSE streaming and message state management
 ├── lib/
 │   ├── agent/
-│   │   ├── client.ts           # Claude Agent SDK wrapper (local + sandbox modes)
-│   │   ├── system-prompt.md    # Agent persona and capabilities
+│   │   ├── client.ts            # Claude Agent SDK wrapper (local + sandbox modes)
+│   │   ├── system-prompt.md     # Agent persona and capabilities
 │   │   └── workspace.ts        # Per-session workspace isolation
 │   ├── auth/
-│   │   ├── index.ts            # Better Auth server config (Prisma adapter, additionalFields)
+│   │   ├── index.ts             # Better Auth server config (Prisma adapter, additionalFields)
 │   │   └── client.ts           # Better Auth React client (useSession, signIn, signUp, signOut)
 │   ├── prisma.ts               # Prisma client singleton with Neon adapter
 │   ├── types.ts                # TypeScript types for chat/messages

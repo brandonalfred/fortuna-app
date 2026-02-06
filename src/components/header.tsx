@@ -1,20 +1,16 @@
 "use client";
 
 import { LogOut, Menu, MessageSquarePlus, User, X } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { signOut, useSession } from "@/lib/auth/client";
 
 interface HeaderProps {
 	isSidebarOpen: boolean;
 	onToggleSidebar: () => void;
-	onNewChat: () => void;
 }
 
-export function Header({
-	isSidebarOpen,
-	onToggleSidebar,
-	onNewChat,
-}: HeaderProps) {
+export function Header({ isSidebarOpen, onToggleSidebar }: HeaderProps) {
 	const { data: session } = useSession();
 
 	return (
@@ -41,11 +37,13 @@ export function Header({
 				<Button
 					variant="ghost"
 					size="sm"
-					onClick={onNewChat}
+					asChild
 					className="gap-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
 				>
-					<MessageSquarePlus className="h-4 w-4" />
-					<span className="hidden sm:inline">New Chat</span>
+					<Link href="/new">
+						<MessageSquarePlus className="h-4 w-4" />
+						<span className="hidden sm:inline">New Chat</span>
+					</Link>
 				</Button>
 
 				{session?.user && (

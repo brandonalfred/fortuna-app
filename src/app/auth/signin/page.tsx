@@ -33,7 +33,7 @@ export default function SignInPage() {
 		const { error } = await signIn.email({
 			email,
 			password,
-			callbackURL: "/",
+			callbackURL: "/new",
 		});
 
 		if (error) {
