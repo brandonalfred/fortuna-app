@@ -254,13 +254,32 @@ export async function POST(req: Request): Promise<Response> {
 					}
 
 					if (capturedSessionId) {
-						await prisma.chat.update({
-							where: { id: chat.id },
-							data: { agentSessionId: capturedSessionId },
-						});
-						console.log(
-							`[Chat API] Persisted agentSessionId=${capturedSessionId}`,
-						);
+						try {
+							await prisma.chat.update({
+								where: { id: chat.id },
+								data: { agentSessionId: capturedSessionId },
+							});
+							console.log(
+								`[Chat API] Persisted agentSessionId=${capturedSessionId}`,
+							);
+						} catch (err) {
+							if (isTransientDbError(err)) {
+								console.warn(
+									"[Chat API] Transient DB error persisting agentSessionId, retrying:",
+									err,
+								);
+								await new Promise((r) => setTimeout(r, 1000));
+								await prisma.chat.update({
+									where: { id: chat.id },
+									data: { agentSessionId: capturedSessionId },
+								});
+							} else {
+								console.error(
+									"[Chat API] Failed to persist agentSessionId:",
+									err,
+								);
+							}
+						}
 					}
 
 					console.log(

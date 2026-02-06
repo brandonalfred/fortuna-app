@@ -423,7 +423,6 @@ async function* streamViaSandbox({
 	chatId,
 	conversationHistory = [],
 	timezone,
-	agentSessionId,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
 	const { sandbox, sandboxReused, previousAgentSessionId } =
@@ -434,7 +433,7 @@ async function* streamViaSandbox({
 
 	if (canResume) {
 		console.log(`[Sandbox] Resuming session=${previousAgentSessionId}`);
-	} else if (agentSessionId && !sandboxReused) {
+	} else if (previousAgentSessionId && !sandboxReused) {
 		console.log(
 			"[Sandbox] Sandbox was recreated, cannot resume previous session",
 		);
