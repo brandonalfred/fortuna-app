@@ -29,24 +29,33 @@ interface UseChatOptions {
 	onError?: (error: string | null) => void;
 }
 
+interface ParseSSEResult {
+	eventType: string;
+	sawTurnComplete: boolean;
+}
+
 function parseSSELines(
 	lines: string[],
 	onEvent: (type: string, data: unknown) => void,
 	currentEventType: string,
-): string {
+): ParseSSEResult {
 	let eventType = currentEventType;
+	let sawTurnComplete = false;
 	for (const line of lines) {
 		if (line.startsWith("event: ")) {
 			eventType = line.slice(7);
 		} else if (line.startsWith("data: ")) {
 			try {
 				onEvent(eventType, JSON.parse(line.slice(6)));
+				if (eventType === "turn_complete") {
+					sawTurnComplete = true;
+				}
 			} catch (e) {
 				console.warn("[SSE] Failed to parse data line:", line.slice(6, 100), e);
 			}
 		}
 	}
-	return eventType;
+	return { eventType, sawTurnComplete };
 }
 
 export interface StreamingMessage {
@@ -73,6 +82,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const sendMessageRef = useRef<((content: string) => Promise<void>) | null>(
 		null,
 	);
+	const messageQueueRef = useRef<QueuedMessage[]>([]);
 	const disconnectedChatRef = useRef<string | null>(null);
 	const lastReloadAttemptRef = useRef(0);
 	const onErrorRef = useRef(options.onError);
@@ -139,6 +149,22 @@ export function useChat(options: UseChatOptions = {}) {
 				});
 				break;
 			}
+			case "turn_complete": {
+				const tcSegments = streamingSegmentsRef.current;
+				for (const segment of tcSegments) {
+					if (
+						segment.type === "tool_use" &&
+						segment.tool.status === "running"
+					) {
+						segment.tool.status = "complete";
+					}
+				}
+				setStreamingMessage({
+					segments: [...tcSegments],
+					isStreaming: true,
+				});
+				break;
+			}
 			case "result": {
 				const segments = streamingSegmentsRef.current;
 				for (const segment of segments) {
@@ -167,10 +193,10 @@ export function useChat(options: UseChatOptions = {}) {
 
 	const finalizeStreamingMessage = useCallback(() => {
 		const segments = streamingSegmentsRef.current;
-		if (segments.length === 0) {
-			setStreamingMessage(null);
-			return;
-		}
+		streamingSegmentsRef.current = [];
+		setStreamingMessage(null);
+
+		if (segments.length === 0) return;
 
 		const content = segments
 			.filter(
@@ -187,19 +213,18 @@ export function useChat(options: UseChatOptions = {}) {
 			)
 			.map((s) => s.tool);
 
-		const assistantMessage: Message = {
-			id: `msg-${crypto.randomUUID()}`,
-			chatId: currentChat?.id || "",
-			role: "assistant",
-			content,
-			toolInput: toolUses.length > 0 ? toolUses : undefined,
-			segments: [...segments],
-			createdAt: new Date().toISOString(),
-		};
-		setMessages((msgs) => [...msgs, assistantMessage]);
-
-		streamingSegmentsRef.current = [];
-		setStreamingMessage(null);
+		setMessages((msgs) => [
+			...msgs,
+			{
+				id: `msg-${crypto.randomUUID()}`,
+				chatId: currentChat?.id || "",
+				role: "assistant",
+				content,
+				toolInput: toolUses.length > 0 ? toolUses : undefined,
+				segments: [...segments],
+				createdAt: new Date().toISOString(),
+			},
+		]);
 	}, [currentChat]);
 
 	const fetchChat = useCallback(
@@ -297,7 +322,13 @@ export function useChat(options: UseChatOptions = {}) {
 					const lines = buffer.split("\n");
 					buffer = lines.pop() || "";
 
-					eventType = parseSSELines(lines, handleEvent, eventType);
+					const result = parseSSELines(lines, handleEvent, eventType);
+					eventType = result.eventType;
+
+					if (result.sawTurnComplete && messageQueueRef.current.length > 0) {
+						abortControllerRef.current?.abort();
+						break;
+					}
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
@@ -347,6 +378,10 @@ export function useChat(options: UseChatOptions = {}) {
 	const removeQueuedMessage = useCallback((id: string) => {
 		setMessageQueue((prev) => prev.filter((msg) => msg.id !== id));
 	}, []);
+
+	useEffect(() => {
+		messageQueueRef.current = messageQueue;
+	}, [messageQueue]);
 
 	useEffect(() => {
 		sendMessageRef.current = sendMessage;

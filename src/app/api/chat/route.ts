@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
+import type { Query } from "@/lib/agent/client";
 import {
+	createLocalAgentQuery,
 	extractThinkingFromMessage,
 	streamAgentResponse,
 } from "@/lib/agent/client";
@@ -38,7 +41,6 @@ export async function POST(req: Request): Promise<Response> {
 				})
 			: null;
 
-		// Fetch conversation history separately
 		const existingMessages = existingChat
 			? await prisma.message.findMany({
 					where: { chatId: existingChat.id },
@@ -49,7 +51,6 @@ export async function POST(req: Request): Promise<Response> {
 		const sessionId = existingChat?.sessionId || randomUUID();
 		const workspacePath = await getOrCreateWorkspace(sessionId);
 
-		// Build conversation history from existing messages (including thinking for context)
 		const conversationHistory = existingMessages.map((m) => ({
 			role: m.role as "user" | "assistant",
 			content: m.content,
@@ -66,7 +67,6 @@ export async function POST(req: Request): Promise<Response> {
 				},
 			}));
 
-		// Save user message
 		await prisma.message.create({
 			data: {
 				chatId: chat.id,
@@ -77,6 +77,8 @@ export async function POST(req: Request): Promise<Response> {
 
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
+
+		let agentQuery: Query | null = null;
 
 		const stream = new ReadableStream({
 			async start(controller) {
@@ -96,20 +98,59 @@ export async function POST(req: Request): Promise<Response> {
 				let lastEventWasToolUse = false;
 				const sentThinkingIds = new Set<string>();
 
+				let savedToDb = false;
+				async function saveAssistantMessage(): Promise<void> {
+					if (savedToDb) return;
+					if (!fullAssistantContent && toolUses.length === 0) return;
+					await prisma.message.create({
+						data: {
+							chatId: chat.id,
+							role: "assistant",
+							content: fullAssistantContent,
+							thinking: fullThinkingContent || null,
+							toolName: toolUses[0]?.name,
+							toolInput:
+								toolUses.length > 0
+									? (toolUses as unknown as Prisma.InputJsonValue)
+									: undefined,
+						},
+					});
+					savedToDb = true;
+				}
+
+				const agentOptions = {
+					prompt: message,
+					workspacePath,
+					chatId: chat.id,
+					conversationHistory,
+					abortController,
+					timezone,
+				};
+
+				const isLocal = !process.env.VERCEL;
+				if (isLocal) {
+					agentQuery = createLocalAgentQuery(agentOptions);
+				}
+				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
+
 				try {
 					console.log("[Chat API] Starting agent stream...");
 
-					const agentStream = streamAgentResponse({
-						prompt: message,
-						workspacePath,
-						chatId: chat.id,
-						conversationHistory,
-						abortController,
-						timezone,
-					});
-
 					for await (const msg of agentStream) {
 						console.log("[Chat API] Received message type:", msg.type);
+
+						if (
+							lastEventWasToolUse &&
+							(msg.type === "assistant" ||
+								(msg.type === "stream_event" &&
+									msg.event.type === "message_start"))
+						) {
+							sendEvent("turn_complete", {});
+							sendEvent("delta", { text: "\n\n" });
+							fullAssistantContent += "\n\n";
+							lastEventWasToolUse = false;
+						}
+
 						switch (msg.type) {
 							case "assistant": {
 								const messageId = msg.message.id;
@@ -137,11 +178,7 @@ export async function POST(req: Request): Promise<Response> {
 							}
 							case "stream_event": {
 								const event = msg.event;
-								if (event.type === "message_start" && lastEventWasToolUse) {
-									sendEvent("delta", { text: "\n\n" });
-									fullAssistantContent += "\n\n";
-									lastEventWasToolUse = false;
-								} else if (
+								if (
 									event.type === "content_block_delta" &&
 									"delta" in event &&
 									event.delta.type === "text_delta"
@@ -173,33 +210,32 @@ export async function POST(req: Request): Promise<Response> {
 						toolUses.length,
 					);
 
-					if (fullAssistantContent || toolUses.length > 0) {
-						await prisma.message.create({
-							data: {
-								chatId: chat.id,
-								role: "assistant",
-								content: fullAssistantContent,
-								thinking: fullThinkingContent || null,
-								toolName: toolUses[0]?.name,
-								toolInput:
-									toolUses.length > 0
-										? JSON.parse(JSON.stringify(toolUses))
-										: undefined,
-							},
-						});
-					}
-
+					await saveAssistantMessage();
 					sendEvent("done", { chatId: chat.id, sessionId });
 				} catch (error) {
-					console.error("[Chat API] Stream error:", error);
-					const errorMessage =
-						error instanceof Error ? error.message : "Unknown error";
-					sendEvent("error", { message: errorMessage });
+					if (!abortController.signal.aborted) {
+						console.error("[Chat API] Stream error:", error);
+						const errorMessage =
+							error instanceof Error ? error.message : "Unknown error";
+						try {
+							sendEvent("error", { message: errorMessage });
+						} catch {}
+					}
 				} finally {
-					controller.close();
+					try {
+						await saveAssistantMessage();
+					} catch (e) {
+						console.error("[Chat API] Failed to save partial response:", e);
+					}
+					try {
+						controller.close();
+					} catch {}
 				}
 			},
 			cancel() {
+				if (agentQuery) {
+					agentQuery.interrupt().catch(() => {});
+				}
 				abortController.abort();
 			},
 		});
