@@ -27,7 +27,7 @@ function isNetworkError(error: unknown): boolean {
 }
 
 interface UseChatOptions {
-	onError?: (error: string) => void;
+	onError?: (error: string | null) => void;
 }
 
 export interface StreamingMessage {
@@ -190,7 +190,7 @@ export function useChat(options: UseChatOptions = {}) {
 				setSessionId(chat.sessionId);
 				setMessageQueue([]);
 				disconnectedChatRef.current = null;
-				options.onError?.(null as unknown as string);
+				options.onError?.(null);
 			} catch {
 				// Will retry on next visibility change
 			}

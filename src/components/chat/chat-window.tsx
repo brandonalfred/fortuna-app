@@ -18,7 +18,7 @@ export function ChatWindow() {
 		queueMessage,
 		removeQueuedMessage,
 	} = useChat({
-		onError: (msg) => setError(msg || null),
+		onError: setError,
 	});
 
 	const handleSend = useCallback(

@@ -368,7 +368,7 @@ async function* streamViaSandbox({
 		};
 		const envExports = Object.entries(envVars)
 			.filter(([, v]) => v)
-			.map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
+			.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
 			.join("\n");
 
 		await sandbox.writeFiles([
