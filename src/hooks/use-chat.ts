@@ -14,6 +14,18 @@ import type {
 	ToolUseEvent,
 } from "@/lib/types";
 
+function isNetworkError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	const msg = error.message.toLowerCase();
+	return (
+		error.name === "TypeError" ||
+		msg.includes("failed to fetch") ||
+		msg.includes("load failed") ||
+		msg.includes("network") ||
+		msg.includes("the operation couldn't be completed")
+	);
+}
+
 interface UseChatOptions {
 	onError?: (error: string) => void;
 }
@@ -42,6 +54,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const sendMessageRef = useRef<((content: string) => Promise<void>) | null>(
 		null,
 	);
+	const disconnectedChatRef = useRef<string | null>(null);
 
 	const handleEvent = useCallback(
 		(type: string, data: unknown) => {
@@ -166,6 +179,25 @@ export function useChat(options: UseChatOptions = {}) {
 		setStreamingMessage(null);
 	}, [currentChat]);
 
+	const reloadChat = useCallback(
+		async (chatId: string) => {
+			try {
+				const response = await fetch(`/api/chats/${chatId}`);
+				if (!response.ok) return;
+				const chat: Chat = await response.json();
+				setCurrentChat(chat);
+				setMessages(chat.messages || []);
+				setSessionId(chat.sessionId);
+				setMessageQueue([]);
+				disconnectedChatRef.current = null;
+				options.onError?.(null as unknown as string);
+			} catch {
+				// Will retry on next visibility change
+			}
+		},
+		[options],
+	);
+
 	const sendMessage = useCallback(
 		async (content: string) => {
 			if (!content.trim() || isLoading) return;
@@ -237,6 +269,21 @@ export function useChat(options: UseChatOptions = {}) {
 				if (error instanceof Error && error.name === "AbortError") {
 					return;
 				}
+
+				if (isNetworkError(error)) {
+					// Connection dropped (e.g. mobile tab backgrounded).
+					// The agent may still be running server-side — reload to get results.
+					const chatId = currentChat?.id;
+					finalizeStreamingMessage();
+					setIsLoading(false);
+					if (chatId) {
+						disconnectedChatRef.current = chatId;
+						options.onError?.("Connection lost. Reloading response...");
+						setTimeout(() => reloadChat(chatId), 2000);
+					}
+					return;
+				}
+
 				const errorMessage =
 					error instanceof Error ? error.message : "Unknown error";
 				options.onError?.(errorMessage);
@@ -253,6 +300,7 @@ export function useChat(options: UseChatOptions = {}) {
 			options,
 			handleEvent,
 			finalizeStreamingMessage,
+			reloadChat,
 		],
 	);
 
@@ -290,6 +338,23 @@ export function useChat(options: UseChatOptions = {}) {
 			}, 0);
 		}
 	}, [isLoading, messageQueue]);
+
+	// Reload chat when tab becomes visible after a disconnection
+	useEffect(() => {
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				const chatId = disconnectedChatRef.current;
+				if (chatId) {
+					reloadChat(chatId);
+				}
+			}
+		};
+
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [reloadChat]);
 
 	const loadChat = useCallback(
 		async (chatId: string) => {

@@ -360,12 +360,49 @@ async function* streamViaSandbox({
 		const script = generateAgentScript(fullPrompt, timezone);
 		console.log("[Sandbox] Writing agent runner script...");
 
+		// Write env vars to sandbox filesystem so all bash commands can access them
+		const envVars: Record<string, string> = {
+			ODDS_API_KEY: process.env.ODDS_API_KEY || "",
+			API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
+			WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL || "",
+		};
+		const envExports = Object.entries(envVars)
+			.filter(([, v]) => v)
+			.map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
+			.join("\n");
+
 		await sandbox.writeFiles([
 			{
 				path: "/vercel/sandbox/agent-runner.mjs",
 				content: Buffer.from(script),
 			},
+			{
+				path: "/vercel/sandbox/.agent-env.sh",
+				content: Buffer.from(`#!/bin/bash\n${envExports}\n`),
+			},
 		]);
+
+		// Source env vars in .bashrc so every bash command inherits them
+		await sandbox.runCommand({
+			cmd: "bash",
+			args: [
+				"-c",
+				"grep -q \"agent-env.sh\" /root/.bashrc 2>/dev/null || echo '[ -f /vercel/sandbox/.agent-env.sh ] && source /vercel/sandbox/.agent-env.sh' >> /root/.bashrc",
+			],
+		});
+
+		// Quick-verify critical Python packages (fast no-op if already installed)
+		console.log("[Sandbox] Verifying Python packages...");
+		const verifyResult = await sandbox.runCommand({
+			cmd: "bash",
+			args: [
+				"-c",
+				"python3 -c 'import nba_api' 2>/dev/null || pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy",
+			],
+		});
+		if (verifyResult.exitCode !== 0) {
+			console.warn("[Sandbox] Warning: Python package verification failed");
+		}
 
 		console.log("[Sandbox] Starting agent command...");
 		const cmd = await sandbox.runCommand({
@@ -373,9 +410,7 @@ async function* streamViaSandbox({
 			args: ["agent-runner.mjs"],
 			env: {
 				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
-				ODDS_API_KEY: process.env.ODDS_API_KEY || "",
-				API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
-				WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL || "",
+				...envVars,
 			},
 			detached: true,
 		});

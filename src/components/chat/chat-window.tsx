@@ -18,7 +18,7 @@ export function ChatWindow() {
 		queueMessage,
 		removeQueuedMessage,
 	} = useChat({
-		onError: setError,
+		onError: (msg) => setError(msg || null),
 	});
 
 	const handleSend = useCallback(
@@ -40,8 +40,16 @@ export function ChatWindow() {
 				/>
 			</div>
 			{error && (
-				<div className="mx-4 mb-2 rounded-md bg-error-subtle border border-error p-3 text-sm text-error">
-					{error}
+				<div className="mx-4 mb-2 flex items-center justify-between rounded-md bg-error-subtle border border-error p-3 text-sm text-error">
+					<span>{error}</span>
+					<button
+						type="button"
+						onClick={() => setError(null)}
+						className="ml-2 shrink-0 text-error/60 hover:text-error"
+						aria-label="Dismiss"
+					>
+						&times;
+					</button>
 				</div>
 			)}
 			<ChatInput
