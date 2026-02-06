@@ -6,13 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth/client";
 
+function getExistingEmail(): string | null {
+	if (typeof window === "undefined") return null;
+	const email = sessionStorage.getItem("signin_email");
+	sessionStorage.removeItem("signin_email");
+	return email;
+}
+
 export default function SignInPage() {
+	const [existingEmail] = useState(getExistingEmail);
+
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [showNotice, setShowNotice] = useState(!!existingEmail);
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
 		setError(null);
+		setShowNotice(false);
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
@@ -43,6 +54,12 @@ export default function SignInPage() {
 					</p>
 				</div>
 
+				{showNotice && (
+					<div className="rounded-md bg-accent-primary/10 border border-accent-primary/30 px-4 py-3 text-sm text-accent-primary">
+						An account with this email already exists. Please sign in.
+					</div>
+				)}
+
 				{error && (
 					<div className="rounded-md bg-error-subtle border border-error/30 px-4 py-3 text-sm text-error">
 						{error}
@@ -61,6 +78,7 @@ export default function SignInPage() {
 							autoComplete="email"
 							required
 							placeholder="you@example.com"
+							defaultValue={existingEmail ?? ""}
 						/>
 					</div>
 
@@ -75,6 +93,7 @@ export default function SignInPage() {
 							autoComplete="current-password"
 							required
 							placeholder="Enter your password"
+							autoFocus={!!existingEmail}
 						/>
 					</div>
 
