@@ -78,7 +78,22 @@ export async function POST(req: Request): Promise<Response> {
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
 
-		let agentQuery: Query | null = null;
+		const agentOptions = {
+			prompt: message,
+			workspacePath,
+			chatId: chat.id,
+			conversationHistory,
+			abortController,
+			timezone,
+		};
+
+		const isLocal = !process.env.VERCEL;
+		// Local: Query object with interrupt() support for graceful shutdown
+		// Vercel: async generator only — interrupt() not available (TODO: add sandbox interrupt support)
+		const agentQuery: Query | null = isLocal
+			? createLocalAgentQuery(agentOptions)
+			: null;
+		const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
 		const stream = new ReadableStream({
 			async start(controller) {
@@ -117,21 +132,6 @@ export async function POST(req: Request): Promise<Response> {
 					});
 					savedToDb = true;
 				}
-
-				const agentOptions = {
-					prompt: message,
-					workspacePath,
-					chatId: chat.id,
-					conversationHistory,
-					abortController,
-					timezone,
-				};
-
-				const isLocal = !process.env.VERCEL;
-				if (isLocal) {
-					agentQuery = createLocalAgentQuery(agentOptions);
-				}
-				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
 				try {
 					console.log("[Chat API] Starting agent stream...");
@@ -219,7 +219,9 @@ export async function POST(req: Request): Promise<Response> {
 							error instanceof Error ? error.message : "Unknown error";
 						try {
 							sendEvent("error", { message: errorMessage });
-						} catch {}
+						} catch {
+							/* stream closed */
+						}
 					}
 				} finally {
 					try {
@@ -229,12 +231,16 @@ export async function POST(req: Request): Promise<Response> {
 					}
 					try {
 						controller.close();
-					} catch {}
+					} catch {
+						/* stream closed */
+					}
 				}
 			},
 			cancel() {
 				if (agentQuery) {
-					agentQuery.interrupt().catch(() => {});
+					agentQuery.interrupt().catch(() => {
+						/* best-effort */
+					});
 				}
 				abortController.abort();
 			},

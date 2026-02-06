@@ -5,6 +5,7 @@ import {
 	query,
 	type SDKMessage,
 	type SDKUserMessage,
+	type SettingSource,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
@@ -126,11 +127,7 @@ function buildFullPrompt(
 export async function* streamAgentResponse(
 	options: StreamAgentOptions,
 ): AsyncGenerator<SDKMessage> {
-	if (process.env.VERCEL) {
-		yield* streamViaSandbox(options);
-	} else {
-		yield* streamLocal(options);
-	}
+	yield* streamViaSandbox(options);
 }
 
 async function* singleMessageStream(
@@ -156,7 +153,7 @@ function buildQueryOptions(
 		cwd: workspacePath,
 		model: AGENT_MODEL,
 		pathToClaudeCodeExecutable: getClaudeCodeCliPath(),
-		settingSources: ["project"] as const,
+		settingSources: ["project"] satisfies SettingSource[],
 		allowedTools: AGENT_ALLOWED_TOOLS,
 		permissionMode: "acceptEdits" as const,
 		systemPrompt: {
@@ -179,21 +176,6 @@ export function createLocalAgentQuery({
 	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
 	return query({
 		prompt: singleMessageStream(fullPrompt),
-		options: buildQueryOptions(workspacePath, abortController, timezone),
-	});
-}
-
-async function* streamLocal({
-	prompt,
-	workspacePath,
-	conversationHistory = [],
-	abortController = new AbortController(),
-	timezone,
-}: StreamAgentOptions): AsyncGenerator<SDKMessage> {
-	console.log("[Agent] streamLocal called");
-	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
-	yield* query({
-		prompt: fullPrompt,
 		options: buildQueryOptions(workspacePath, abortController, timezone),
 	});
 }
