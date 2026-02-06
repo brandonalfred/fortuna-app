@@ -200,6 +200,10 @@ export function useChat(options: UseChatOptions = {}) {
 				});
 
 				if (!response.ok) {
+					if (response.status === 401) {
+						window.location.href = "/auth/signin";
+						return;
+					}
 					throw new Error("Failed to send message");
 				}
 

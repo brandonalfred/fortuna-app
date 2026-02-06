@@ -26,11 +26,19 @@ export function serverError(error: unknown): Response {
 }
 
 export async function getAuthenticatedUser(): Promise<Session["user"] | null> {
-	const session = await auth.api.getSession({
-		headers: await headers(),
-	});
-	if (!session?.user?.id) {
+	try {
+		const session = await auth.api.getSession({
+			headers: await headers(),
+		});
+		if (!session?.user?.id) {
+			return null;
+		}
+		return session.user;
+	} catch (error) {
+		console.error(
+			"[Auth] Failed to get session:",
+			error instanceof Error ? error.message : error,
+		);
 		return null;
 	}
-	return session.user;
 }
