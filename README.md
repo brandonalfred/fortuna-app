@@ -1,5 +1,7 @@
 # Fortuna
 
+[![CI](https://github.com/brandonalfred/fortuna-app/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/brandonalfred/fortuna-app/actions/workflows/ci.yml)
+
 AI-powered sports betting analysis assistant built with the Claude Agent SDK.
 
 ## Features
