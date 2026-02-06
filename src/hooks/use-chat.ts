@@ -89,6 +89,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const disconnectedChatRef = useRef<string | null>(null);
 	const lastReloadAttemptRef = useRef(0);
 	const loadedChatIdRef = useRef<string | undefined>(undefined);
+	const creatingChatRef = useRef(false);
 	const onErrorRef = useRef(options.onError);
 	const onChatCreatedRef = useRef(options.onChatCreated);
 	const onChatNotFoundRef = useRef(options.onChatNotFound);
@@ -125,6 +126,7 @@ export function useChat(options: UseChatOptions = {}) {
 						messages: prev?.messages || [],
 					}));
 					if (!chatId) {
+						creatingChatRef.current = true;
 						onChatCreatedRef.current?.(initData.chatId);
 					}
 					break;
@@ -280,6 +282,12 @@ export function useChat(options: UseChatOptions = {}) {
 	}, []);
 
 	useEffect(() => {
+		if (creatingChatRef.current) {
+			creatingChatRef.current = false;
+			loadedChatIdRef.current = chatId;
+			return;
+		}
+
 		abortControllerRef.current?.abort();
 
 		if (chatId) {
