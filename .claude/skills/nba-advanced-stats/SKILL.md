@@ -38,13 +38,12 @@ except ImportError:
 
 ## Proxy Configuration
 
-NBA.com blocks cloud provider IPs. `WEBSHARE_PROXY_URL` contains multiple proxies (comma-separated). The `safe_request` helper automatically rotates through them on failure.
+NBA.com blocks cloud provider IPs. `WEBSHARE_PROXY_URL` contains a rotating residential proxy gateway URL (e.g. `http://user:pass@p.webshare.io:80/`). Each request through this gateway automatically gets a different residential IP from a 215K+ IP pool.
 
 ```python
-import os, random
+import os
 
-PROXY_LIST = [p.strip() for p in os.environ.get("WEBSHARE_PROXY_URL", "").split(",") if p.strip()]
-random.shuffle(PROXY_LIST)
+PROXY = os.environ.get("WEBSHARE_PROXY_URL", "").strip() or None
 
 HEADERS = {
     "x-nba-stats-origin": "stats",
@@ -54,30 +53,30 @@ HEADERS = {
 }
 ```
 
-## Rate Limiting & Proxy Rotation
+## Rate Limiting & Retry Logic
 
-The `safe_request` helper rotates through proxies on failure and adds delays to avoid throttling:
+The `safe_request` helper retries failed requests with delays. The residential proxy rotates IPs automatically on each attempt.
 
 ```python
 import time
 
-def safe_request(endpoint_class, **kwargs):
-    """Make an nba_api request with proxy rotation and retry logic."""
-    proxies_to_try = PROXY_LIST if PROXY_LIST else [""]
-    for proxy in proxies_to_try:
+def safe_request(endpoint_class, max_retries=3, **kwargs):
+    """Make an nba_api request with retry logic and residential proxy."""
+    for attempt in range(1, max_retries + 1):
         try:
             time.sleep(2)
             endpoint = endpoint_class(
-                proxy=proxy,
+                proxy=PROXY,
                 headers=HEADERS,
                 timeout=30,
                 **kwargs
             )
             return endpoint.get_data_frames()[0]
         except Exception as e:
-            print(f"Proxy {proxy[:30]}... failed: {e}")
-            time.sleep(2)
-    print("All proxies exhausted. Falling back to web search.")
+            print(f"Attempt {attempt}/{max_retries} failed: {str(e)[:100]}")
+            if attempt < max_retries:
+                time.sleep(3)
+    print("All attempts failed. Falling back to web search.")
     return None
 ```
 
@@ -377,9 +376,9 @@ nba_api uses `"YYYY-YY"` format for seasons:
 
 ## Fallback Strategy
 
-If nba_api requests fail (IP blocks, timeouts, rate limits):
+If nba_api requests fail after 3 retries (timeouts, rate limits):
 
-1. **Retry** with the `safe_request` helper (3 attempts with backoff)
+1. `safe_request` returns `None` after exhausting retries — each retry gets a fresh residential IP automatically
 2. **Web search** for the same data on Basketball Reference, Statmuse, or NBA.com
 3. **Cite** that the data was sourced from web search rather than the API directly
 
