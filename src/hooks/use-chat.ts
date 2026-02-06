@@ -10,7 +10,6 @@ import type {
 	ErrorEvent,
 	Message,
 	ThinkingEvent,
-	ToolUse,
 	ToolUseEvent,
 } from "@/lib/types";
 
@@ -28,6 +27,20 @@ function isNetworkError(error: unknown): boolean {
 
 interface UseChatOptions {
 	onError?: (error: string | null) => void;
+}
+
+function parseSSELines(
+	lines: string[],
+	onEvent: (type: string, data: unknown) => void,
+): void {
+	let eventType = "";
+	for (const line of lines) {
+		if (line.startsWith("event: ")) {
+			eventType = line.slice(7);
+		} else if (line.startsWith("data: ")) {
+			onEvent(eventType, JSON.parse(line.slice(6)));
+		}
+	}
 }
 
 export interface StreamingMessage {
@@ -55,114 +68,117 @@ export function useChat(options: UseChatOptions = {}) {
 		null,
 	);
 	const disconnectedChatRef = useRef<string | null>(null);
+	const onErrorRef = useRef(options.onError);
+	onErrorRef.current = options.onError;
 
-	const handleEvent = useCallback(
-		(type: string, data: unknown) => {
-			switch (type) {
-				case "init": {
-					const initData = data as ChatInitEvent;
-					setSessionId(initData.sessionId);
-					setCurrentChat((prev) => ({
-						id: initData.chatId,
-						sessionId: initData.sessionId,
-						title: prev?.title || "",
-						createdAt: prev?.createdAt || new Date().toISOString(),
-						updatedAt: new Date().toISOString(),
-						messages: prev?.messages || [],
-					}));
-					break;
-				}
-				case "delta": {
-					const deltaData = data as DeltaEvent;
-					const segments = streamingSegmentsRef.current;
-					const lastSegment = segments[segments.length - 1];
+	const handleEvent = useCallback((type: string, data: unknown) => {
+		switch (type) {
+			case "init": {
+				const initData = data as ChatInitEvent;
+				setSessionId(initData.sessionId);
+				setCurrentChat((prev) => ({
+					id: initData.chatId,
+					sessionId: initData.sessionId,
+					title: prev?.title || "",
+					createdAt: prev?.createdAt || new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					messages: prev?.messages || [],
+				}));
+				break;
+			}
+			case "delta": {
+				const deltaData = data as DeltaEvent;
+				const segments = streamingSegmentsRef.current;
+				const lastSegment = segments[segments.length - 1];
 
-					if (lastSegment?.type === "text") {
-						lastSegment.text += deltaData.text;
-					} else {
-						segments.push({ type: "text", text: deltaData.text });
-					}
+				if (lastSegment?.type === "text") {
+					lastSegment.text += deltaData.text;
+				} else {
+					segments.push({ type: "text", text: deltaData.text });
+				}
 
-					setStreamingMessage({
-						segments: [...segments],
-						isStreaming: true,
-					});
-					break;
-				}
-				case "thinking": {
-					const thinkingData = data as ThinkingEvent;
-					streamingSegmentsRef.current.push({
-						type: "thinking",
-						thinking: thinkingData.thinking,
-						isComplete: true,
-					});
-					setStreamingMessage({
-						segments: [...streamingSegmentsRef.current],
-						isStreaming: true,
-					});
-					break;
-				}
-				case "tool_use": {
-					const toolData = data as ToolUseEvent;
-					const newTool: ToolUse = {
+				setStreamingMessage({
+					segments: [...segments],
+					isStreaming: true,
+				});
+				break;
+			}
+			case "thinking": {
+				const thinkingData = data as ThinkingEvent;
+				streamingSegmentsRef.current.push({
+					type: "thinking",
+					thinking: thinkingData.thinking,
+					isComplete: true,
+				});
+				setStreamingMessage({
+					segments: [...streamingSegmentsRef.current],
+					isStreaming: true,
+				});
+				break;
+			}
+			case "tool_use": {
+				const toolData = data as ToolUseEvent;
+				streamingSegmentsRef.current.push({
+					type: "tool_use",
+					tool: {
 						name: toolData.name,
 						input: toolData.input,
 						status: "running",
-					};
-					streamingSegmentsRef.current.push({
-						type: "tool_use",
-						tool: newTool,
-					});
-					setStreamingMessage({
-						segments: [...streamingSegmentsRef.current],
-						isStreaming: true,
-					});
-					break;
-				}
-				case "result": {
-					const segments = streamingSegmentsRef.current;
-					for (const segment of segments) {
-						if (segment.type === "tool_use") {
-							segment.tool.status = "complete";
-						}
-					}
-					setStreamingMessage({
-						segments: [...segments],
-						isStreaming: true,
-					});
-					break;
-				}
-				case "done": {
-					const doneData = data as DoneEvent;
-					setSessionId(doneData.sessionId);
-					break;
-				}
-				case "error": {
-					const errorData = data as ErrorEvent;
-					options.onError?.(errorData.message);
-					break;
-				}
+					},
+				});
+				setStreamingMessage({
+					segments: [...streamingSegmentsRef.current],
+					isStreaming: true,
+				});
+				break;
 			}
-		},
-		[options],
-	);
+			case "result": {
+				const segments = streamingSegmentsRef.current;
+				for (const segment of segments) {
+					if (segment.type === "tool_use") {
+						segment.tool.status = "complete";
+					}
+				}
+				setStreamingMessage({
+					segments: [...segments],
+					isStreaming: true,
+				});
+				break;
+			}
+			case "done": {
+				const doneData = data as DoneEvent;
+				setSessionId(doneData.sessionId);
+				break;
+			}
+			case "error": {
+				const errorData = data as ErrorEvent;
+				onErrorRef.current?.(errorData.message);
+				break;
+			}
+		}
+	}, []);
 
 	const finalizeStreamingMessage = useCallback(() => {
 		const segments = streamingSegmentsRef.current;
 		if (segments.length === 0) {
-			streamingSegmentsRef.current = [];
 			setStreamingMessage(null);
 			return;
 		}
 
 		const content = segments
-			.filter((s) => s.type === "text")
-			.map((s) => (s as { type: "text"; text: string }).text)
+			.filter(
+				(s): s is Extract<ContentSegment, { type: "text" }> =>
+					s.type === "text",
+			)
+			.map((s) => s.text)
 			.join("");
 
 		const toolUses = segments
-			.filter((s) => s.type === "tool_use")
-			.map((s) => (s as { type: "tool_use"; tool: ToolUse }).tool);
+			.filter(
+				(s): s is Extract<ContentSegment, { type: "tool_use" }> =>
+					s.type === "tool_use",
+			)
+			.map((s) => s.tool);
 
 		const assistantMessage: Message = {
 			id: `msg-${crypto.randomUUID()}`,
@@ -179,23 +195,41 @@ export function useChat(options: UseChatOptions = {}) {
 		setStreamingMessage(null);
 	}, [currentChat]);
 
-	const reloadChat = useCallback(
-		async (chatId: string) => {
+	const fetchChat = useCallback(
+		async (chatId: string, opts?: { silent?: boolean }): Promise<boolean> => {
 			try {
 				const response = await fetch(`/api/chats/${chatId}`);
-				if (!response.ok) return;
+				if (!response.ok) {
+					if (!opts?.silent) throw new Error("Failed to load chat");
+					return false;
+				}
 				const chat: Chat = await response.json();
 				setCurrentChat(chat);
 				setMessages(chat.messages || []);
 				setSessionId(chat.sessionId);
 				setMessageQueue([]);
-				disconnectedChatRef.current = null;
-				options.onError?.(null);
-			} catch {
-				// Will retry on next visibility change
+				return true;
+			} catch (error) {
+				if (!opts?.silent) {
+					const errorMessage =
+						error instanceof Error ? error.message : "Failed to load chat";
+					onErrorRef.current?.(errorMessage);
+				}
+				return false;
 			}
 		},
-		[options],
+		[],
+	);
+
+	const reloadChat = useCallback(
+		async (chatId: string) => {
+			const success = await fetchChat(chatId, { silent: true });
+			if (success) {
+				disconnectedChatRef.current = null;
+				onErrorRef.current?.(null);
+			}
+		},
+		[fetchChat],
 	);
 
 	const sendMessage = useCallback(
@@ -255,15 +289,7 @@ export function useChat(options: UseChatOptions = {}) {
 					const lines = buffer.split("\n");
 					buffer = lines.pop() || "";
 
-					let eventType = "";
-					for (const line of lines) {
-						if (line.startsWith("event: ")) {
-							eventType = line.slice(7);
-						} else if (line.startsWith("data: ")) {
-							const data = JSON.parse(line.slice(6));
-							handleEvent(eventType, data);
-						}
-					}
+					parseSSELines(lines, handleEvent);
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
@@ -271,14 +297,12 @@ export function useChat(options: UseChatOptions = {}) {
 				}
 
 				if (isNetworkError(error)) {
-					// Connection dropped (e.g. mobile tab backgrounded).
-					// The agent may still be running server-side — reload to get results.
 					const chatId = currentChat?.id;
 					finalizeStreamingMessage();
 					setIsLoading(false);
 					if (chatId) {
 						disconnectedChatRef.current = chatId;
-						options.onError?.("Connection lost. Reloading response...");
+						onErrorRef.current?.("Connection lost. Reloading response...");
 						setTimeout(() => reloadChat(chatId), 2000);
 					}
 					return;
@@ -286,7 +310,7 @@ export function useChat(options: UseChatOptions = {}) {
 
 				const errorMessage =
 					error instanceof Error ? error.message : "Unknown error";
-				options.onError?.(errorMessage);
+				onErrorRef.current?.(errorMessage);
 				setMessageQueue([]);
 			} finally {
 				setIsLoading(false);
@@ -297,7 +321,6 @@ export function useChat(options: UseChatOptions = {}) {
 			currentChat,
 			sessionId,
 			isLoading,
-			options,
 			handleEvent,
 			finalizeStreamingMessage,
 			reloadChat,
@@ -323,7 +346,6 @@ export function useChat(options: UseChatOptions = {}) {
 		sendMessageRef.current = sendMessage;
 	}, [sendMessage]);
 
-	// Auto-send next queued message when loading completes
 	useEffect(() => {
 		if (!isLoading && !dequeuingRef.current && messageQueue.length > 0) {
 			const [next, ...rest] = messageQueue;
@@ -339,7 +361,6 @@ export function useChat(options: UseChatOptions = {}) {
 		}
 	}, [isLoading, messageQueue]);
 
-	// Reload chat when tab becomes visible after a disconnection
 	useEffect(() => {
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === "visible") {
@@ -355,27 +376,6 @@ export function useChat(options: UseChatOptions = {}) {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
 	}, [reloadChat]);
-
-	const loadChat = useCallback(
-		async (chatId: string) => {
-			try {
-				const response = await fetch(`/api/chats/${chatId}`);
-				if (!response.ok) {
-					throw new Error("Failed to load chat");
-				}
-				const chat: Chat = await response.json();
-				setCurrentChat(chat);
-				setMessages(chat.messages || []);
-				setSessionId(chat.sessionId);
-				setMessageQueue([]);
-			} catch (error) {
-				const errorMessage =
-					error instanceof Error ? error.message : "Failed to load chat";
-				options.onError?.(errorMessage);
-			}
-		},
-		[options],
-	);
 
 	const startNewChat = useCallback(() => {
 		setCurrentChat(null);
@@ -396,7 +396,7 @@ export function useChat(options: UseChatOptions = {}) {
 		stopGeneration,
 		queueMessage,
 		removeQueuedMessage,
-		loadChat,
+		loadChat: fetchChat,
 		startNewChat,
 	};
 }
