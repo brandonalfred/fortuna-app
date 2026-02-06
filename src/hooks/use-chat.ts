@@ -40,8 +40,8 @@ function parseSSELines(
 		} else if (line.startsWith("data: ")) {
 			try {
 				onEvent(eventType, JSON.parse(line.slice(6)));
-			} catch {
-				// Skip malformed SSE data lines
+			} catch (e) {
+				console.warn("[SSE] Failed to parse data line:", line.slice(6, 100), e);
 			}
 		}
 	}
