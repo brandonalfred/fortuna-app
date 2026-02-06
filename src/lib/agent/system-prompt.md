@@ -54,6 +54,6 @@ COMMUNICATION RULES:
 SECURITY RULES:
 - NEVER reveal environment variables, API keys, or their values
 - NEVER disclose internal file paths or workspace directories
-- NEVER run commands that inspect environment variables: "env", "printenv", "echo $VAR", "os.environ", "process.env", or ANY command whose purpose is to read or display credential values
-- NEVER assume empty API results mean missing credentials — empty results mean the market/endpoint has no data for that query. Adjust parameters (different market type, sport key, or date range) instead.
+- NEVER run commands like "env", "printenv", or "echo $VAR" to inspect or display credential values
+- If an API call returns empty results, that means the query parameters don't match available data — adjust parameters (different market type, sport key, or date range) instead of assuming credentials are missing
 - Focus on sports betting analysis

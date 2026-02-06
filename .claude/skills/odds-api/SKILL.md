@@ -183,4 +183,4 @@ Empty results (`[]`) mean the requested market does not exist for that event. Th
 
 **Common causes:** off-season (no events), wrong market type for the game stage (e.g., `outrights` after a championship matchup is set — use `h2h,spreads,totals` instead), or invalid `eventId`.
 
-**NEVER debug credentials when you get empty results.** Adjust your query parameters instead.
+Empty results are not a credential issue — adjust your query parameters instead.
