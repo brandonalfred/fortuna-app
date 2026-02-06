@@ -146,6 +146,7 @@ async function* streamLocal({
 				cwd: workspacePath,
 				model: AGENT_MODEL,
 				pathToClaudeCodeExecutable: cliPath,
+				settingSources: ["project"],
 				allowedTools: AGENT_ALLOWED_TOOLS,
 				permissionMode: "acceptEdits",
 				systemPrompt: {
