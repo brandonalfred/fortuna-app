@@ -32,8 +32,9 @@ interface UseChatOptions {
 function parseSSELines(
 	lines: string[],
 	onEvent: (type: string, data: unknown) => void,
-): void {
-	let eventType = "";
+	currentEventType: string,
+): string {
+	let eventType = currentEventType;
 	for (const line of lines) {
 		if (line.startsWith("event: ")) {
 			eventType = line.slice(7);
@@ -45,6 +46,7 @@ function parseSSELines(
 			}
 		}
 	}
+	return eventType;
 }
 
 export interface StreamingMessage {
@@ -72,6 +74,7 @@ export function useChat(options: UseChatOptions = {}) {
 		null,
 	);
 	const disconnectedChatRef = useRef<string | null>(null);
+	const lastReloadAttemptRef = useRef(0);
 	const onErrorRef = useRef(options.onError);
 	onErrorRef.current = options.onError;
 
@@ -284,6 +287,7 @@ export function useChat(options: UseChatOptions = {}) {
 
 				const decoder = new TextDecoder();
 				let buffer = "";
+				let eventType = "";
 
 				while (true) {
 					const { done, value } = await reader.read();
@@ -293,7 +297,7 @@ export function useChat(options: UseChatOptions = {}) {
 					const lines = buffer.split("\n");
 					buffer = lines.pop() || "";
 
-					parseSSELines(lines, handleEvent);
+					eventType = parseSSELines(lines, handleEvent, eventType);
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
@@ -366,7 +370,8 @@ export function useChat(options: UseChatOptions = {}) {
 	useEffect(() => {
 		const tryReload = () => {
 			const chatId = disconnectedChatRef.current;
-			if (chatId) {
+			if (chatId && Date.now() - lastReloadAttemptRef.current > 5000) {
+				lastReloadAttemptRef.current = Date.now();
 				reloadChat(chatId);
 			}
 		};
