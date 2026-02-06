@@ -105,11 +105,12 @@ export default function SignUpPage() {
 		);
 
 		if (error) {
-			setError(
-				error.code === "USER_ALREADY_EXISTS"
-					? "An account with this email already exists"
-					: error.message || "Something went wrong",
-			);
+			if (error.code === "USER_ALREADY_EXISTS") {
+				const email = formData.get("email") as string;
+				window.location.href = `/auth/signin?exists=true&email=${encodeURIComponent(email)}`;
+				return;
+			}
+			setError(error.message || "Something went wrong");
 			setLoading(false);
 		}
 	}
