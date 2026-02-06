@@ -106,6 +106,14 @@ The agent runs differently based on environment:
 - **Local development**: Direct SDK execution via `@anthropic-ai/claude-agent-sdk`
 - **Vercel production**: Runs inside Vercel Sandbox with per-chat persistence
 
+### Sandbox Security Model
+
+Each chat gets its own ephemeral Vercel Sandbox instance (45-minute timeout). Sandboxes are:
+- **Isolated**: One sandbox per chat, no cross-chat access
+- **Ephemeral**: Destroyed after timeout or on error, no persistent state between sessions
+- **Credential-scoped**: API keys (`ODDS_API_KEY`, `API_SPORTS_KEY`, `WEBSHARE_PROXY_URL`) are written to the sandbox filesystem (`.agent-env.sh`) so bash commands can access them. This is an accepted trade-off — the sandbox is short-lived and per-user. The keys are for sports data APIs, not infrastructure credentials.
+- **Snapshot-backed**: When `AGENT_SANDBOX_SNAPSHOT_ID` is set, sandboxes boot from a pre-built snapshot with Python packages and tools pre-installed. A quick-verify step ensures critical packages (nba_api, etc.) are present even if the snapshot is stale.
+
 ### Key Components
 
 | File | Purpose |

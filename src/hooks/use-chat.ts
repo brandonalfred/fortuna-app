@@ -38,7 +38,11 @@ function parseSSELines(
 		if (line.startsWith("event: ")) {
 			eventType = line.slice(7);
 		} else if (line.startsWith("data: ")) {
-			onEvent(eventType, JSON.parse(line.slice(6)));
+			try {
+				onEvent(eventType, JSON.parse(line.slice(6)));
+			} catch {
+				// Skip malformed SSE data lines
+			}
 		}
 	}
 }
@@ -298,8 +302,6 @@ export function useChat(options: UseChatOptions = {}) {
 
 				if (isNetworkError(error)) {
 					const chatId = currentChat?.id;
-					finalizeStreamingMessage();
-					setIsLoading(false);
 					if (chatId) {
 						disconnectedChatRef.current = chatId;
 						onErrorRef.current?.("Connection lost. Reloading response...");
@@ -362,18 +364,24 @@ export function useChat(options: UseChatOptions = {}) {
 	}, [isLoading, messageQueue]);
 
 	useEffect(() => {
+		const tryReload = () => {
+			const chatId = disconnectedChatRef.current;
+			if (chatId) {
+				reloadChat(chatId);
+			}
+		};
+
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === "visible") {
-				const chatId = disconnectedChatRef.current;
-				if (chatId) {
-					reloadChat(chatId);
-				}
+				tryReload();
 			}
 		};
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
+		window.addEventListener("online", tryReload);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
+			window.removeEventListener("online", tryReload);
 		};
 	}, [reloadChat]);
 
