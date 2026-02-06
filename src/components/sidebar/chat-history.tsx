@@ -1,6 +1,8 @@
 "use client";
 
 import { MessageSquarePlus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,15 +11,12 @@ import { cn } from "@/lib/utils";
 
 interface ChatHistoryProps {
 	currentChatId?: string;
-	onSelectChat: (chatId: string) => void;
-	onNewChat: () => void;
 }
 
 interface ChatListContentProps {
 	isLoading: boolean;
 	chats: Chat[];
 	currentChatId?: string;
-	onSelectChat: (chatId: string) => void;
 	onDelete: (e: React.MouseEvent, chatId: string) => void;
 }
 
@@ -25,7 +24,6 @@ function ChatListContent({
 	isLoading,
 	chats,
 	currentChatId,
-	onSelectChat,
 	onDelete,
 }: ChatListContentProps) {
 	if (isLoading) {
@@ -61,13 +59,12 @@ function ChatListContent({
 							: "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
 					)}
 				>
-					<button
-						type="button"
-						onClick={() => onSelectChat(chat.id)}
-						className="flex-1 cursor-pointer truncate px-3 py-2 text-left"
+					<Link
+						href={`/chat/${chat.id}`}
+						className="flex-1 truncate px-3 py-2 text-left"
 					>
 						{chat.title}
-					</button>
+					</Link>
 					<button
 						type="button"
 						onClick={(e) => onDelete(e, chat.id)}
@@ -81,13 +78,11 @@ function ChatListContent({
 	);
 }
 
-export function ChatHistory({
-	currentChatId,
-	onSelectChat,
-	onNewChat,
-}: ChatHistoryProps) {
+export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 	const [chats, setChats] = useState<Chat[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	const pathname = usePathname();
+	const router = useRouter();
 
 	const fetchChats = useCallback(async () => {
 		try {
@@ -105,11 +100,12 @@ export function ChatHistory({
 
 	useEffect(() => {
 		fetchChats();
-	}, [fetchChats]);
+	}, [fetchChats, pathname]);
 
 	const handleDelete = useCallback(
 		async (e: React.MouseEvent, chatId: string) => {
 			e.stopPropagation();
+			e.preventDefault();
 			try {
 				const response = await fetch(`/api/chats/${chatId}`, {
 					method: "DELETE",
@@ -117,14 +113,14 @@ export function ChatHistory({
 				if (response.ok) {
 					setChats((prev) => prev.filter((c) => c.id !== chatId));
 					if (currentChatId === chatId) {
-						onNewChat();
+						router.push("/new");
 					}
 				}
 			} catch {
 				// Ignore delete errors
 			}
 		},
-		[currentChatId, onNewChat],
+		[currentChatId, router],
 	);
 
 	return (
@@ -134,10 +130,12 @@ export function ChatHistory({
 				<Button
 					variant="ghost"
 					size="icon"
-					onClick={onNewChat}
+					asChild
 					className="h-8 w-8 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
 				>
-					<MessageSquarePlus className="h-4 w-4" />
+					<Link href="/new">
+						<MessageSquarePlus className="h-4 w-4" />
+					</Link>
 				</Button>
 			</div>
 			<ScrollArea className="flex-1">
@@ -146,7 +144,6 @@ export function ChatHistory({
 						isLoading={isLoading}
 						chats={chats}
 						currentChatId={currentChatId}
-						onSelectChat={onSelectChat}
 						onDelete={handleDelete}
 					/>
 				</div>

@@ -1,12 +1,18 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 
-export function ChatWindow() {
+interface ChatWindowProps {
+	chatId?: string;
+}
+
+export function ChatWindow({ chatId }: ChatWindowProps) {
 	const [error, setError] = useState<string | null>(null);
+	const router = useRouter();
 
 	const {
 		messages,
@@ -18,7 +24,15 @@ export function ChatWindow() {
 		queueMessage,
 		removeQueuedMessage,
 	} = useChat({
+		chatId,
 		onError: setError,
+		onChatCreated: (newChatId) => {
+			router.replace(`/chat/${newChatId}`);
+		},
+		onChatNotFound: () => {
+			setError("Chat not found");
+			router.replace("/new");
+		},
 	});
 
 	const handleSend = useCallback(

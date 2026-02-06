@@ -7,13 +7,17 @@ export function middleware(request: NextRequest) {
 
 	if (isAuthPage) {
 		if (sessionCookie) {
-			return NextResponse.redirect(new URL("/", request.url));
+			return NextResponse.redirect(new URL("/new", request.url));
 		}
 		return NextResponse.next();
 	}
 
 	if (!sessionCookie) {
 		return NextResponse.redirect(new URL("/auth/signin", request.url));
+	}
+
+	if (request.nextUrl.pathname === "/") {
+		return NextResponse.redirect(new URL("/new", request.url));
 	}
 
 	return NextResponse.next();
