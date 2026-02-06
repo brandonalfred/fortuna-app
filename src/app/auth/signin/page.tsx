@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth/client";
 
 function getExistingEmail(): string | null {
+	if (typeof window === "undefined") return null;
 	const params = new URLSearchParams(window.location.search);
 	if (params.get("exists") !== "true") return null;
 	const email = sessionStorage.getItem("signin_email");
