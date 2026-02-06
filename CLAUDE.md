@@ -182,7 +182,7 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - `Session` - Database sessions with token, expiry, IP address, user agent
 - `Account` - Auth provider accounts (email/password stored here)
 - `Verification` - Email verification tokens
-- `Chat` - Chat sessions with `sessionId` (agent session) and optional `sandboxId` (Vercel Sandbox)
+- `Chat` - Chat sessions with `sessionId` (agent session), optional `sandboxId` (Vercel Sandbox), and optional `agentSessionId` (SDK session resume)
 - `Message` - Messages with `role`, `content`, optional `thinking`, and tool metadata
 
 **Important:** After a fresh `bun install` or any schema change, run `bunx prisma generate` before `bun run type-check` or `bun run lint:check` — the generated Prisma client is not committed and must be regenerated locally.
@@ -206,6 +206,16 @@ bunx prisma generate                     # Regenerate client after schema change
 ```
 
 **Important:** Never use `db push` for production-bound changes - it doesn't create migration files.
+
+**Migration immutability:** Never modify a migration file after it has been applied to any database. Prisma stores a SHA-256 checksum of each migration file — any edit (even whitespace) causes a checksum mismatch that blocks `prisma migrate dev`. If a migration needs changes, create a new migration instead. If a checksum mismatch has already occurred, fix it by updating the `_prisma_migrations` table:
+
+```bash
+shasum -a 256 prisma/migrations/<migration_name>/migration.sql
+# Then in psql:
+UPDATE _prisma_migrations SET checksum = '<new_sha256>' WHERE migration_name = '<migration_name>';
+```
+
+**Always use Prisma CLI to create migrations** — never manually create migration directories or SQL files. Use `bunx prisma migrate dev --create-only --name <name>` to generate the migration, review the SQL, then apply with `bunx prisma migrate dev`.
 
 ## Design System
 

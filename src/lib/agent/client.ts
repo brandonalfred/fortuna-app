@@ -99,6 +99,7 @@ export interface StreamAgentOptions {
 	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
 	timezone?: string;
+	agentSessionId?: string;
 }
 
 function buildFullPrompt(
@@ -148,6 +149,7 @@ function buildQueryOptions(
 	workspacePath: string,
 	abortController: AbortController,
 	timezone?: string,
+	agentSessionId?: string,
 ) {
 	return {
 		cwd: workspacePath,
@@ -163,6 +165,7 @@ function buildQueryOptions(
 		},
 		abortController,
 		includePartialMessages: true,
+		resume: agentSessionId,
 	};
 }
 
@@ -172,11 +175,20 @@ export function createLocalAgentQuery({
 	conversationHistory = [],
 	abortController = new AbortController(),
 	timezone,
+	agentSessionId,
 }: StreamAgentOptions): Query {
-	const fullPrompt = buildFullPrompt(prompt, conversationHistory);
+	const effectivePrompt = agentSessionId
+		? prompt
+		: buildFullPrompt(prompt, conversationHistory);
+
 	return query({
-		prompt: singleMessageStream(fullPrompt),
-		options: buildQueryOptions(workspacePath, abortController, timezone),
+		prompt: singleMessageStream(effectivePrompt),
+		options: buildQueryOptions(
+			workspacePath,
+			abortController,
+			timezone,
+			agentSessionId,
+		),
 	});
 }
 
@@ -184,28 +196,33 @@ async function runSandboxCommand(
 	sandbox: Sandbox,
 	options: { cmd: string; args: string[] },
 	description: string,
-	opts?: { warnOnly?: boolean },
 ): Promise<void> {
 	console.log(`[Sandbox] ${description}...`);
 	const result = await sandbox.runCommand(options);
 	if (result.exitCode !== 0) {
-		const message = `${description} failed (exit code ${result.exitCode})`;
-		if (opts?.warnOnly) {
-			console.warn(`[Sandbox] Warning: ${message}`);
-		} else {
-			throw new Error(message);
-		}
+		throw new Error(`${description} failed (exit code ${result.exitCode})`);
 	}
 }
 
-async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
+interface SandboxResult {
+	sandbox: Sandbox;
+	sandboxReused: boolean;
+	previousAgentSessionId: string | null;
+}
+
+async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 	const chat = await prisma.chat.findUnique({ where: { id: chatId } });
+	const previousAgentSessionId = chat?.agentSessionId ?? null;
 
 	if (chat?.sandboxId) {
 		try {
 			const existing = await Sandbox.get({ sandboxId: chat.sandboxId });
 			console.log("[Sandbox] Reusing existing sandbox:", chat.sandboxId);
-			return existing;
+			return {
+				sandbox: existing,
+				sandboxReused: true,
+				previousAgentSessionId,
+			};
 		} catch (error) {
 			console.log(
 				"[Sandbox] Existing sandbox expired or unavailable:",
@@ -259,14 +276,10 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 				cmd: "bash",
 				args: [
 					"-c",
-					[
-						"apt-get update",
-						"apt-get install -y python3 python3-pip python3-venv jq sqlite3 csvkit libxml2-dev libxslt1-dev",
-					].join(" && "),
+					"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
 				],
 			},
 			"Installing Python 3, pip, and system tools",
-			{ warnOnly: true },
 		);
 
 		await runSandboxCommand(
@@ -288,7 +301,6 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 				],
 			},
 			"Installing Python packages",
-			{ warnOnly: true },
 		);
 	}
 
@@ -312,17 +324,24 @@ async function getOrCreateSandbox(chatId: string): Promise<Sandbox> {
 
 	await prisma.chat.update({
 		where: { id: chatId },
-		data: { sandboxId: sandbox.sandboxId },
+		data: { sandboxId: sandbox.sandboxId, agentSessionId: null },
 	});
 
-	return sandbox;
+	return { sandbox, sandboxReused: false, previousAgentSessionId: null };
 }
 
-function generateAgentScript(fullPrompt: string, timezone?: string): string {
+function generateAgentScript(
+	fullPrompt: string,
+	timezone?: string,
+	agentSessionId?: string,
+): string {
 	const escapedPrompt = JSON.stringify(fullPrompt);
 	const escapedSystemPrompt = JSON.stringify(getSystemPrompt(timezone));
 	const escapedModel = JSON.stringify(AGENT_MODEL);
 	const escapedTools = JSON.stringify(AGENT_ALLOWED_TOOLS);
+	const resumeLine = agentSessionId
+		? `        resume: ${JSON.stringify(agentSessionId)},`
+		: "";
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -347,6 +366,7 @@ async function main() {
         },
         abortController: new AbortController(),
         includePartialMessages: true,
+${resumeLine}
       },
     });
 
@@ -390,10 +410,7 @@ function parseSandboxLine(line: string): SandboxLineResult | null {
 			return { complete: true };
 		}
 		return null;
-	} catch (parseError) {
-		if (!(parseError instanceof SyntaxError)) {
-			throw parseError;
-		}
+	} catch {
 		if (!line.startsWith("{")) {
 			console.log("[Sandbox] Non-JSON output:", line);
 		}
@@ -408,11 +425,29 @@ async function* streamViaSandbox({
 	timezone,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
-	const sandbox = await getOrCreateSandbox(chatId);
+	const { sandbox, sandboxReused, previousAgentSessionId } =
+		await getOrCreateSandbox(chatId);
+
+	const canResume = sandboxReused && !!previousAgentSessionId;
+	const effectiveSessionId = canResume ? previousAgentSessionId : undefined;
+
+	if (canResume) {
+		console.log(`[Sandbox] Resuming session=${previousAgentSessionId}`);
+	} else if (previousAgentSessionId && !sandboxReused) {
+		console.log(
+			"[Sandbox] Sandbox was recreated, cannot resume previous session",
+		);
+	}
 
 	try {
-		const fullPrompt = buildFullPrompt(prompt, conversationHistory);
-		const script = generateAgentScript(fullPrompt, timezone);
+		const effectivePrompt = canResume
+			? prompt
+			: buildFullPrompt(prompt, conversationHistory);
+		const script = generateAgentScript(
+			effectivePrompt,
+			timezone,
+			effectiveSessionId,
+		);
 		console.log("[Sandbox] Writing agent runner script...");
 
 		const envVars: Record<string, string> = {
@@ -456,7 +491,7 @@ async function* streamViaSandbox({
 			cmd: "bash",
 			args: [
 				"-c",
-				"python3 -c 'import nba_api' 2>/dev/null || pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy",
+				"python3 -c 'import nba_api' 2>/dev/null || (dnf install -y python3 python3-pip 2>/dev/null; pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy)",
 			],
 		});
 		if (verifyResult.exitCode !== 0) {
@@ -469,6 +504,7 @@ async function* streamViaSandbox({
 			args: ["agent-runner.mjs"],
 			env: {
 				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				BASH_ENV: "/vercel/sandbox/.agent-env.sh",
 				...envVars,
 			},
 			detached: true,
@@ -523,7 +559,7 @@ async function* streamViaSandbox({
 			await sandbox.stop();
 			await prisma.chat.update({
 				where: { id: chatId },
-				data: { sandboxId: null },
+				data: { sandboxId: null, agentSessionId: null },
 			});
 		} catch (stopError) {
 			console.error("[Sandbox] Failed to stop sandbox:", stopError);
