@@ -147,6 +147,7 @@ export async function POST(req: Request): Promise<Response> {
 				let lastEventWasToolUse = false;
 				const sentThinkingIds = new Set<string>();
 
+				let resultStopReason: string | null = null;
 				let capturedSessionId: string | undefined;
 				let savedToDb = false;
 				async function saveAssistantMessage(): Promise<void> {
@@ -158,6 +159,7 @@ export async function POST(req: Request): Promise<Response> {
 							role: "assistant",
 							content: fullAssistantContent,
 							thinking: fullThinkingContent || null,
+							stopReason: resultStopReason,
 							toolName: toolUses[0]?.name,
 							toolInput:
 								toolUses.length > 0
@@ -220,18 +222,23 @@ export async function POST(req: Request): Promise<Response> {
 								break;
 							}
 							case "result": {
+								resultStopReason =
+									"stop_reason" in msg ? (msg.stop_reason as string) : null;
 								if (msg.session_id) {
 									capturedSessionId = msg.session_id;
 								}
-								const resultData: Record<string, unknown> = {
+								console.log(
+									`[Chat API] Result subtype=${msg.subtype} stop_reason=${resultStopReason}`,
+								);
+								sendEvent("result", {
 									subtype: msg.subtype,
+									stop_reason: resultStopReason,
 									duration_ms: msg.duration_ms,
 									session_id: msg.session_id,
-								};
-								if ("cost_usd" in msg) {
-									resultData.cost_usd = msg.cost_usd;
-								}
-								sendEvent("result", resultData);
+									...("cost_usd" in msg && {
+										cost_usd: msg.cost_usd,
+									}),
+								});
 								break;
 							}
 						}

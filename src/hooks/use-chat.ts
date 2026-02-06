@@ -9,6 +9,7 @@ import type {
 	DoneEvent,
 	ErrorEvent,
 	Message,
+	ResultEvent,
 	ThinkingEvent,
 	ToolUseEvent,
 } from "@/lib/types";
@@ -86,6 +87,10 @@ export function useChat(options: UseChatOptions = {}) {
 		null,
 	);
 	const messageQueueRef = useRef<QueuedMessage[]>([]);
+	const stopReasonRef = useRef<{
+		stopReason: string;
+		subtype: string;
+	} | null>(null);
 	const disconnectedChatRef = useRef<string | null>(null);
 	const lastReloadAttemptRef = useRef(0);
 	const loadedChatIdRef = useRef<string | undefined>(undefined);
@@ -177,9 +182,21 @@ export function useChat(options: UseChatOptions = {}) {
 					});
 					break;
 				}
-				case "turn_complete":
+				case "turn_complete": {
+					markToolsComplete();
+					break;
+				}
 				case "result": {
 					markToolsComplete();
+					const { stop_reason, subtype } = data as ResultEvent;
+					const abnormalStop = stop_reason && stop_reason !== "end_turn";
+
+					if (abnormalStop || subtype !== "success") {
+						stopReasonRef.current = {
+							stopReason: abnormalStop ? stop_reason : subtype,
+							subtype,
+						};
+					}
 					break;
 				}
 				case "done": {
@@ -204,6 +221,17 @@ export function useChat(options: UseChatOptions = {}) {
 
 		if (segments.length === 0) return;
 
+		const stopInfo = stopReasonRef.current;
+		stopReasonRef.current = null;
+
+		if (stopInfo) {
+			segments.push({
+				type: "stop_notice",
+				stopReason: stopInfo.stopReason,
+				subtype: stopInfo.subtype,
+			});
+		}
+
 		const content = segments
 			.filter(
 				(s): s is Extract<ContentSegment, { type: "text" }> =>
@@ -226,6 +254,7 @@ export function useChat(options: UseChatOptions = {}) {
 				chatId: currentChat?.id || "",
 				role: "assistant",
 				content,
+				stopReason: stopInfo?.stopReason,
 				toolInput: toolUses.length > 0 ? toolUses : undefined,
 				segments: [...segments],
 				createdAt: new Date().toISOString(),

@@ -1,10 +1,13 @@
 "use client";
 
 import {
+	AlertTriangle,
+	Ban,
 	Brain,
 	ChevronDown,
 	ChevronRight,
 	Clock,
+	Info,
 	Loader2,
 	X,
 } from "lucide-react";
@@ -117,6 +120,12 @@ export function MessageItem({ message }: MessageItemProps) {
 					) : (
 						<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
 					)}
+					{!isUser &&
+						message.stopReason &&
+						message.stopReason !== "end_turn" &&
+						!hasSegments && (
+							<StopNoticeBanner stopReason={message.stopReason} />
+						)}
 				</div>
 			</div>
 		</div>
@@ -196,6 +205,68 @@ function LoadingIndicator() {
 	);
 }
 
+interface StopNoticeBannerProps {
+	stopReason: string;
+	subtype?: string;
+}
+
+const STOP_NOTICE_CONFIG: Record<
+	string,
+	{ icon: typeof Ban; message: string; variant: "error" | "warning" | "info" }
+> = {
+	refusal: {
+		icon: Ban,
+		message: "The model declined this request.",
+		variant: "error",
+	},
+	max_tokens: {
+		icon: AlertTriangle,
+		message: "Response was truncated due to length limits.",
+		variant: "warning",
+	},
+	error_max_turns: {
+		icon: AlertTriangle,
+		message: "Reached the maximum number of tool-use turns.",
+		variant: "warning",
+	},
+	error_max_budget_usd: {
+		icon: AlertTriangle,
+		message: "Analysis stopped due to budget limits.",
+		variant: "warning",
+	},
+	error_during_execution: {
+		icon: AlertTriangle,
+		message: "An error occurred during analysis.",
+		variant: "error",
+	},
+};
+
+const VARIANT_CLASSES = {
+	error: "bg-error-subtle/50 border-error/30 text-error",
+	warning: "bg-warning-subtle/50 border-warning/30 text-warning",
+	info: "bg-bg-tertiary/50 border-border-subtle text-text-secondary",
+};
+
+function StopNoticeBanner({ stopReason, subtype }: StopNoticeBannerProps) {
+	const key = subtype && subtype !== "success" ? subtype : stopReason;
+	const config = STOP_NOTICE_CONFIG[key];
+	const Icon = config?.icon ?? Info;
+	const message = config?.message ?? `Response ended: ${stopReason}`;
+	const variant = config?.variant ?? "info";
+
+	return (
+		<div
+			className={cn(
+				"flex items-center gap-2 rounded-lg border px-3 py-2 text-xs my-2",
+				VARIANT_CLASSES[variant],
+			)}
+		>
+			<Icon className="h-3.5 w-3.5 shrink-0" />
+			<span>{message}</span>
+		</div>
+	);
+}
+
 interface SegmentRendererProps {
 	segment: ContentSegment;
 }
@@ -215,6 +286,13 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
 				<div className="my-2">
 					<ToolUsePill tool={segment.tool} />
 				</div>
+			);
+		case "stop_notice":
+			return (
+				<StopNoticeBanner
+					stopReason={segment.stopReason}
+					subtype={segment.subtype}
+				/>
 			);
 		default:
 			return null;

@@ -14,6 +14,7 @@ export interface Message {
 	content: string;
 	toolName?: string | null;
 	toolInput?: unknown;
+	stopReason?: string | null;
 	segments?: ContentSegment[];
 	createdAt: string;
 }
@@ -27,7 +28,8 @@ export interface ToolUse {
 export type ContentSegment =
 	| { type: "text"; text: string }
 	| { type: "tool_use"; tool: ToolUse }
-	| { type: "thinking"; thinking: string; isComplete?: boolean };
+	| { type: "thinking"; thinking: string; isComplete?: boolean }
+	| { type: "stop_notice"; stopReason: string; subtype?: string };
 
 export interface StreamEvent {
 	type:
@@ -62,6 +64,7 @@ export interface ToolUseEvent {
 
 export interface ResultEvent {
 	subtype: string;
+	stop_reason?: string | null;
 	duration_ms: number;
 	cost_usd?: number;
 	session_id: string;
