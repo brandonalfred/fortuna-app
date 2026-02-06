@@ -118,11 +118,12 @@ export async function POST(req: Request): Promise<Response> {
 			conversationHistory,
 			abortController,
 			timezone,
+			agentSessionId: existingChat?.agentSessionId ?? undefined,
 		};
 
 		const isLocal = !process.env.VERCEL;
-		// Local: Query object with interrupt() support for graceful shutdown
-		// Vercel: async generator only — interrupt() not available (TODO: add sandbox interrupt support)
+		// Local mode provides a Query object with interrupt() for graceful shutdown.
+		// Vercel sandbox mode only provides an async generator (no interrupt support yet).
 		const agentQuery: Query | null = isLocal
 			? createLocalAgentQuery(agentOptions)
 			: null;
@@ -146,6 +147,7 @@ export async function POST(req: Request): Promise<Response> {
 				let lastEventWasToolUse = false;
 				const sentThinkingIds = new Set<string>();
 
+				let capturedSessionId: string | undefined;
 				let savedToDb = false;
 				async function saveAssistantMessage(): Promise<void> {
 					if (savedToDb) return;
@@ -218,6 +220,9 @@ export async function POST(req: Request): Promise<Response> {
 								break;
 							}
 							case "result": {
+								if (msg.session_id) {
+									capturedSessionId = msg.session_id;
+								}
 								const resultData: Record<string, unknown> = {
 									subtype: msg.subtype,
 									duration_ms: msg.duration_ms,
@@ -246,6 +251,16 @@ export async function POST(req: Request): Promise<Response> {
 						);
 						await new Promise((r) => setTimeout(r, 1000));
 						await saveAssistantMessage();
+					}
+
+					if (capturedSessionId) {
+						await prisma.chat.update({
+							where: { id: chat.id },
+							data: { agentSessionId: capturedSessionId },
+						});
+						console.log(
+							`[Chat API] Persisted agentSessionId=${capturedSessionId}`,
+						);
 					}
 
 					console.log(
