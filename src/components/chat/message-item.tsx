@@ -225,28 +225,45 @@ interface ToolUsePillProps {
 	tool: ToolUse;
 }
 
+function formatToolInput(input: unknown): string {
+	if (typeof input === "string") return input;
+	return JSON.stringify(input, null, 2);
+}
+
 function ToolUsePill({ tool }: ToolUsePillProps) {
+	const [expanded, setExpanded] = useState(false);
 	const label = getToolLabel(tool.name);
 	const summary = getToolSummary(tool.name, tool.input);
+	const isRunning = tool.status === "running";
+	const Chevron = expanded ? ChevronDown : ChevronRight;
 
 	return (
 		<div className="inline-block">
-			<div
+			<button
+				type="button"
+				onClick={() => setExpanded(!expanded)}
 				className={cn(
 					"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-mono",
 					"bg-tool-bg border border-tool-border text-tool-text",
-					tool.status === "running" && "animate-subtle-pulse",
+					"transition-colors hover:bg-tool-bg/80 cursor-pointer",
+					isRunning && "animate-subtle-pulse",
 				)}
 			>
+				<Chevron className="h-3 w-3 shrink-0" />
 				<span>{label}</span>
-				{tool.status === "running" && (
+				{isRunning && (
 					<span className="h-1.5 w-1.5 rounded-full bg-accent-primary animate-pulse" />
 				)}
-			</div>
-			{summary && (
+			</button>
+			{summary && !expanded && (
 				<p className="mt-0.5 text-[11px] text-text-tertiary font-mono truncate max-w-xs">
 					{summary}
 				</p>
+			)}
+			{expanded && tool.input != null && (
+				<pre className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3 text-xs text-text-secondary font-mono overflow-x-auto max-w-lg whitespace-pre-wrap break-words">
+					{formatToolInput(tool.input)}
+				</pre>
 			)}
 		</div>
 	);
