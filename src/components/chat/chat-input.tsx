@@ -59,7 +59,7 @@ export function ChatInput({
 	);
 
 	return (
-		<div className="border-t border-border-subtle bg-bg-primary p-4">
+		<div className="border-t border-border-subtle bg-bg-primary p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
 			<div className="mx-auto max-w-3xl">
 				<div
 					className={cn(
