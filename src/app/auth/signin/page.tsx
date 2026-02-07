@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AlphaTag } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth/client";
@@ -50,7 +51,7 @@ export default function SignInPage() {
 						Welcome back
 					</h1>
 					<p className="mt-2 text-text-secondary">
-						Sign in to continue to FortunaBets
+						Sign in to continue to FortunaBets <AlphaTag />
 					</p>
 				</div>
 

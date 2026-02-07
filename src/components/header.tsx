@@ -2,6 +2,7 @@
 
 import { LogOut, Menu, MessageSquarePlus, User, X } from "lucide-react";
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/client";
 import { useSessionContext } from "@/lib/auth/session-context";
@@ -30,8 +31,8 @@ export function Header({ isSidebarOpen, onToggleSidebar }: HeaderProps) {
 						<Menu className="h-5 w-5" />
 					)}
 				</Button>
-				<h1 className="font-display text-xl text-text-primary">
-					fortuna<span className="text-accent-primary">bets</span>.ai
+				<h1 className="text-xl">
+					<BrandLogo />
 				</h1>
 			</div>
 

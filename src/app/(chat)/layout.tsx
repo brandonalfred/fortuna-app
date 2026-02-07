@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand";
 import { Header } from "@/components/header";
 import { ChatHistory } from "@/components/sidebar/chat-history";
 import {
@@ -42,9 +43,7 @@ export default function ChatLayout({
 						<SheetContent side="left" className="w-60 p-0 lg:hidden">
 							<SheetTitle className="sr-only">Chat history</SheetTitle>
 							<div className="flex h-14 items-center justify-between border-b border-border-subtle px-3">
-								<span className="font-display text-lg text-text-primary">
-									fortuna<span className="text-accent-primary">bets</span>.ai
-								</span>
+								<BrandLogo className="text-lg" />
 								<SheetClose className="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary">
 									<X className="h-5 w-5" />
 									<span className="sr-only">Close</span>

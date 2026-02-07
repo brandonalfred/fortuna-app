@@ -3,6 +3,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { AlphaTag } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signUp } from "@/lib/auth/client";
@@ -124,7 +125,7 @@ export default function SignUpPage() {
 						Create an account
 					</h1>
 					<p className="mt-2 text-text-secondary">
-						Sign up to start using FortunaBets
+						Sign up to start using FortunaBets <AlphaTag />
 					</p>
 				</div>
 
