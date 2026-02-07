@@ -3,5 +3,11 @@
 		"src/app/api/chat/route.ts": {
 			"maxDuration": 300
 		}
+	},
+	"git": {
+		"deploymentEnabled": {
+			"main": true,
+			"**": false
+		}
 	}
 }

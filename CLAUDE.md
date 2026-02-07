@@ -41,6 +41,12 @@ When creating new features or starting new work:
 2. Create a new feature branch: `git checkout -b feature/<description>`
 3. Use conventional commit prefixes: `feat:`, `fix:`, `docs:`, `refactor:`, etc.
 
+## Build Cost Awareness
+
+Every `git push` to `main` triggers a Vercel production build (~2 min, $0.126/min overage). Preview deployments are disabled for non-main branches to save build minutes.
+- To create a preview deployment manually: `vercel deploy`
+- Automatic builds only happen on merge to `main`
+
 ## Custom Skills
 
 This project has custom skills in `.claude/skills/`:
