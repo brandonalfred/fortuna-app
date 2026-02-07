@@ -12,6 +12,7 @@ import {
 interface MessageListProps {
 	messages: Message[];
 	streamingMessage: StreamingMessage | null;
+	statusMessage?: string | null;
 	messageQueue: QueuedMessage[];
 	onRemoveQueued: (id: string) => void;
 }
@@ -22,6 +23,7 @@ const SCROLL_IDLE_DELAY = 150;
 export function MessageList({
 	messages,
 	streamingMessage,
+	statusMessage,
 	messageQueue,
 	onRemoveQueued,
 }: MessageListProps) {
@@ -104,6 +106,7 @@ export function MessageList({
 				<StreamingMessageItem
 					segments={streamingMessage.segments}
 					isStreaming
+					statusMessage={statusMessage}
 				/>
 			)}
 			{messageQueue.map((msg) => (
