@@ -23,6 +23,10 @@ API quota costs 1 per market per region requested. To minimize usage:
 
 ## Sport Keys
 
+> **These tables list common keys only** — the API adds and removes sport keys seasonally.
+> **Championship and playoff games** (Super Bowl, NBA Finals, World Series, Stanley Cup) are listed under the main sport key (e.g., `americanfootball_nfl`), not separate keys like `americanfootball_nfl_super_bowl`.
+> When unsure, query `/v4/sports/` first — **this endpoint is free** and costs zero quota.
+
 ### US Sports
 
 | Key | Sport |
@@ -111,6 +115,29 @@ API quota costs 1 per market per region requested. To minimize usage:
 curl -s "https://api.the-odds-api.com/v4/sports/?apiKey=${ODDS_API_KEY}"
 ```
 
+### List Events for a Sport
+
+```bash
+curl -s "https://api.the-odds-api.com/v4/sports/{sport_key}/events/?apiKey=${ODDS_API_KEY}"
+```
+
+**Free** — does not count against quota. Returns event IDs, teams, and commence times. Use this to find a specific game (e.g., the Super Bowl) by its `eventId`, then query odds for just that event.
+
+**Parameters:**
+
+| Param | Values | Description |
+|-------|--------|-------------|
+| `commenceTimeFrom` | ISO 8601 | Filter events starting after this time |
+| `commenceTimeTo` | ISO 8601 | Filter events starting before this time |
+
+### List Available Markets for an Event
+
+```bash
+curl -s "https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/markets/?apiKey=${ODDS_API_KEY}"
+```
+
+Costs **1 quota credit**. Returns which market keys each bookmaker offers for a specific event. Useful when you're unsure which player props or alternate markets are available before requesting odds.
+
 ### Get Odds for a Sport
 
 ```bash
@@ -189,3 +216,11 @@ Empty results (`[]`) mean the requested market does not exist for that event. Th
 **Common causes:** off-season (no events), wrong market type for the game stage (e.g., `outrights` after a championship matchup is set — use `h2h,spreads,totals` instead), or invalid `eventId`.
 
 Empty results are not a credential issue — adjust your query parameters instead.
+
+### Unknown sport key / 404 error
+
+**Cause:** Fabricated or guessed sport key (e.g., `americanfootball_nfl_super_bowl`). The API only accepts keys it currently lists.
+
+**Fix:** Query `/v4/sports/` first to get valid keys — it's free and costs zero quota.
+
+**Key rule:** Championship and playoff games (Super Bowl, NBA Finals, World Series, Stanley Cup) always use the main sport key (e.g., `americanfootball_nfl`), never a special one. Find the specific game by querying `/v4/sports/{sport_key}/events/` (also free).
