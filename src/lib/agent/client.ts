@@ -40,6 +40,17 @@ function formatCurrentDate(timezone: string): string {
 	return formatter.format(new Date());
 }
 
+function collectEnvVars(keys: string[]): Record<string, string> {
+	const result: Record<string, string> = {};
+	for (const key of keys) {
+		const value = process.env[key];
+		if (value) {
+			result[key] = value;
+		}
+	}
+	return result;
+}
+
 function getSystemPrompt(timezone?: string): string {
 	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
@@ -385,13 +396,10 @@ function generateAgentScript(
 		? `        resume: ${JSON.stringify(agentSessionId)},`
 		: "";
 
-	const nonEmptyVars = Object.fromEntries(
-		Object.entries(envVars ?? {}).filter(([, v]) => v),
-	);
-	const envSetup =
-		Object.keys(nonEmptyVars).length > 0
-			? `\nObject.assign(process.env, ${JSON.stringify(nonEmptyVars)});\n`
-			: "";
+	const hasEnvVars = envVars && Object.keys(envVars).length > 0;
+	const envSetup = hasEnvVars
+		? `\nObject.assign(process.env, ${JSON.stringify(envVars)});\n`
+		: "";
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -414,6 +422,7 @@ async function main() {
           preset: 'claude_code',
           append: systemPromptAppend,
         },
+        env: process.env,
         abortController: new AbortController(),
         includePartialMessages: true,
 ${resumeLine}
@@ -495,13 +504,11 @@ async function* streamViaSandbox({
 			? prompt
 			: buildFullPrompt(prompt, conversationHistory);
 
-		const envVars: Record<string, string> = Object.fromEntries(
-			Object.entries({
-				ODDS_API_KEY: process.env.ODDS_API_KEY,
-				API_SPORTS_KEY: process.env.API_SPORTS_KEY,
-				WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL,
-			}).filter((entry): entry is [string, string] => !!entry[1]),
-		);
+		const envVars = collectEnvVars([
+			"ODDS_API_KEY",
+			"API_SPORTS_KEY",
+			"WEBSHARE_PROXY_URL",
+		]);
 
 		const script = generateAgentScript(
 			effectivePrompt,
@@ -510,14 +517,15 @@ async function* streamViaSandbox({
 			envVars,
 		);
 
-		const envExports = Object.entries(envVars)
+		const envEntries = Object.entries(envVars);
+		const envExports = envEntries
 			.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
 			.join("\n");
+		const envPlain = envEntries.map(([k, v]) => `${k}=${v}`).join("\n");
 
-		const envSummary = Object.entries(envVars)
-			.map(([k, v]) => `${k}=${v.length}chars`)
-			.join(", ");
-		console.log(`[Sandbox] Env vars: ${envSummary || "(none)"}`);
+		console.log(
+			`[Sandbox] Env vars: ${envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ") || "(none)"}`,
+		);
 
 		console.log("[Sandbox] Writing agent runner script...");
 		await sandbox.writeFiles([
@@ -528,6 +536,10 @@ async function* streamViaSandbox({
 			{
 				path: "/vercel/sandbox/.agent-env.sh",
 				content: Buffer.from(`#!/bin/bash\n${envExports}\n`),
+			},
+			{
+				path: "/vercel/sandbox/.agent-env",
+				content: Buffer.from(`${envPlain}\n`),
 			},
 		]);
 
