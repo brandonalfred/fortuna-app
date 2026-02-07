@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { QueuedMessage, StreamingMessage } from "@/hooks/use-chat";
+import { useSession } from "@/lib/auth/client";
 import type { Message } from "@/lib/types";
 import {
 	MessageItem,
@@ -22,6 +23,7 @@ export function MessageList({
 	messageQueue,
 	onRemoveQueued,
 }: MessageListProps) {
+	const { data: session } = useSession();
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,12 @@ export function MessageList({
 			<div className="flex h-full flex-col items-center justify-center px-4">
 				<h1 className="font-display text-4xl text-text-primary mb-2 text-center">
 					Welcome to FortunaBets
+					{session?.user?.firstName && (
+						<>
+							,<br />
+							{session.user.firstName}
+						</>
+					)}
 				</h1>
 				<p className="text-text-secondary text-center max-w-md">
 					Ask about any game. Get AI-powered odds, matchups, and
