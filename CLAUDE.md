@@ -165,6 +165,18 @@ Each chat gets its own ephemeral Vercel Sandbox instance (45-minute timeout). Sa
 | `BETTER_AUTH_URL` | Base URL of the app (e.g., `http://localhost:3000`) |
 | `AGENT_SANDBOX_SNAPSHOT_ID` | Optional Vercel Sandbox snapshot for faster cold starts |
 
+**Vercel env var gotcha:** When setting env vars via `vercel env add` with pipe input, use `printf` instead of `echo` to avoid a trailing newline being stored as part of the value. For example:
+
+```bash
+# Correct — no trailing newline
+printf "my-value" | vercel env add MY_VAR production
+
+# Wrong — echo adds a trailing \n that gets stored in the value
+echo "my-value" | vercel env add MY_VAR production
+```
+
+The Vercel Sandbox API does exact-match on snapshot IDs, so a trailing `\n` causes 404s. The code trims `AGENT_SANDBOX_SNAPSHOT_ID` defensively, but other env vars may not be as forgiving.
+
 ## Path Aliases
 
 Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`).
