@@ -1,11 +1,8 @@
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
-
-const geistSans = GeistSans;
-const geistMono = GeistMono;
 
 const instrumentSerif = Instrument_Serif({
 	variable: "--font-instrument-serif",
@@ -13,6 +10,10 @@ const instrumentSerif = Instrument_Serif({
 	weight: "400",
 	style: ["normal", "italic"],
 });
+
+export const viewport: Viewport = {
+	viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
 	title: "Fortuna - AI Sports Betting Analysis",
@@ -36,7 +37,7 @@ export default function RootLayout({
 	return (
 		<html lang="en" className="dark">
 			<body
-				className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} antialiased bg-bg-primary text-text-primary`}
+				className={`${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable} antialiased bg-bg-primary text-text-primary`}
 			>
 				{children}
 			</body>

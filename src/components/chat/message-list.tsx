@@ -80,7 +80,7 @@ export function MessageList({
 	if (messages.length === 0 && !streamingMessage) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-4">
-				<h1 className="font-display text-4xl text-text-primary mb-2">
+				<h1 className="font-display text-4xl text-text-primary mb-2 text-center">
 					Welcome to FortunaBets
 				</h1>
 				<p className="text-text-secondary text-center max-w-md">
