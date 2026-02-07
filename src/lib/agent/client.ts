@@ -213,6 +213,37 @@ interface SandboxResult {
 	previousAgentSessionId: string | null;
 }
 
+async function createFreshSandbox(): Promise<Sandbox> {
+	return Sandbox.create({
+		runtime: "node22",
+		resources: { vcpus: 4 },
+		timeout: ms("45m"),
+	});
+}
+
+async function createSandbox(
+	snapshotId: string | undefined,
+): Promise<{ sandbox: Sandbox; usedSnapshot: boolean }> {
+	if (!snapshotId) {
+		return { sandbox: await createFreshSandbox(), usedSnapshot: false };
+	}
+
+	try {
+		const sandbox = await Sandbox.create({
+			source: { type: "snapshot", snapshotId },
+			resources: { vcpus: 4 },
+			timeout: ms("45m"),
+		});
+		return { sandbox, usedSnapshot: true };
+	} catch (error) {
+		console.warn(
+			"[Sandbox] Snapshot unavailable, falling back to fresh sandbox:",
+			error instanceof Error ? error.message : error,
+		);
+		return { sandbox: await createFreshSandbox(), usedSnapshot: false };
+	}
+}
+
 async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 	const chat = await prisma.chat.findUnique({ where: { id: chatId } });
 	const previousAgentSessionId = chat?.agentSessionId ?? null;
@@ -234,23 +265,16 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 		}
 	}
 
-	const snapshotId = process.env.AGENT_SANDBOX_SNAPSHOT_ID;
+	const snapshotId = process.env.AGENT_SANDBOX_SNAPSHOT_ID?.trim() || undefined;
 	console.log(
 		"[Sandbox] Creating new sandbox",
 		snapshotId ? `from snapshot: ${snapshotId}` : "(no snapshot)",
 	);
 
-	const sandbox = await Sandbox.create({
-		...(snapshotId
-			? { source: { type: "snapshot", snapshotId } }
-			: { runtime: "node22" }),
-		resources: { vcpus: 4 },
-		timeout: ms("45m"),
-	});
-
+	const { sandbox, usedSnapshot } = await createSandbox(snapshotId);
 	console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
 
-	if (!snapshotId) {
+	if (!usedSnapshot) {
 		await runSandboxCommand(
 			sandbox,
 			{
