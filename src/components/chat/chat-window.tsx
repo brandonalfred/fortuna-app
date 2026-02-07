@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
@@ -33,7 +34,7 @@ function ErrorBanner({ message, onDismiss, className }: ErrorBannerProps) {
 				className="ml-2 shrink-0 text-error/60 hover:text-error"
 				aria-label="Dismiss"
 			>
-				&times;
+				<X className="h-4 w-4" />
 			</button>
 		</div>
 	);
