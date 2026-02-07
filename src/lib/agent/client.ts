@@ -200,7 +200,10 @@ async function runSandboxCommand(
 	console.log(`[Sandbox] ${description}...`);
 	const result = await sandbox.runCommand(options);
 	if (result.exitCode !== 0) {
-		throw new Error(`${description} failed (exit code ${result.exitCode})`);
+		const stderr = await result.stderr();
+		throw new Error(
+			`${description} failed (exit code ${result.exitCode}): ${stderr}`,
+		);
 	}
 }
 
@@ -290,7 +293,7 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 				args: [
 					"-c",
 					[
-						"pip3 install --break-system-packages",
+						"PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install",
 						"pandas numpy scipy",
 						"requests httpx beautifulsoup4 lxml",
 						"python-dateutil pytz",
@@ -489,11 +492,15 @@ async function* streamViaSandbox({
 		});
 
 		console.log("[Sandbox] Verifying Python packages...");
+		const pipFallback = [
+			"sudo PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install -q",
+			"nba_api requests httpx beautifulsoup4 pandas numpy",
+		].join(" ");
 		const verifyResult = await sandbox.runCommand({
 			cmd: "bash",
 			args: [
 				"-c",
-				"python3 -c 'import nba_api' 2>/dev/null || (sudo dnf install -y python3 python3-pip 2>/dev/null; sudo pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy)",
+				`python3 -c 'import nba_api' 2>/dev/null || (sudo dnf install -y python3 python3-pip 2>/dev/null; ${pipFallback})`,
 			],
 		});
 		if (verifyResult.exitCode !== 0) {

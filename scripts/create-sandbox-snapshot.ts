@@ -11,8 +11,10 @@ async function runStep(
 	console.log(`Exit code: ${result.exitCode}`);
 
 	if (result.exitCode !== 0) {
-		console.error("stderr:", await result.stderr());
-		throw new Error(`${description} failed (exit code ${result.exitCode})`);
+		const stderr = await result.stderr();
+		throw new Error(
+			`${description} failed (exit code ${result.exitCode}): ${stderr}`,
+		);
 	}
 }
 
@@ -54,7 +56,7 @@ async function createSnapshot(): Promise<void> {
 		args: [
 			"-c",
 			[
-				"pip3 install --break-system-packages",
+				"PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install",
 				"pandas numpy scipy",
 				"requests httpx beautifulsoup4 lxml",
 				"python-dateutil pytz",
