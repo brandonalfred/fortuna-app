@@ -3,7 +3,9 @@
 import { LogOut, Menu, MessageSquarePlus, User, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { signOut, useSession } from "@/lib/auth/client";
+import { signOut } from "@/lib/auth/client";
+import { useSessionContext } from "@/lib/auth/session-context";
+import { capitalize } from "@/lib/utils";
 
 interface HeaderProps {
 	isSidebarOpen: boolean;
@@ -11,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ isSidebarOpen, onToggleSidebar }: HeaderProps) {
-	const { data: session } = useSession();
+	const { session } = useSessionContext();
 
 	return (
 		<header className="flex h-14 shrink-0 items-center justify-between border-b border-border-subtle bg-bg-primary px-4">
@@ -51,7 +53,8 @@ export function Header({ isSidebarOpen, onToggleSidebar }: HeaderProps) {
 						<div className="hidden sm:flex items-center gap-2 text-sm text-text-secondary px-2">
 							<User className="h-4 w-4" />
 							<span>
-								{session.user.firstName} {session.user.lastName}
+								{capitalize(session.user.firstName)}{" "}
+								{capitalize(session.user.lastName)}
 							</span>
 						</div>
 						<Button

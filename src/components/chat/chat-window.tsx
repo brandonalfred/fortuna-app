@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
-import { useSession } from "@/lib/auth/client";
+import { useSessionContext } from "@/lib/auth/session-context";
 import { capitalize, cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
@@ -43,7 +43,7 @@ function ErrorBanner({ message, onDismiss, className }: ErrorBannerProps) {
 export function ChatWindow({ chatId }: ChatWindowProps) {
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
-	const { data: session } = useSession();
+	const { session, isPending } = useSessionContext();
 
 	const {
 		messages,
@@ -83,11 +83,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 			<div className="flex h-full flex-col items-center justify-center px-4">
 				<h1 className="font-display text-4xl text-text-primary mb-3 text-center">
 					Welcome to FortunaBets
-					{session?.user?.firstName && (
-						<>
+					{!isPending && session?.user?.firstName && (
+						<span className="animate-message-in">
 							,<br />
 							{capitalize(session.user.firstName)}
-						</>
+						</span>
 					)}
 				</h1>
 				<p className="text-text-secondary text-center max-w-md mb-8">
