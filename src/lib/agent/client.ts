@@ -194,7 +194,7 @@ export function createLocalAgentQuery({
 
 async function runSandboxCommand(
 	sandbox: Sandbox,
-	options: { cmd: string; args: string[] },
+	options: { cmd: string; args: string[]; sudo?: boolean },
 	description: string,
 ): Promise<void> {
 	console.log(`[Sandbox] ${description}...`);
@@ -278,6 +278,7 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 					"-c",
 					"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
 				],
+				sudo: true,
 			},
 			"Installing Python 3, pip, and system tools",
 		);
@@ -299,6 +300,7 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 						"nba_api",
 					].join(" "),
 				],
+				sudo: true,
 			},
 			"Installing Python packages",
 		);
@@ -491,7 +493,7 @@ async function* streamViaSandbox({
 			cmd: "bash",
 			args: [
 				"-c",
-				"python3 -c 'import nba_api' 2>/dev/null || (dnf install -y python3 python3-pip 2>/dev/null; pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy)",
+				"python3 -c 'import nba_api' 2>/dev/null || (sudo dnf install -y python3 python3-pip 2>/dev/null; sudo pip3 install --break-system-packages -q nba_api requests httpx beautifulsoup4 pandas numpy)",
 			],
 		});
 		if (verifyResult.exitCode !== 0) {
