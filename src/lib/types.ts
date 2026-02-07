@@ -40,8 +40,14 @@ export interface StreamEvent {
 		| "done"
 		| "error"
 		| "thinking"
-		| "turn_complete";
+		| "turn_complete"
+		| "status";
 	data: unknown;
+}
+
+export interface StatusEvent {
+	stage: string;
+	message: string;
 }
 
 export interface ThinkingEvent {

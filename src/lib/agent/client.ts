@@ -13,6 +13,8 @@ import { prisma } from "@/lib/prisma";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
+const SANDBOX_TIMEOUT = ms("5h");
+
 const AGENT_MODEL = "claude-opus-4-6";
 
 const AGENT_ALLOWED_TOOLS = [
@@ -92,6 +94,8 @@ interface ConversationMessage {
 	thinking?: string | null;
 }
 
+type StatusCallback = (stage: string, message: string) => void;
+
 export interface StreamAgentOptions {
 	prompt: string;
 	workspacePath: string;
@@ -100,6 +104,7 @@ export interface StreamAgentOptions {
 	abortController?: AbortController;
 	timezone?: string;
 	agentSessionId?: string;
+	onStatus?: StatusCallback;
 }
 
 function buildFullPrompt(
@@ -217,7 +222,7 @@ async function createFreshSandbox(): Promise<Sandbox> {
 	return Sandbox.create({
 		runtime: "node22",
 		resources: { vcpus: 4 },
-		timeout: ms("45m"),
+		timeout: SANDBOX_TIMEOUT,
 	});
 }
 
@@ -232,7 +237,7 @@ async function createSandbox(
 		const sandbox = await Sandbox.create({
 			source: { type: "snapshot", snapshotId },
 			resources: { vcpus: 4 },
-			timeout: ms("45m"),
+			timeout: SANDBOX_TIMEOUT,
 		});
 		return { sandbox, usedSnapshot: true };
 	} catch (error) {
@@ -244,7 +249,11 @@ async function createSandbox(
 	}
 }
 
-async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
+async function getOrCreateSandbox(
+	chatId: string,
+	onStatus?: StatusCallback,
+): Promise<SandboxResult> {
+	onStatus?.("preparing", "Preparing workspace...");
 	const chat = await prisma.chat.findUnique({ where: { id: chatId } });
 	const previousAgentSessionId = chat?.agentSessionId ?? null;
 
@@ -271,10 +280,12 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 		snapshotId ? `from snapshot: ${snapshotId}` : "(no snapshot)",
 	);
 
+	onStatus?.("initializing", "Initializing environment...");
 	const { sandbox, usedSnapshot } = await createSandbox(snapshotId);
 	console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
 
 	if (!usedSnapshot) {
+		onStatus?.("installing", "Installing analysis tools...");
 		await runSandboxCommand(
 			sandbox,
 			{
@@ -333,6 +344,7 @@ async function getOrCreateSandbox(chatId: string): Promise<SandboxResult> {
 		);
 	}
 
+	onStatus?.("configuring", "Configuring tools...");
 	const skills = getSkillFiles();
 	console.log(`[Sandbox] Setting up ${skills.length} skills...`);
 
@@ -461,10 +473,11 @@ async function* streamViaSandbox({
 	chatId,
 	conversationHistory = [],
 	timezone,
+	onStatus,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
 	const { sandbox, sandboxReused, previousAgentSessionId } =
-		await getOrCreateSandbox(chatId);
+		await getOrCreateSandbox(chatId, onStatus);
 
 	const canResume = sandboxReused && !!previousAgentSessionId;
 	const effectiveSessionId = canResume ? previousAgentSessionId : undefined;
@@ -548,6 +561,7 @@ async function* streamViaSandbox({
 			console.warn("[Sandbox] Warning: Python package verification failed");
 		}
 
+		onStatus?.("starting", "Starting analysis...");
 		console.log("[Sandbox] Starting agent command...");
 		const cmd = await sandbox.runCommand({
 			cmd: "node",
@@ -599,7 +613,7 @@ async function* streamViaSandbox({
 			throw new Error(`Agent process exited with code ${exitResult.exitCode}`);
 		}
 
-		sandbox.extendTimeout(ms("45m")).catch((err: unknown) => {
+		sandbox.extendTimeout(SANDBOX_TIMEOUT).catch((err: unknown) => {
 			console.warn("[Sandbox] Failed to extend timeout (non-fatal):", err);
 		});
 	} catch (error) {

@@ -10,6 +10,7 @@ import type {
 	ErrorEvent,
 	Message,
 	ResultEvent,
+	StatusEvent,
 	ThinkingEvent,
 	ToolUseEvent,
 } from "@/lib/types";
@@ -77,6 +78,7 @@ export function useChat(options: UseChatOptions = {}) {
 	const [streamingMessage, setStreamingMessage] =
 		useState<StreamingMessage | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
+	const [statusMessage, setStatusMessage] = useState<string | null>(null);
 	const [currentChat, setCurrentChat] = useState<Chat | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
 	const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
@@ -136,7 +138,13 @@ export function useChat(options: UseChatOptions = {}) {
 					}
 					break;
 				}
+				case "status": {
+					const statusData = data as StatusEvent;
+					setStatusMessage(statusData.message);
+					break;
+				}
 				case "delta": {
+					setStatusMessage(null);
 					const deltaData = data as DeltaEvent;
 					const segments = streamingSegmentsRef.current;
 					const lastSegment = segments[segments.length - 1];
@@ -154,6 +162,7 @@ export function useChat(options: UseChatOptions = {}) {
 					break;
 				}
 				case "thinking": {
+					setStatusMessage(null);
 					const thinkingData = data as ThinkingEvent;
 					streamingSegmentsRef.current.push({
 						type: "thinking",
@@ -200,11 +209,13 @@ export function useChat(options: UseChatOptions = {}) {
 					break;
 				}
 				case "done": {
+					setStatusMessage(null);
 					const doneData = data as DoneEvent;
 					setSessionId(doneData.sessionId);
 					break;
 				}
 				case "error": {
+					setStatusMessage(null);
 					const errorData = data as ErrorEvent;
 					onErrorRef.current?.(errorData.message);
 					break;
@@ -421,6 +432,7 @@ export function useChat(options: UseChatOptions = {}) {
 				setMessageQueue([]);
 			} finally {
 				setIsLoading(false);
+				setStatusMessage(null);
 				finalizeStreamingMessage();
 			}
 		},
@@ -499,6 +511,7 @@ export function useChat(options: UseChatOptions = {}) {
 		messages,
 		streamingMessage,
 		isLoading,
+		statusMessage,
 		currentChat,
 		sessionId,
 		messageQueue,

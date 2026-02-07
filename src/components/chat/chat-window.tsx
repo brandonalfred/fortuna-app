@@ -18,6 +18,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 		messages,
 		streamingMessage,
 		isLoading,
+		statusMessage,
 		messageQueue,
 		sendMessage,
 		stopGeneration,
@@ -49,6 +50,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 				<MessageList
 					messages={messages}
 					streamingMessage={streamingMessage}
+					statusMessage={statusMessage}
 					messageQueue={messageQueue}
 					onRemoveQueued={removeQueuedMessage}
 				/>

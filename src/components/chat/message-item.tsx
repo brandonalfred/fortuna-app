@@ -135,6 +135,7 @@ export function MessageItem({ message }: MessageItemProps) {
 interface StreamingMessageItemProps {
 	segments: ContentSegment[];
 	isStreaming?: boolean;
+	statusMessage?: string | null;
 }
 
 function getSegmentKey(segment: ContentSegment, idx: number): string {
@@ -147,6 +148,7 @@ function getSegmentKey(segment: ContentSegment, idx: number): string {
 export function StreamingMessageItem({
 	segments,
 	isStreaming,
+	statusMessage,
 }: StreamingMessageItemProps) {
 	return (
 		<div className="animate-message-in flex w-full justify-start">
@@ -158,7 +160,7 @@ export function StreamingMessageItem({
 							segment={segment}
 						/>
 					))}
-					{isStreaming && <LoadingIndicator />}
+					{isStreaming && <LoadingIndicator statusMessage={statusMessage} />}
 				</div>
 			</div>
 		</div>
@@ -197,10 +199,19 @@ export function QueuedMessageItem({
 	);
 }
 
-function LoadingIndicator() {
+interface LoadingIndicatorProps {
+	statusMessage?: string | null;
+}
+
+function LoadingIndicator({ statusMessage }: LoadingIndicatorProps) {
 	return (
-		<span className="ml-1 inline-flex items-center">
+		<span className="ml-1 inline-flex items-center gap-2">
 			<Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
+			{statusMessage && (
+				<span className="text-xs text-text-tertiary animate-subtle-pulse">
+					{statusMessage}
+				</span>
+			)}
 		</span>
 	);
 }
@@ -359,6 +370,7 @@ function generateThinkingSummary(thinking: string): string {
 function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 	const [expanded, setExpanded] = useState(false);
 	const summary = generateThinkingSummary(thinking);
+	const Chevron = expanded ? ChevronDown : ChevronRight;
 
 	return (
 		<div className="my-2">
@@ -375,11 +387,7 @@ function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 				<span className="text-text-secondary flex-1 truncate">
 					{expanded ? "Reasoning" : summary}
 				</span>
-				{expanded ? (
-					<ChevronDown className="h-4 w-4 text-text-muted shrink-0" />
-				) : (
-					<ChevronRight className="h-4 w-4 text-text-muted shrink-0" />
-				)}
+				<Chevron className="h-4 w-4 text-text-muted shrink-0" />
 			</button>
 			{expanded && (
 				<div className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3">

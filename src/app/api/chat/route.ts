@@ -110,24 +110,7 @@ export async function POST(req: Request): Promise<Response> {
 
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
-
-		const agentOptions = {
-			prompt: message,
-			workspacePath,
-			chatId: chat.id,
-			conversationHistory,
-			abortController,
-			timezone,
-			agentSessionId: existingChat?.agentSessionId ?? undefined,
-		};
-
-		const isLocal = !process.env.VERCEL;
-		// Local mode provides a Query object with interrupt() for graceful shutdown.
-		// Vercel sandbox mode only provides an async generator (no interrupt support yet).
-		const agentQuery: Query | null = isLocal
-			? createLocalAgentQuery(agentOptions)
-			: null;
-		const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
+		let agentQuery: Query | null = null;
 
 		const stream = new ReadableStream({
 			async start(controller) {
@@ -138,6 +121,23 @@ export async function POST(req: Request): Promise<Response> {
 						),
 					);
 				};
+
+				const agentOptions = {
+					prompt: message,
+					workspacePath,
+					chatId: chat.id,
+					conversationHistory,
+					abortController,
+					timezone,
+					agentSessionId: existingChat?.agentSessionId ?? undefined,
+					onStatus: (stage: string, statusMessage: string) => {
+						sendEvent("status", { stage, message: statusMessage });
+					},
+				};
+
+				const isLocal = !process.env.VERCEL;
+				agentQuery = isLocal ? createLocalAgentQuery(agentOptions) : null;
+				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
 				sendEvent("init", { chatId: chat.id, sessionId });
 

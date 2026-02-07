@@ -13,6 +13,7 @@ import {
 interface MessageListProps {
 	messages: Message[];
 	streamingMessage: StreamingMessage | null;
+	statusMessage?: string | null;
 	messageQueue: QueuedMessage[];
 	onRemoveQueued: (id: string) => void;
 }
@@ -20,6 +21,7 @@ interface MessageListProps {
 export function MessageList({
 	messages,
 	streamingMessage,
+	statusMessage,
 	messageQueue,
 	onRemoveQueued,
 }: MessageListProps) {
@@ -118,6 +120,7 @@ export function MessageList({
 				<StreamingMessageItem
 					segments={streamingMessage.segments}
 					isStreaming
+					statusMessage={statusMessage}
 				/>
 			)}
 			{messageQueue.map((msg) => (
