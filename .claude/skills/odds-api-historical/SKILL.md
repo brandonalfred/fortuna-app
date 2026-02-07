@@ -7,6 +7,11 @@ description: Query historical betting odds snapshots from The Odds API
 
 The `ODDS_API_KEY` environment variable is available. Use it with curl to fetch historical odds data.
 
+**Important:** Always source the environment file before API calls to ensure variables are loaded:
+```bash
+source /vercel/sandbox/.agent-env.sh 2>/dev/null || true
+```
+
 ## Critical: Query Time Strategy
 
 **The historical endpoint only returns games that haven't started yet at the snapshot time.** This is the most common source of "missing games" issues.
