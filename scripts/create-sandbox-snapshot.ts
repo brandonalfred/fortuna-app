@@ -4,7 +4,7 @@ import ms from "ms";
 async function runStep(
 	sandbox: Sandbox,
 	description: string,
-	options: { cmd: string; args: string[] },
+	options: { cmd: string; args: string[]; sudo?: boolean },
 ): Promise<void> {
 	console.log(`\n${description}...`);
 	const result = await sandbox.runCommand(options);
@@ -45,6 +45,7 @@ async function createSnapshot(): Promise<void> {
 				"-c",
 				"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
 			],
+			sudo: true,
 		},
 	);
 
@@ -63,6 +64,7 @@ async function createSnapshot(): Promise<void> {
 				"nba_api",
 			].join(" "),
 		],
+		sudo: true,
 	});
 
 	console.log("\nVerifying installations...");
