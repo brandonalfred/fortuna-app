@@ -1,10 +1,16 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/header";
 import { ChatHistory } from "@/components/sidebar/chat-history";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+	Sheet,
+	SheetClose,
+	SheetContent,
+	SheetTitle,
+} from "@/components/ui/sheet";
 
 export default function ChatLayout({
 	children,
@@ -33,7 +39,15 @@ export default function ChatLayout({
 				<Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
 					<SheetContent side="left" className="w-60 p-0 lg:hidden">
 						<SheetTitle className="sr-only">Chat history</SheetTitle>
-						<div className="h-14 border-b border-border-subtle" />
+						<div className="flex h-14 items-center justify-between border-b border-border-subtle px-3">
+							<span className="font-display text-lg text-text-primary">
+								fortuna<span className="text-accent-primary">bets</span>.ai
+							</span>
+							<SheetClose className="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary">
+								<X className="h-5 w-5" />
+								<span className="sr-only">Close</span>
+							</SheetClose>
+						</div>
 						<ChatHistory currentChatId={currentChatId} />
 					</SheetContent>
 				</Sheet>
