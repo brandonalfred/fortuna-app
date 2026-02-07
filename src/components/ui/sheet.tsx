@@ -64,9 +64,12 @@ function SheetContent({
 	className,
 	children,
 	side = "left",
+	showClose = false,
 	...props
 }: React.ComponentProps<typeof Dialog.Content> &
-	VariantProps<typeof sheetContentVariants>) {
+	VariantProps<typeof sheetContentVariants> & {
+		showClose?: boolean;
+	}) {
 	return (
 		<SheetPortal>
 			<SheetOverlay />
@@ -76,10 +79,12 @@ function SheetContent({
 				{...props}
 			>
 				{children}
-				<Dialog.Close className="absolute right-4 top-4 rounded-sm text-text-secondary opacity-70 transition-opacity hover:opacity-100 focus:outline-none disabled:pointer-events-none">
-					<X className="h-4 w-4" />
-					<span className="sr-only">Close</span>
-				</Dialog.Close>
+				{showClose && (
+					<Dialog.Close className="absolute right-4 top-4 rounded-sm text-text-secondary opacity-70 transition-opacity hover:opacity-100 focus:outline-none disabled:pointer-events-none">
+						<X className="h-4 w-4" />
+						<span className="sr-only">Close</span>
+					</Dialog.Close>
+				)}
 			</Dialog.Content>
 		</SheetPortal>
 	);
