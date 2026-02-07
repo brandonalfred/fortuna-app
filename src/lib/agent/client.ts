@@ -363,20 +363,29 @@ function generateAgentScript(
 	fullPrompt: string,
 	timezone?: string,
 	agentSessionId?: string,
+	envVars?: Record<string, string>,
 ): string {
-	const escapedPrompt = JSON.stringify(fullPrompt);
-	const escapedSystemPrompt = JSON.stringify(getSystemPrompt(timezone));
-	const escapedModel = JSON.stringify(AGENT_MODEL);
-	const escapedTools = JSON.stringify(AGENT_ALLOWED_TOOLS);
+	const promptLiteral = JSON.stringify(fullPrompt);
+	const systemPromptLiteral = JSON.stringify(getSystemPrompt(timezone));
+	const modelLiteral = JSON.stringify(AGENT_MODEL);
+	const toolsLiteral = JSON.stringify(AGENT_ALLOWED_TOOLS);
 	const resumeLine = agentSessionId
 		? `        resume: ${JSON.stringify(agentSessionId)},`
 		: "";
 
+	const nonEmptyVars = Object.fromEntries(
+		Object.entries(envVars ?? {}).filter(([, v]) => v),
+	);
+	const envSetup =
+		Object.keys(nonEmptyVars).length > 0
+			? `\nObject.assign(process.env, ${JSON.stringify(nonEmptyVars)});\n`
+			: "";
+
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
-
-const prompt = ${escapedPrompt};
-const systemPromptAppend = ${escapedSystemPrompt};
+${envSetup}
+const prompt = ${promptLiteral};
+const systemPromptAppend = ${systemPromptLiteral};
 
 async function main() {
   try {
@@ -384,9 +393,9 @@ async function main() {
       prompt,
       options: {
         cwd: '/vercel/sandbox',
-        model: ${escapedModel},
+        model: ${modelLiteral},
         settingSources: ['project'],
-        allowedTools: ${escapedTools},
+        allowedTools: ${toolsLiteral},
         permissionMode: 'acceptEdits',
         systemPrompt: {
           type: 'preset',
@@ -472,30 +481,32 @@ async function* streamViaSandbox({
 		const effectivePrompt = canResume
 			? prompt
 			: buildFullPrompt(prompt, conversationHistory);
+
+		const envVars: Record<string, string> = Object.fromEntries(
+			Object.entries({
+				ODDS_API_KEY: process.env.ODDS_API_KEY,
+				API_SPORTS_KEY: process.env.API_SPORTS_KEY,
+				WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL,
+			}).filter((entry): entry is [string, string] => !!entry[1]),
+		);
+
 		const script = generateAgentScript(
 			effectivePrompt,
 			timezone,
 			effectiveSessionId,
+			envVars,
 		);
-		console.log("[Sandbox] Writing agent runner script...");
 
-		const envVars: Record<string, string> = {
-			ODDS_API_KEY: process.env.ODDS_API_KEY || "",
-			API_SPORTS_KEY: process.env.API_SPORTS_KEY || "",
-			WEBSHARE_PROXY_URL: process.env.WEBSHARE_PROXY_URL || "",
-		};
 		const envExports = Object.entries(envVars)
-			.filter(([, v]) => v)
 			.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
 			.join("\n");
 
-		const configuredKeys = Object.entries(envVars)
-			.filter(([, v]) => v)
-			.map(([k]) => k);
-		console.log(
-			`[Sandbox] Writing env vars to .agent-env.sh: ${configuredKeys.join(", ") || "(none)"}`,
-		);
+		const envSummary = Object.entries(envVars)
+			.map(([k, v]) => `${k}=${v.length}chars`)
+			.join(", ");
+		console.log(`[Sandbox] Env vars: ${envSummary || "(none)"}`);
 
+		console.log("[Sandbox] Writing agent runner script...");
 		await sandbox.writeFiles([
 			{
 				path: "/vercel/sandbox/agent-runner.mjs",
@@ -507,11 +518,17 @@ async function* streamViaSandbox({
 			},
 		]);
 
+		const agentEnvSource =
+			"[ -f /vercel/sandbox/.agent-env.sh ] && . /vercel/sandbox/.agent-env.sh";
 		await sandbox.runCommand({
 			cmd: "bash",
 			args: [
 				"-c",
-				"grep -q \"agent-env.sh\" /root/.bashrc 2>/dev/null || echo '[ -f /vercel/sandbox/.agent-env.sh ] && source /vercel/sandbox/.agent-env.sh' >> /root/.bashrc",
+				[
+					`for f in /etc/bashrc /etc/bash.bashrc; do [ -f "$f" ] && ! grep -q agent-env "$f" && echo '${agentEnvSource}' >> "$f"; done`,
+					`cp /vercel/sandbox/.agent-env.sh /etc/profile.d/agent-env.sh 2>/dev/null || true`,
+					`grep -q agent-env /root/.bashrc 2>/dev/null || echo '${agentEnvSource}' >> /root/.bashrc`,
+				].join(" ; "),
 			],
 		});
 

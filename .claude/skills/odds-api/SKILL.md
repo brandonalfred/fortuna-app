@@ -7,6 +7,11 @@ description: Fetch live sports betting odds from The Odds API
 
 The `ODDS_API_KEY` environment variable is available. Use it with curl to fetch data.
 
+**Important:** Always source the environment file before API calls to ensure variables are loaded:
+```bash
+source /vercel/sandbox/.agent-env.sh 2>/dev/null || true
+```
+
 ## Efficient Querying
 
 API quota costs 1 per market per region requested. To minimize usage:
