@@ -115,7 +115,7 @@ The agent runs differently based on environment:
 
 ### Sandbox Security Model
 
-Each chat gets its own ephemeral Vercel Sandbox instance (45-minute timeout). Sandboxes are:
+Each chat gets its own ephemeral Vercel Sandbox instance (5-hour timeout). Sandboxes are:
 - **Isolated**: One sandbox per chat, no cross-chat access
 - **Ephemeral**: Destroyed after timeout or on error, no persistent state between sessions
 - **Credential-scoped**: API keys (`ODDS_API_KEY`, `API_SPORTS_KEY`, `WEBSHARE_PROXY_URL`) are written to the sandbox filesystem (`.agent-env.sh`) so bash commands can access them. This is an accepted trade-off — the sandbox is short-lived and per-user. The keys are for sports data APIs, not infrastructure credentials.
@@ -149,6 +149,7 @@ Each chat gets its own ephemeral Vercel Sandbox instance (45-minute timeout). Sa
 | `thinking` | `{ thinking }` | Extended thinking content |
 | `tool_use` | `{ name, input }` | Tool execution |
 | `turn_complete` | `{}` | Tool call cycle complete |
+| `status` | `{ stage, message }` | Sandbox initialization progress |
 | `result` | `{ cost_usd, duration_ms }` | Completion metrics |
 | `done` | `{ chatId, sessionId }` | Stream complete |
 
