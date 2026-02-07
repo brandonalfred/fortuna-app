@@ -59,7 +59,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 		chatId,
 		onError: setError,
 		onChatCreated: (newChatId) => {
-			window.history.replaceState(null, "", `/chat/${newChatId}`);
+			router.replace(`/chat/${newChatId}`);
 		},
 		onChatNotFound: () => {
 			setError("Chat not found");
