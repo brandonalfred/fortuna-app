@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/lib/auth/client";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 
@@ -85,7 +85,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 					{session?.user?.firstName && (
 						<>
 							,<br />
-							{session.user.firstName}
+							{capitalize(session.user.firstName)}
 						</>
 					)}
 				</h1>

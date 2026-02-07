@@ -78,7 +78,7 @@ export function ChatInput({
 				disabled={disabled}
 				rows={1}
 				className={cn(
-					"min-h-[44px] max-h-[200px] resize-none pr-12",
+					"min-h-[44px] max-h-[200px] resize-none py-3 pr-12",
 					"border-0 rounded-none bg-transparent shadow-none",
 					"text-text-primary placeholder:text-text-tertiary",
 					"focus-visible:ring-0 focus-visible:border-0",
