@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { QueuedMessage, StreamingMessage } from "@/hooks/use-chat";
-import { useSession } from "@/lib/auth/client";
 import type { Message } from "@/lib/types";
 import {
 	MessageItem,
@@ -17,13 +16,15 @@ interface MessageListProps {
 	onRemoveQueued: (id: string) => void;
 }
 
+const SCROLL_THRESHOLD = 100;
+const SCROLL_IDLE_DELAY = 150;
+
 export function MessageList({
 	messages,
 	streamingMessage,
 	messageQueue,
 	onRemoveQueued,
 }: MessageListProps) {
-	const { data: session } = useSession();
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -39,20 +40,26 @@ export function MessageList({
 
 		userScrollingRef.current = true;
 
-		const threshold = 100;
 		const distanceFromBottom =
 			container.scrollHeight - container.scrollTop - container.clientHeight;
-		setIsNearBottom(distanceFromBottom < threshold);
+		setIsNearBottom(distanceFromBottom < SCROLL_THRESHOLD);
 
 		if (scrollTimeoutRef.current) {
 			clearTimeout(scrollTimeoutRef.current);
 		}
 		scrollTimeoutRef.current = setTimeout(() => {
 			userScrollingRef.current = false;
-		}, 150);
+		}, SCROLL_IDLE_DELAY);
 	}, []);
 
-	// Scroll to last message when a new message is added (user sends)
+	useEffect(() => {
+		return () => {
+			if (scrollTimeoutRef.current) {
+				clearTimeout(scrollTimeoutRef.current);
+			}
+		};
+	}, []);
+
 	useEffect(() => {
 		if (messages.length > prevMessagesLengthRef.current) {
 			lastMessageRef.current?.scrollIntoView({
@@ -63,7 +70,6 @@ export function MessageList({
 		prevMessagesLengthRef.current = messages.length;
 	}, [messages.length]);
 
-	// Auto-scroll during streaming only if near bottom
 	useEffect(() => {
 		if (
 			streamingMessage?.isStreaming &&
@@ -79,31 +85,11 @@ export function MessageList({
 		isNearBottom,
 	]);
 
-	if (messages.length === 0 && !streamingMessage) {
-		return (
-			<div className="flex h-full flex-col items-center justify-center px-4">
-				<h1 className="font-display text-4xl text-text-primary mb-2 text-center">
-					Welcome to FortunaBets
-					{session?.user?.firstName && (
-						<>
-							,<br />
-							{session.user.firstName}
-						</>
-					)}
-				</h1>
-				<p className="text-text-secondary text-center max-w-md">
-					Ask about any game. Get AI-powered odds, matchups, and
-					insights—instantly.
-				</p>
-			</div>
-		);
-	}
-
 	return (
 		<div
 			ref={scrollContainerRef}
 			onScroll={handleScroll}
-			className="flex flex-col gap-4 p-4 pb-4 h-full overflow-y-auto"
+			className="flex flex-col gap-4 p-4 h-full overflow-y-auto"
 		>
 			{messages.map((message, index) => (
 				<div

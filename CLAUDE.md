@@ -32,6 +32,8 @@ bunx prisma generate # Regenerate Prisma client (required before type-check/lint
 
 Biome enforces formatting with tabs and double quotes. Run `bun run lint` to auto-fix.
 
+Always use **Lucide React** icons (`lucide-react`) — never use raw HTML entities (e.g. `&times;`) or other icon libraries for UI icons.
+
 ## Git Workflow
 
 When creating new features or starting new work:

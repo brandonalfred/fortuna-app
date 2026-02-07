@@ -53,7 +53,7 @@ function ChatListContent({
 				<div
 					key={chat.id}
 					className={cn(
-						"group flex w-full items-center justify-between rounded-md text-sm transition-colors",
+						"group flex w-full items-center justify-between rounded-md text-sm transition-colors min-w-0",
 						currentChatId === chat.id
 							? "bg-bg-tertiary border-l-2 border-accent-primary text-text-primary"
 							: "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
@@ -61,9 +61,9 @@ function ChatListContent({
 				>
 					<Link
 						href={`/chat/${chat.id}`}
-						className="flex-1 truncate px-3 py-2 text-left"
+						className="min-w-0 flex-1 px-3 py-2 text-left"
 					>
-						{chat.title}
+						<span className="block truncate">{chat.title}</span>
 					</Link>
 					<button
 						type="button"
@@ -126,7 +126,7 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 	return (
 		<div className="flex h-full flex-col bg-bg-secondary">
 			<div className="flex items-center justify-between border-b border-border-subtle p-3">
-				<span className="text-sm font-medium text-text-secondary">History</span>
+				<span className="text-sm font-medium text-text-secondary">Recents</span>
 				<Button
 					variant="ghost"
 					size="icon"
