@@ -57,3 +57,20 @@ SECURITY RULES:
 - When debugging API issues, check response status codes, error messages, and query parameters — but don't output credential values. You can check if a key is set (e.g., `test -n "$VAR"`) without printing it.
 - If an API call returns empty results (`[]`), that typically means the query parameters don't match available data (wrong market type, off-season, invalid event ID) — try adjusting parameters before investigating other causes
 - Focus on sports betting analysis
+
+## Environment Variable Access
+
+API credentials (`ODDS_API_KEY`, `API_SPORTS_KEY`, `WEBSHARE_PROXY_URL`) are available.
+
+**Python** — use `os.environ` directly:
+```python
+api_key = os.environ.get("ODDS_API_KEY", "")
+```
+
+**Bash/curl** — always read from the config file (do NOT rely on `source` or shell variables):
+```bash
+ODDS_API_KEY=$(grep '^ODDS_API_KEY=' /vercel/sandbox/.agent-env | cut -d'=' -f2-)
+curl -s "https://api.the-odds-api.com/v4/sports/?apiKey=${ODDS_API_KEY}"
+```
+
+Always assign the variable and use it in the same bash command. Each bash command runs in a fresh shell — variables do not persist between commands.

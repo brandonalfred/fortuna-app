@@ -7,9 +7,9 @@ description: Query historical betting odds snapshots from The Odds API
 
 The `ODDS_API_KEY` environment variable is available. Use it with curl to fetch historical odds data.
 
-**Important:** Always source the environment file before API calls to ensure variables are loaded:
+**Important:** Read the API key from config before API calls:
 ```bash
-source /vercel/sandbox/.agent-env.sh 2>/dev/null || true
+ODDS_API_KEY=$(grep '^ODDS_API_KEY=' /vercel/sandbox/.agent-env | cut -d'=' -f2-)
 ```
 
 ## Critical: Query Time Strategy

@@ -15,9 +15,9 @@ x-apisports-key: ${API_SPORTS_KEY}
 
 All requests require this header.
 
-**Important:** Always source the environment file before API calls to ensure variables are loaded:
+**Important:** Read the API key from config before API calls:
 ```bash
-source /vercel/sandbox/.agent-env.sh 2>/dev/null || true
+API_SPORTS_KEY=$(grep '^API_SPORTS_KEY=' /vercel/sandbox/.agent-env | cut -d'=' -f2-)
 ```
 
 ## Sport-Specific APIs
