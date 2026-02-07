@@ -34,6 +34,8 @@ Biome enforces formatting with tabs and double quotes. Run `bun run lint` to aut
 
 Always use **Lucide React** icons (`lucide-react`) — never use raw HTML entities (e.g. `&times;`) or other icon libraries for UI icons.
 
+**Routing:** Never use `window.history.replaceState()` for navigation in Next.js App Router — it desynchronizes the browser URL from Next.js's internal router state. Always use `router.replace()` or `router.push()` from `next/navigation`.
+
 ## Git Workflow
 
 When creating new features or starting new work:
