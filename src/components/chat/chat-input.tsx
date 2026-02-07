@@ -31,7 +31,6 @@ export function ChatInput({
 	const handleSubmit = useCallback(() => {
 		if (!value.trim() || disabled) return;
 		if (isLoading) {
-			// Queue the message to send after current response completes
 			onQueue(value);
 		} else {
 			onSend(value);

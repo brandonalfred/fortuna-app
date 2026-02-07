@@ -16,6 +16,9 @@ interface MessageListProps {
 	onRemoveQueued: (id: string) => void;
 }
 
+const SCROLL_THRESHOLD = 100;
+const SCROLL_IDLE_DELAY = 150;
+
 export function MessageList({
 	messages,
 	streamingMessage,
@@ -37,20 +40,26 @@ export function MessageList({
 
 		userScrollingRef.current = true;
 
-		const threshold = 100;
 		const distanceFromBottom =
 			container.scrollHeight - container.scrollTop - container.clientHeight;
-		setIsNearBottom(distanceFromBottom < threshold);
+		setIsNearBottom(distanceFromBottom < SCROLL_THRESHOLD);
 
 		if (scrollTimeoutRef.current) {
 			clearTimeout(scrollTimeoutRef.current);
 		}
 		scrollTimeoutRef.current = setTimeout(() => {
 			userScrollingRef.current = false;
-		}, 150);
+		}, SCROLL_IDLE_DELAY);
 	}, []);
 
-	// Scroll to last message when a new message is added (user sends)
+	useEffect(() => {
+		return () => {
+			if (scrollTimeoutRef.current) {
+				clearTimeout(scrollTimeoutRef.current);
+			}
+		};
+	}, []);
+
 	useEffect(() => {
 		if (messages.length > prevMessagesLengthRef.current) {
 			lastMessageRef.current?.scrollIntoView({
@@ -61,7 +70,6 @@ export function MessageList({
 		prevMessagesLengthRef.current = messages.length;
 	}, [messages.length]);
 
-	// Auto-scroll during streaming only if near bottom
 	useEffect(() => {
 		if (
 			streamingMessage?.isStreaming &&
@@ -81,7 +89,7 @@ export function MessageList({
 		<div
 			ref={scrollContainerRef}
 			onScroll={handleScroll}
-			className="flex flex-col gap-4 p-4 pb-4 h-full overflow-y-auto"
+			className="flex flex-col gap-4 p-4 h-full overflow-y-auto"
 		>
 			{messages.map((message, index) => (
 				<div

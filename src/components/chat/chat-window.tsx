@@ -4,11 +4,39 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/lib/auth/client";
+import { cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
 
 interface ChatWindowProps {
 	chatId?: string;
+}
+
+interface ErrorBannerProps {
+	message: string;
+	onDismiss: () => void;
+	className?: string;
+}
+
+function ErrorBanner({ message, onDismiss, className }: ErrorBannerProps) {
+	return (
+		<div
+			className={cn(
+				"flex items-center justify-between rounded-md bg-error-subtle border border-error p-3 text-sm text-error",
+				className,
+			)}
+		>
+			<span>{message}</span>
+			<button
+				type="button"
+				onClick={onDismiss}
+				className="ml-2 shrink-0 text-error/60 hover:text-error"
+				aria-label="Dismiss"
+			>
+				&times;
+			</button>
+		</div>
+	);
 }
 
 export function ChatWindow({ chatId }: ChatWindowProps) {
@@ -45,6 +73,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 		[sendMessage],
 	);
 
+	const dismissError = useCallback(() => setError(null), []);
+
 	const isEmpty = messages.length === 0 && !streamingMessage;
 
 	if (isEmpty) {
@@ -64,17 +94,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 					insights—instantly.
 				</p>
 				{error && (
-					<div className="mb-4 w-full max-w-2xl flex items-center justify-between rounded-md bg-error-subtle border border-error p-3 text-sm text-error">
-						<span>{error}</span>
-						<button
-							type="button"
-							onClick={() => setError(null)}
-							className="ml-2 shrink-0 text-error/60 hover:text-error"
-							aria-label="Dismiss"
-						>
-							&times;
-						</button>
-					</div>
+					<ErrorBanner
+						message={error}
+						onDismiss={dismissError}
+						className="mb-4 w-full max-w-2xl"
+					/>
 				)}
 				<ChatInput
 					onSend={handleSend}
@@ -98,17 +122,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 				/>
 			</div>
 			{error && (
-				<div className="mx-4 mb-2 flex items-center justify-between rounded-md bg-error-subtle border border-error p-3 text-sm text-error">
-					<span>{error}</span>
-					<button
-						type="button"
-						onClick={() => setError(null)}
-						className="ml-2 shrink-0 text-error/60 hover:text-error"
-						aria-label="Dismiss"
-					>
-						&times;
-					</button>
-				</div>
+				<ErrorBanner
+					message={error}
+					onDismiss={dismissError}
+					className="mx-4 mb-2"
+				/>
 			)}
 			<ChatInput
 				onSend={handleSend}
