@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import { AlphaTag } from "@/components/brand";
 import { useChat } from "@/hooks/use-chat";
 import { useSessionContext } from "@/lib/auth/session-context";
 import { capitalize, cn } from "@/lib/utils";
@@ -83,7 +84,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-4">
 				<h1 className="font-display text-4xl text-text-primary mb-3 text-center">
-					Welcome to FortunaBets
+					Welcome to FortunaBets <AlphaTag />
 					{!isPending && session?.user?.firstName && (
 						<span className="animate-message-in">
 							,<br />
