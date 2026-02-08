@@ -11,7 +11,7 @@ import {
 	Loader2,
 	X,
 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ContentSegment, Message, ToolUse } from "@/lib/types";
@@ -90,9 +90,22 @@ interface MessageItemProps {
 	message: Message;
 }
 
+function renderMessageContent(message: Message): ReactNode {
+	if (message.role === "user") {
+		return <p>{message.content}</p>;
+	}
+
+	if (message.segments && message.segments.length > 0) {
+		return message.segments.map((segment, idx) => (
+			<SegmentRenderer key={getSegmentKey(segment, idx)} segment={segment} />
+		));
+	}
+
+	return <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>;
+}
+
 export function MessageItem({ message }: MessageItemProps) {
 	const isUser = message.role === "user";
-	const hasSegments = message.segments && message.segments.length > 0;
 
 	return (
 		<div
@@ -107,26 +120,7 @@ export function MessageItem({ message }: MessageItemProps) {
 					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
 				)}
 			>
-				<div className={PROSE_CLASSES}>
-					{isUser ? (
-						<p>{message.content}</p>
-					) : hasSegments ? (
-						message.segments!.map((segment, idx) => (
-							<SegmentRenderer
-								key={getSegmentKey(segment, idx)}
-								segment={segment}
-							/>
-						))
-					) : (
-						<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
-					)}
-					{!isUser &&
-						message.stopReason &&
-						message.stopReason !== "end_turn" &&
-						!hasSegments && (
-							<StopNoticeBanner stopReason={message.stopReason} />
-						)}
-				</div>
+				<div className={PROSE_CLASSES}>{renderMessageContent(message)}</div>
 			</div>
 		</div>
 	);
@@ -285,11 +279,7 @@ interface SegmentRendererProps {
 function SegmentRenderer({ segment }: SegmentRendererProps) {
 	switch (segment.type) {
 		case "thinking":
-			return (
-				<div className="my-2">
-					<ThinkingBlock thinking={segment.thinking} />
-				</div>
-			);
+			return <ThinkingBlock thinking={segment.thinking} />;
 		case "text":
 			return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
 		case "tool_use":
