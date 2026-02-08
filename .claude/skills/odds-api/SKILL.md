@@ -21,6 +21,16 @@ API quota costs 1 per market per region requested. To minimize usage:
 - Limit regions to what's relevant (`us` for US sports, `uk` for EPL)
 - Use `eventIds` param to fetch specific games instead of all
 
+## Rate Limiting
+
+The API rate limit is 30 requests per second. To avoid 429 errors:
+
+- **Combine markets in a single request** — use `markets=h2h,spreads,totals` instead of separate requests per market. Same applies to regions.
+- **Cache `/sports` and `/events` responses** — these don't change often. Reuse results within a session instead of re-fetching.
+- **Space sequential requests** — when looping through multiple events, add a brief pause between calls rather than firing them all at once.
+- **Reduce frequency for empty results** — if a sport is off-season or no events are listed, don't keep polling.
+- **Retry on 429** — if you get a 429 status code, wait 2-3 seconds and retry. Do not retry immediately.
+
 ## Sport Keys
 
 > **These tables list common keys only** — the API adds and removes sport keys seasonally.

@@ -172,6 +172,15 @@ curl -s "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/events
 3. **Navigate with timestamps** - use `previous_timestamp`/`next_timestamp` from response to walk through time
 4. **Cache responses** - historical data doesn't change, so cache aggressively
 
+## Rate Limiting
+
+The API rate limit is 30 requests per second. To avoid 429 errors:
+
+- **Combine markets in a single request** — use `markets=h2h,spreads,totals` instead of separate requests per market. Same applies to regions.
+- **Space sequential requests** — when querying multiple events for closing odds, add a brief pause between calls rather than firing them all at once.
+- **Cache aggressively** — historical data never changes. Never re-fetch the same sport/date/market combination.
+- **Retry on 429** — if you get a 429 status code, wait 2-3 seconds and retry. Do not retry immediately.
+
 ## Common Use Cases
 
 - **Line movement analysis**: Compare opening odds to closing odds
