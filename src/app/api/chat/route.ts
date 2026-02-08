@@ -378,9 +378,6 @@ export async function POST(req: Request): Promise<Response> {
 								for (const block of msg.message.content) {
 									if (block.type === "text") {
 										fullAssistantContent += block.text;
-										if (isV2) {
-											textBuffer += block.text;
-										}
 									} else if (block.type === "tool_use") {
 										lastEventWasToolUse = true;
 										const { name, input } = block;
