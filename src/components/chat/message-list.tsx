@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { QueuedMessage, StreamingMessage } from "@/hooks/use-chat";
-import type { Message } from "@/lib/types";
+import type { Message, QueuedMessage, StreamingMessage } from "@/lib/types";
 import {
 	MessageItem,
 	QueuedMessageItem,

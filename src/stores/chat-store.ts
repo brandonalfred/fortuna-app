@@ -1,0 +1,441 @@
+import { createStore } from "zustand/vanilla";
+import { createLogger } from "@/lib/logger";
+import { hydrateMessageSegments } from "@/lib/segments";
+import { createDeduplicator, parseSSEStream } from "@/lib/sse";
+import type {
+	Chat,
+	ChatInitEvent,
+	ContentSegment,
+	DeltaEvent,
+	DoneEvent,
+	ErrorEvent,
+	Message,
+	ResultEvent,
+	StatusEvent,
+	StreamingMessage,
+	ThinkingEvent,
+	ToolUseEvent,
+} from "@/lib/types";
+import type { QueueStore } from "./queue-store";
+
+const log = createLogger("ChatStore");
+
+function isNetworkError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	const msg = error.message.toLowerCase();
+	return (
+		error.name === "TypeError" ||
+		msg.includes("failed to fetch") ||
+		msg.includes("load failed") ||
+		msg.includes("network") ||
+		msg.includes("the operation couldn't be completed")
+	);
+}
+
+interface ChatState {
+	messages: Message[];
+	streamingMessage: StreamingMessage | null;
+	streamingSegments: ContentSegment[];
+	isLoading: boolean;
+	statusMessage: string | null;
+	currentChat: Chat | null;
+	sessionId: string | null;
+	error: string | null;
+	abortController: AbortController | null;
+	stopReason: { stopReason: string; subtype: string } | null;
+	disconnectedChatId: string | null;
+	lastReloadAttempt: number;
+	loadedChatId: string | undefined;
+	isCreatingChat: boolean;
+}
+
+interface ChatActions {
+	handleEvent(type: string, data: unknown): void;
+	publishSegments(): void;
+	markToolsComplete(): void;
+	finalizeStreamingMessage(): void;
+	fetchChat(chatId: string, opts?: { silent?: boolean }): Promise<boolean>;
+	reloadChat(chatId: string): Promise<void>;
+	sendMessage(content: string): Promise<void>;
+	stopGeneration(): void;
+	startNewChat(): void;
+	clearError(): void;
+	setError(error: string | null): void;
+}
+
+export type ChatStore = ChatState & ChatActions;
+
+export interface ChatStoreCallbacks {
+	onChatCreated?: (chatId: string) => void;
+	onChatNotFound?: () => void;
+	getQueueStore: () => QueueStore;
+}
+
+export function createChatStore(callbacks: ChatStoreCallbacks) {
+	return createStore<ChatStore>()((set, get) => ({
+		messages: [],
+		streamingMessage: null,
+		streamingSegments: [],
+		isLoading: false,
+		statusMessage: null,
+		currentChat: null,
+		sessionId: null,
+		error: null,
+		abortController: null,
+		stopReason: null,
+		disconnectedChatId: null,
+		lastReloadAttempt: 0,
+		loadedChatId: undefined,
+		isCreatingChat: false,
+
+		publishSegments() {
+			set({
+				streamingMessage: {
+					segments: [...get().streamingSegments],
+					isStreaming: true,
+				},
+			});
+		},
+
+		markToolsComplete() {
+			for (const segment of get().streamingSegments) {
+				if (segment.type === "tool_use") {
+					segment.tool.status = "complete";
+				}
+			}
+			get().publishSegments();
+		},
+
+		handleEvent(type: string, data: unknown) {
+			const state = get();
+
+			switch (type) {
+				case "init": {
+					const initData = data as ChatInitEvent;
+					set({
+						sessionId: initData.sessionId,
+						currentChat: {
+							id: initData.chatId,
+							sessionId: initData.sessionId,
+							title: state.currentChat?.title || "",
+							createdAt:
+								state.currentChat?.createdAt || new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							messages: state.currentChat?.messages || [],
+						},
+					});
+					if (!state.loadedChatId && !state.isCreatingChat) {
+						set({ isCreatingChat: true });
+						callbacks.onChatCreated?.(initData.chatId);
+					}
+					break;
+				}
+				case "status": {
+					const statusData = data as StatusEvent;
+					set({ statusMessage: statusData.message });
+					break;
+				}
+				case "delta": {
+					set({ statusMessage: null });
+					const deltaData = data as DeltaEvent;
+					const segments = state.streamingSegments;
+					const lastSegment = segments[segments.length - 1];
+
+					if (lastSegment?.type === "text") {
+						lastSegment.text += deltaData.text;
+					} else {
+						segments.push({ type: "text", text: deltaData.text });
+					}
+
+					state.publishSegments();
+					break;
+				}
+				case "thinking": {
+					set({ statusMessage: null });
+					const thinkingData = data as ThinkingEvent;
+					state.streamingSegments.push({
+						type: "thinking",
+						thinking: thinkingData.thinking,
+						isComplete: true,
+					});
+					state.publishSegments();
+					break;
+				}
+				case "tool_use": {
+					const toolData = data as ToolUseEvent;
+					state.streamingSegments.push({
+						type: "tool_use",
+						tool: {
+							name: toolData.name,
+							input: toolData.input,
+							status: "running",
+						},
+					});
+					state.publishSegments();
+					break;
+				}
+				case "turn_complete": {
+					state.markToolsComplete();
+					break;
+				}
+				case "result": {
+					state.markToolsComplete();
+					const { stop_reason, subtype } = data as ResultEvent;
+					const abnormalStop = stop_reason && stop_reason !== "end_turn";
+
+					if (abnormalStop || subtype !== "success") {
+						set({
+							stopReason: {
+								stopReason: abnormalStop ? stop_reason : subtype,
+								subtype,
+							},
+						});
+					}
+					break;
+				}
+				case "done": {
+					const doneData = data as DoneEvent;
+					set({ statusMessage: null, sessionId: doneData.sessionId });
+					break;
+				}
+				case "error": {
+					const errorData = data as ErrorEvent;
+					set({ statusMessage: null, error: errorData.message });
+					break;
+				}
+			}
+		},
+
+		finalizeStreamingMessage() {
+			const state = get();
+			const segments = state.streamingSegments;
+			const stopInfo = state.stopReason;
+			set({
+				streamingSegments: [],
+				streamingMessage: null,
+				stopReason: null,
+			});
+
+			if (segments.length === 0) return;
+
+			if (stopInfo) {
+				segments.push({
+					type: "stop_notice",
+					stopReason: stopInfo.stopReason,
+					subtype: stopInfo.subtype,
+				});
+			}
+
+			const content = segments
+				.filter(
+					(s): s is Extract<ContentSegment, { type: "text" }> =>
+						s.type === "text",
+				)
+				.map((s) => s.text)
+				.join("");
+
+			const toolUses = segments
+				.filter(
+					(s): s is Extract<ContentSegment, { type: "tool_use" }> =>
+						s.type === "tool_use",
+				)
+				.map((s) => s.tool);
+
+			set({
+				messages: [
+					...get().messages,
+					{
+						id: `msg-${crypto.randomUUID()}`,
+						chatId: state.currentChat?.id || "",
+						role: "assistant",
+						content,
+						stopReason: stopInfo?.stopReason,
+						toolInput: toolUses.length > 0 ? toolUses : undefined,
+						segments: [...segments],
+						createdAt: new Date().toISOString(),
+					},
+				],
+			});
+		},
+
+		async fetchChat(chatId, opts) {
+			log.info("Fetching chat", { chatId });
+			try {
+				const response = await fetch(`/api/chats/${chatId}`);
+				if (!response.ok) {
+					if (!opts?.silent) throw new Error("Failed to load chat");
+					return false;
+				}
+				const chat: Chat = await response.json();
+				set({
+					currentChat: chat,
+					messages: (chat.messages || []).map(hydrateMessageSegments),
+					sessionId: chat.sessionId,
+				});
+				callbacks.getQueueStore().clear();
+				return true;
+			} catch (error) {
+				if (!opts?.silent) {
+					const errorMessage =
+						error instanceof Error ? error.message : "Failed to load chat";
+					set({ error: errorMessage });
+				}
+				return false;
+			}
+		},
+
+		async reloadChat(chatId) {
+			log.info("Reloading chat", { chatId });
+			const success = await get().fetchChat(chatId, { silent: true });
+			if (success) {
+				set({
+					disconnectedChatId: null,
+					error: null,
+				});
+			}
+		},
+
+		startNewChat() {
+			set({
+				currentChat: null,
+				messages: [],
+				sessionId: null,
+				streamingMessage: null,
+			});
+			callbacks.getQueueStore().clear();
+		},
+
+		async sendMessage(content) {
+			const state = get();
+			if (!content.trim() || state.isLoading) return;
+
+			log.info("Sending message", {
+				chatId: state.currentChat?.id,
+				length: content.length,
+			});
+
+			const userMessage: Message = {
+				id: `temp-${crypto.randomUUID()}`,
+				chatId: state.currentChat?.id || "",
+				role: "user",
+				content,
+				createdAt: new Date().toISOString(),
+			};
+
+			const abortController = new AbortController();
+
+			set({
+				messages: [...state.messages, userMessage],
+				isLoading: true,
+				streamingSegments: [],
+				streamingMessage: { segments: [], isStreaming: true },
+				abortController,
+			});
+
+			const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+			try {
+				const currentState = get();
+				const response = await fetch("/api/chat", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						message: content,
+						chatId: currentState.currentChat?.id,
+						sessionId: currentState.sessionId,
+						timezone: userTimezone,
+					}),
+					signal: abortController.signal,
+				});
+
+				if (!response.ok) {
+					if (response.status === 401) {
+						window.location.href = "/auth/signin";
+						return;
+					}
+					throw new Error("Failed to send message");
+				}
+
+				const headerChatId = response.headers.get("X-Chat-Id");
+				if (headerChatId && !currentState.currentChat?.id) {
+					set({
+						isCreatingChat: true,
+						currentChat: {
+							id: headerChatId,
+							sessionId: "",
+							title: "",
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							messages: [],
+						},
+					});
+					callbacks.onChatCreated?.(headerChatId);
+				}
+
+				const reader = response.body?.getReader();
+				if (!reader) {
+					throw new Error("No response body");
+				}
+
+				const dedup = createDeduplicator();
+				for await (const event of parseSSEStream(reader)) {
+					if (dedup.isDuplicate(event.id)) continue;
+					get().handleEvent(event.type, event.data);
+
+					if (
+						event.type === "turn_complete" &&
+						callbacks.getQueueStore().pendingMessages.length > 0
+					) {
+						get().abortController?.abort();
+						break;
+					}
+				}
+			} catch (error) {
+				if (error instanceof Error && error.name === "AbortError") {
+					return;
+				}
+
+				if (isNetworkError(error)) {
+					const disconnectedId = get().currentChat?.id;
+					if (disconnectedId) {
+						set({
+							disconnectedChatId: disconnectedId,
+							error: "Connection lost. Reloading response...",
+						});
+						log.warn("Network error, will reload", { disconnectedId });
+						setTimeout(() => get().reloadChat(disconnectedId), 2000);
+					}
+					return;
+				}
+
+				const errorMessage =
+					error instanceof Error ? error.message : "Unknown error";
+				log.error("Send failed", error);
+				set({ error: errorMessage });
+				callbacks.getQueueStore().clear();
+			} finally {
+				set({
+					isLoading: false,
+					statusMessage: null,
+				});
+				get().finalizeStreamingMessage();
+			}
+		},
+
+		stopGeneration() {
+			log.info("Stopping generation");
+			get().abortController?.abort();
+			set({ isLoading: false });
+			callbacks.getQueueStore().clear();
+			get().finalizeStreamingMessage();
+		},
+
+		clearError() {
+			set({ error: null });
+		},
+
+		setError(error) {
+			set({ error });
+		},
+	}));
+}

@@ -4,7 +4,6 @@ import { X } from "lucide-react";
 import { useParams, usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand";
-import { ChatProvider } from "@/components/chat/chat-context";
 import { Header } from "@/components/header";
 import { ChatHistory } from "@/components/sidebar/chat-history";
 import {
@@ -14,6 +13,7 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { SessionProvider } from "@/lib/auth/session-context";
+import { ChatStoreProvider } from "@/providers/chat-store-provider";
 
 interface ChatLayoutProps {
 	children: ReactNode;
@@ -30,7 +30,7 @@ export default function ChatLayout({ children }: ChatLayoutProps) {
 
 	return (
 		<SessionProvider>
-			<ChatProvider>
+			<ChatStoreProvider>
 				<div className="flex h-dvh flex-col overflow-hidden bg-bg-primary">
 					<Header
 						isSidebarOpen={isSidebarOpen}
@@ -58,7 +58,7 @@ export default function ChatLayout({ children }: ChatLayoutProps) {
 						<main className="flex-1 overflow-hidden">{children}</main>
 					</div>
 				</div>
-			</ChatProvider>
+			</ChatStoreProvider>
 		</SessionProvider>
 	);
 }
