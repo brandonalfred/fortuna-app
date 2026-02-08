@@ -74,15 +74,32 @@ model Chat {
   sessionId String    @unique @map("session_id")
   sandboxId       String?   @map("sandbox_id")
   agentSessionId  String?   @map("agent_session_id")
+  executorStatus  String?   @map("executor_status")
+  storageVersion  Int       @default(2) @map("storage_version")
+  lastSequenceNum Int       @default(0) @map("last_sequence_num")
   userId    String    @map("user_id")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
+  events    ChatEvent[]
 
   @@index([createdAt])
   @@index([userId])
   @@map("chat")
+}
+
+model ChatEvent {
+  id          String   @id @default(uuid())
+  chatId      String   @map("chat_id")
+  type        String
+  data        Json
+  sequenceNum Int      @map("sequence_num")
+  createdAt   DateTime @default(now()) @map("created_at")
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, sequenceNum])
+  @@map("chat_event")
 }
 
 model Message {
