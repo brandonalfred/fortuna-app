@@ -25,6 +25,8 @@ bunx prisma generate # Regenerate Prisma client (required before type-check/lint
 - **shadcn/ui** components - add via `bunx shadcn@latest add <component>`
 - **Prisma 7** with PostgreSQL (Neon serverless adapter)
 - **Better Auth** for authentication (email/password, with MFA planned)
+- **Zustand** for client state management (vanilla stores + React providers)
+- **React Query** (`@tanstack/react-query`) for server state/data fetching
 - **Claude Agent SDK** for AI-powered sports betting analysis
 - **Vercel Sandbox** for secure agent code execution in production
 
@@ -80,24 +82,28 @@ Player and team statistics from API-Sports.io for NBA, NFL, MLB, and NHL. Used b
 src/
 ├── app/
 │   ├── (chat)/                    # Chat route group (shared layout with sidebar)
-│   │   ├── layout.tsx             # Chat layout with sidebar management
-│   │   ├── new/
-│   │   │   └── page.tsx           # New chat page
-│   │   └── chat/
-│   │       └── [id]/
-│   │           └── page.tsx       # Existing chat page (by ID)
+│   │   ├── layout.tsx             # Chat layout: QueryProvider → SessionProvider → ChatStoreProvider
+│   │   ├── new/page.tsx           # New chat page
+│   │   └── chat/[id]/page.tsx     # Existing chat page (by ID)
+│   ├── auth/                      # Auth pages (signin, signup)
 │   ├── api/
 │   │   ├── chat/route.ts         # SSE streaming endpoint for agent responses
 │   │   └── chats/                # Chat CRUD operations
 │   ├── globals.css               # Tailwind v4 theme with design tokens
-│   ├── layout.tsx                # Root layout with fonts
-│   └── page.tsx                  # Redirects to /new
+│   └── layout.tsx                # Root layout with fonts
 ├── components/
 │   ├── chat/                     # Chat UI (input, messages, tool display)
 │   ├── sidebar/                  # Chat history sidebar
 │   └── ui/                      # shadcn/ui primitives
 ├── hooks/
-│   └── use-chat.ts              # SSE streaming and message state management
+│   ├── use-chat.ts              # SSE streaming and message state management
+│   ├── use-chat-actions.ts      # Unified hook combining chat + queue store selectors
+│   └── use-chat-query.ts        # React Query wrapper for chat data fetching
+├── stores/
+│   ├── chat-store.ts            # Zustand vanilla store: messages, streaming, SSE event processing
+│   └── queue-store.ts           # Zustand store: message queue with localStorage persistence
+├── providers/
+│   └── chat-store-provider.tsx  # React provider wrapping Zustand stores, manages chat lifecycle
 ├── lib/
 │   ├── agent/
 │   │   ├── client.ts            # Claude Agent SDK wrapper (local + sandbox modes)
@@ -105,12 +111,30 @@ src/
 │   │   └── workspace.ts        # Per-session workspace isolation
 │   ├── auth/
 │   │   ├── index.ts             # Better Auth server config (Prisma adapter, additionalFields)
-│   │   └── client.ts           # Better Auth React client (useSession, signIn, signUp, signOut)
+│   │   ├── client.ts           # Better Auth React client (useSession, signIn, signUp, signOut)
+│   │   └── session-context.tsx  # SessionProvider wrapping Better Auth's useSession via React Context
 │   ├── prisma.ts               # Prisma client singleton with Neon adapter
 │   ├── types.ts                # TypeScript types for chat/messages
+│   ├── segments.ts             # Reconstructs message segments from DB columns for history loading
+│   ├── sse.ts                  # parseSSEStream() async generator + deduplication
+│   ├── api.ts                  # API helpers (unauthorized, notFound, getAuthenticatedUser)
 │   └── validations/            # Zod schemas for API validation
+├── middleware.ts                # Route protection via Better Auth session cookies
 └── .claude/skills/             # Agent skills loaded at runtime
 ```
+
+### State Management Pattern
+
+Client state uses **Zustand vanilla stores** (not React Context for state):
+- `chat-store.ts` — core chat state (messages, streaming status, error handling, SSE event dispatch)
+- `queue-store.ts` — message queue with `zustand/middleware` `persist` for localStorage durability
+- `chat-store-provider.tsx` — bridges Zustand stores into React, manages lifecycle and cross-store subscriptions
+
+The stores use callback patterns (`onChatCreated`, `onStreamComplete`) for navigation side effects, keeping stores framework-agnostic.
+
+### Provider Hierarchy
+
+The `(chat)/layout.tsx` wraps children in: `QueryProvider → SessionProvider → ChatStoreProvider`
 
 ## Agent System
 
@@ -139,7 +163,8 @@ Each chat gets its own ephemeral Vercel Sandbox instance (5-hour timeout). Sandb
 | `src/lib/agent/workspace.ts` | Creates isolated workspace per session |
 | `src/lib/agent/system-prompt.md` | Agent persona and security rules |
 | `src/app/api/chat/route.ts` | SSE streaming endpoint with conversation history |
-| `src/hooks/use-chat.ts` | React hook for SSE parsing and state |
+| `src/stores/chat-store.ts` | Zustand store: SSE event processing, message state |
+| `src/hooks/use-chat-actions.ts` | Unified hook combining store selectors for components |
 
 ### Agent Capabilities
 
@@ -174,7 +199,9 @@ Each chat gets its own ephemeral Vercel Sandbox instance (5-hour timeout). Sandb
 | `WORKSPACE_ROOT` | Agent workspace root (default: `./workspace`) |
 | `BETTER_AUTH_SECRET` | Secret key for Better Auth session signing |
 | `BETTER_AUTH_URL` | Base URL of the app (e.g., `http://localhost:3000`) |
+| `WEBSHARE_PROXY_URL` | Rotating residential proxy for NBA.com API access |
 | `AGENT_SANDBOX_SNAPSHOT_ID` | Optional Vercel Sandbox snapshot for faster cold starts |
+| `DATABASE_URL_UNPOOLED` | Direct (non-pooled) DB connection, used by migration verification script |
 
 **Vercel env var gotcha:** When setting env vars via `vercel env add` with pipe input, use `printf` instead of `echo` to avoid a trailing newline being stored as part of the value. For example:
 
@@ -187,6 +214,14 @@ echo "my-value" | vercel env add MY_VAR production
 ```
 
 The Vercel Sandbox API does exact-match on snapshot IDs, so a trailing `\n` causes 404s. The code trims `AGENT_SANDBOX_SNAPSHOT_ID` defensively, but other env vars may not be as forgiving.
+
+## Middleware
+
+`src/middleware.ts` handles route protection using `better-auth/cookies` `getSessionCookie()`. Unauthenticated users are redirected to `/auth/signin`. Excludes `/api/auth`, `_next/static`, `_next/image`, and `favicon.ico`.
+
+## Testing
+
+No test suite exists yet. If adding tests, conventions will need to be established from scratch.
 
 ## Path Aliases
 
