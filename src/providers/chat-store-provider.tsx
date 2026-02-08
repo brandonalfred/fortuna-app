@@ -17,6 +17,7 @@ const QueueStoreContext = createContext<QueueStoreApi | null>(null);
 
 const RELOAD_THROTTLE_MS = 5000;
 const STALE_STREAM_THRESHOLD_MS = 2000;
+const STALE_STREAM_CHECK_DELAY_MS = 1000;
 const STALE_STREAM_RELOAD_DELAY_MS = 1000;
 
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
@@ -146,13 +147,17 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			}
 
 			if (state.isLoading && hiddenDuration > STALE_STREAM_THRESHOLD_MS) {
-				state.abortController?.abort();
 				const id = state.currentChat?.id;
 				if (id) {
-					setTimeout(
-						() => chatStore.getState().reloadChat(id),
-						STALE_STREAM_RELOAD_DELAY_MS,
-					);
+					setTimeout(() => {
+						const current = chatStore.getState();
+						if (!current.isLoading) return;
+						current.abortController?.abort();
+						setTimeout(
+							() => chatStore.getState().reloadChat(id),
+							STALE_STREAM_RELOAD_DELAY_MS,
+						);
+					}, STALE_STREAM_CHECK_DELAY_MS);
 				}
 				return;
 			}

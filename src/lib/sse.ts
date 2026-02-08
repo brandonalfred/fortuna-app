@@ -14,6 +14,7 @@ export async function* parseSSEStream(
 	const decoder = new TextDecoder();
 	let buffer = "";
 	let currentEventType = "";
+	let currentEventId = "";
 	let eventCounter = 0;
 
 	while (true) {
@@ -27,12 +28,15 @@ export async function* parseSSEStream(
 		for (const line of lines) {
 			if (line.startsWith("event: ")) {
 				currentEventType = line.slice(7);
+			} else if (line.startsWith("id: ")) {
+				currentEventId = line.slice(4);
 			} else if (line.startsWith("data: ")) {
 				try {
 					const data = JSON.parse(line.slice(6));
-					const id = `sse-${++eventCounter}`;
+					const id = currentEventId || `sse-${++eventCounter}`;
 					log.debug("Event", { id, type: currentEventType });
 					yield { id, type: currentEventType, data };
+					currentEventId = "";
 				} catch {
 					log.warn("Failed to parse data line", {
 						preview: line.slice(6, 100),
