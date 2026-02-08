@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Message, QueuedMessage, StreamingMessage } from "@/lib/types";
 import {
 	MessageItem,
@@ -62,10 +62,14 @@ export function MessageList({
 		};
 	}, []);
 
-	const lastUserMessageIndex = messages.findLastIndex(
-		(msg) => msg.role === "user",
+	const lastUserMessageIndex = useMemo(
+		() => messages.findLastIndex((msg) => msg.role === "user"),
+		[messages],
 	);
-	const lastMessageRole = messages[messages.length - 1]?.role;
+	const lastMessageRole = useMemo(
+		() => messages[messages.length - 1]?.role,
+		[messages],
+	);
 
 	function getMessageRef(
 		index: number,
