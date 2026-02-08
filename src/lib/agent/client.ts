@@ -63,20 +63,17 @@ function getSystemPrompt(timezone?: string): string {
 
 function getSkillFiles(): Array<{ name: string; content: string }> {
 	const skillsDir = path.join(process.cwd(), ".claude/skills");
-	const skills: Array<{ name: string; content: string }> = [];
+	if (!fs.existsSync(skillsDir)) return [];
 
-	if (fs.existsSync(skillsDir)) {
-		for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-			if (entry.isDirectory()) {
-				const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
-				if (fs.existsSync(skillPath)) {
-					skills.push({
-						name: entry.name,
-						content: fs.readFileSync(skillPath, "utf-8"),
-					});
-				}
-			}
-		}
+	const skills: Array<{ name: string; content: string }> = [];
+	for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+		if (!entry.isDirectory()) continue;
+		const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
+		if (!fs.existsSync(skillPath)) continue;
+		skills.push({
+			name: entry.name,
+			content: fs.readFileSync(skillPath, "utf-8"),
+		});
 	}
 	return skills;
 }
@@ -97,7 +94,6 @@ function getClaudeCodeCliPath(): string {
 }
 
 export type { Query };
-export type AgentMessage = SDKMessage;
 
 interface ConversationMessage {
 	role: "user" | "assistant";
@@ -239,6 +235,7 @@ async function createFreshSandbox(): Promise<Sandbox> {
 
 async function createSandbox(
 	snapshotId: string | undefined,
+	onStatus?: StatusCallback,
 ): Promise<{ sandbox: Sandbox; usedSnapshot: boolean }> {
 	if (!snapshotId) {
 		return { sandbox: await createFreshSandbox(), usedSnapshot: false };
@@ -255,6 +252,10 @@ async function createSandbox(
 		console.warn(
 			"[Sandbox] Snapshot unavailable, falling back to fresh sandbox:",
 			error instanceof Error ? error.message : error,
+		);
+		onStatus?.(
+			"installing",
+			"Setting up fresh environment (this may take a moment)...",
 		);
 		return { sandbox: await createFreshSandbox(), usedSnapshot: false };
 	}
@@ -292,11 +293,16 @@ async function getOrCreateSandbox(
 	);
 
 	onStatus?.("initializing", "Initializing environment...");
-	const { sandbox, usedSnapshot } = await createSandbox(snapshotId);
+	const { sandbox, usedSnapshot } = await createSandbox(snapshotId, onStatus);
 	console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
 
 	if (!usedSnapshot) {
-		onStatus?.("installing", "Installing analysis tools...");
+		onStatus?.(
+			"installing",
+			"Setting up fresh environment (this may take a moment)...",
+		);
+
+		onStatus?.("installing", "Installing core tools (1/4)...");
 		await runSandboxCommand(
 			sandbox,
 			{
@@ -306,6 +312,7 @@ async function getOrCreateSandbox(
 			"Installing Claude Code CLI",
 		);
 
+		onStatus?.("installing", "Installing SDKs (2/4)...");
 		await runSandboxCommand(
 			sandbox,
 			{
@@ -319,6 +326,7 @@ async function getOrCreateSandbox(
 			"Installing SDKs",
 		);
 
+		onStatus?.("installing", "Installing system tools (3/4)...");
 		await runSandboxCommand(
 			sandbox,
 			{
@@ -332,6 +340,7 @@ async function getOrCreateSandbox(
 			"Installing Python 3, pip, and system tools",
 		);
 
+		onStatus?.("installing", "Installing analysis packages (4/4)...");
 		await runSandboxCommand(
 			sandbox,
 			{
@@ -458,17 +467,16 @@ function parseSandboxLine(line: string): SandboxLineResult | null {
 
 	try {
 		const parsed = JSON.parse(line);
-
-		if (parsed.type === "sdk_message") {
-			return { message: parsed.data as SDKMessage };
+		switch (parsed.type) {
+			case "sdk_message":
+				return { message: parsed.data as SDKMessage };
+			case "error":
+				return { error: parsed.error };
+			case "complete":
+				return { complete: true };
+			default:
+				return null;
 		}
-		if (parsed.type === "error") {
-			return { error: parsed.error };
-		}
-		if (parsed.type === "complete") {
-			return { complete: true };
-		}
-		return null;
 	} catch {
 		if (!line.startsWith("{")) {
 			console.log("[Sandbox] Non-JSON output:", line);
@@ -644,50 +652,17 @@ async function* streamViaSandbox({
 	}
 }
 
-interface TextBlock {
-	type: "text";
-	text: string;
-}
-
 interface ThinkingBlock {
 	type: "thinking";
 	thinking: string;
 	signature: string;
 }
 
-interface ToolUseBlock {
-	type: "tool_use";
-	id: string;
-	name: string;
-	input: unknown;
-}
-
-type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | { type: string };
+type ContentBlock = ThinkingBlock | { type: string };
 
 function getAssistantContent(message: SDKMessage): ContentBlock[] | null {
 	if (message.type !== "assistant") return null;
 	return message.message.content as ContentBlock[];
-}
-
-export function extractTextFromMessage(message: SDKMessage): string | null {
-	const content = getAssistantContent(message);
-	if (!content) return null;
-
-	return content
-		.filter((block): block is TextBlock => block.type === "text")
-		.map((block) => block.text)
-		.join("");
-}
-
-export function extractToolUseFromMessage(
-	message: SDKMessage,
-): Array<{ id: string; name: string; input: unknown }> | null {
-	const content = getAssistantContent(message);
-	if (!content) return null;
-
-	return content
-		.filter((block): block is ToolUseBlock => block.type === "tool_use")
-		.map(({ id, name, input }) => ({ id, name, input }));
 }
 
 export function extractThinkingFromMessage(message: SDKMessage): string | null {

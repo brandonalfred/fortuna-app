@@ -11,7 +11,7 @@ import {
 	Loader2,
 	X,
 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ContentSegment, Message, ToolUse } from "@/lib/types";
@@ -62,10 +62,8 @@ function getToolSummary(name: string, input: unknown): string | null {
 				return null;
 			}
 		}
-		case "Bash": {
-			const cmd = obj.command as string | undefined;
-			return cmd ? truncate(cmd) : null;
-		}
+		case "Bash":
+			return null;
 		case "Read":
 		case "Write":
 		case "Edit": {
@@ -83,6 +81,34 @@ function getToolSummary(name: string, input: unknown): string | null {
 	}
 }
 
+interface CollapsibleToolUse extends ToolUse {
+	_groupCount?: number;
+}
+
+function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
+	const result: ContentSegment[] = [];
+	for (const seg of segments) {
+		const prev = result[result.length - 1];
+		if (
+			seg.type === "tool_use" &&
+			seg.tool.name === "Bash" &&
+			prev?.type === "tool_use" &&
+			prev.tool.name === "Bash"
+		) {
+			const prevTool = prev.tool as CollapsibleToolUse;
+			prevTool._groupCount = (prevTool._groupCount ?? 1) + 1;
+			if (seg.tool.status === "running") prevTool.status = "running";
+			continue;
+		}
+		if (seg.type === "tool_use") {
+			result.push({ type: "tool_use", tool: { ...seg.tool } });
+		} else {
+			result.push(seg);
+		}
+	}
+	return result;
+}
+
 const PROSE_CLASSES =
 	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
 
@@ -90,9 +116,31 @@ interface MessageItemProps {
 	message: Message;
 }
 
+function renderMessageContent(message: Message): ReactNode {
+	if (message.role === "user") {
+		return <p>{message.content}</p>;
+	}
+
+	const hasSegments = message.segments && message.segments.length > 0;
+
+	if (hasSegments) {
+		return collapseToolSegments(message.segments!).map((segment, idx) => (
+			<SegmentRenderer key={getSegmentKey(segment, idx)} segment={segment} />
+		));
+	}
+
+	return (
+		<>
+			<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+			{message.stopReason && message.stopReason !== "end_turn" && (
+				<StopNoticeBanner stopReason={message.stopReason} />
+			)}
+		</>
+	);
+}
+
 export function MessageItem({ message }: MessageItemProps) {
 	const isUser = message.role === "user";
-	const hasSegments = message.segments && message.segments.length > 0;
 
 	return (
 		<div
@@ -107,26 +155,7 @@ export function MessageItem({ message }: MessageItemProps) {
 					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
 				)}
 			>
-				<div className={PROSE_CLASSES}>
-					{isUser ? (
-						<p>{message.content}</p>
-					) : hasSegments ? (
-						message.segments!.map((segment, idx) => (
-							<SegmentRenderer
-								key={getSegmentKey(segment, idx)}
-								segment={segment}
-							/>
-						))
-					) : (
-						<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
-					)}
-					{!isUser &&
-						message.stopReason &&
-						message.stopReason !== "end_turn" &&
-						!hasSegments && (
-							<StopNoticeBanner stopReason={message.stopReason} />
-						)}
-				</div>
+				<div className={PROSE_CLASSES}>{renderMessageContent(message)}</div>
 			</div>
 		</div>
 	);
@@ -154,7 +183,7 @@ export function StreamingMessageItem({
 		<div className="animate-message-in flex w-full justify-start">
 			<div className="max-w-[85%] rounded-lg px-4 py-3 text-text-primary">
 				<div className={PROSE_CLASSES}>
-					{segments.map((segment, idx) => (
+					{collapseToolSegments(segments).map((segment, idx) => (
 						<SegmentRenderer
 							key={getSegmentKey(segment, idx)}
 							segment={segment}
@@ -208,7 +237,7 @@ function LoadingIndicator({ statusMessage }: LoadingIndicatorProps) {
 		<span className="ml-1 inline-flex items-center gap-2">
 			<Loader2 className="h-4 w-4 animate-spin text-accent-primary" />
 			{statusMessage && (
-				<span className="text-xs text-text-tertiary animate-subtle-pulse">
+				<span className="text-xs text-text-secondary animate-subtle-pulse">
 					{statusMessage}
 				</span>
 			)}
@@ -321,7 +350,10 @@ function formatToolInput(input: unknown): string {
 
 function ToolUsePill({ tool }: ToolUsePillProps) {
 	const [expanded, setExpanded] = useState(false);
-	const label = getToolLabel(tool.name);
+	const groupCount = (tool as CollapsibleToolUse)._groupCount;
+	const baseLabel = getToolLabel(tool.name);
+	const label =
+		groupCount && groupCount > 1 ? `${baseLabel} (${groupCount})` : baseLabel;
 	const summary = getToolSummary(tool.name, tool.input);
 	const isRunning = tool.status === "running";
 	const Chevron = expanded ? ChevronDown : ChevronRight;
