@@ -13,6 +13,7 @@ bun run lint:check   # Lint without fixing (CI)
 bun run lint:prisma  # Lint Prisma schema naming conventions
 bun run type-check   # TypeScript type checking
 bunx prisma generate # Regenerate Prisma client (required before type-check/lint after fresh install or schema changes)
+bun install          # Run when type-check fails with "Cannot find module" errors for installed packages
 ```
 
 ## Tech Stack
@@ -244,6 +245,8 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - `Message` - Messages with `role`, `content`, optional `thinking`, and tool metadata
 
 **Important:** After a fresh `bun install` or any schema change, run `bunx prisma generate` before `bun run type-check` or `bun run lint:check` — the generated Prisma client is not committed and must be regenerated locally.
+
+**Troubleshooting type-check failures:** If `bun run type-check` fails with `TS2307: Cannot find module` errors for packages that should be installed (e.g., `zustand`, `@tanstack/react-query`), run `bun install` first to restore missing dependencies from the lockfile.
 
 **Migration requirement:** Every change to `prisma/schema.prisma` MUST include a corresponding migration file. The build runs `prisma migrate deploy` which only applies existing migrations — without a migration file, schema changes will not reach the database. Use `vercel env pull .env --environment preview` to get database credentials, then:
 
