@@ -47,6 +47,62 @@ function toUserFriendlyError(error: unknown): string {
 	return "Something went wrong. Please try again.";
 }
 
+const MAX_TOOL_RESULT_DB_LIMIT = 2000;
+
+interface ContentBlock {
+	type: string;
+	text?: string;
+	content?: unknown;
+	is_error?: boolean;
+}
+
+function isContentBlock(value: unknown): value is ContentBlock {
+	return typeof value === "object" && value !== null && "type" in value;
+}
+
+function extractTextParts(content: unknown): string[] {
+	if (typeof content === "string") return [content];
+	if (!Array.isArray(content)) return [];
+
+	const parts: string[] = [];
+	for (const inner of content) {
+		if (isContentBlock(inner) && inner.type === "text" && inner.text) {
+			parts.push(inner.text);
+		}
+	}
+	return parts;
+}
+
+function extractToolResultContent(msg: {
+	message: { content: unknown };
+}): string {
+	const content = msg.message.content;
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+
+	const parts: string[] = [];
+	for (const block of content) {
+		if (!isContentBlock(block)) continue;
+
+		if (block.type === "tool_result") {
+			parts.push(...extractTextParts(block.content));
+		} else if (block.type === "text" && block.text) {
+			parts.push(block.text);
+		}
+	}
+	return parts.join("\n");
+}
+
+function extractIsError(content: unknown): boolean {
+	if (!Array.isArray(content)) return false;
+	return content.some(
+		(block) =>
+			isContentBlock(block) &&
+			block.type === "tool_result" &&
+			block.is_error === true,
+	);
+}
+
 async function retryOnTransientError<T>(
 	fn: () => Promise<T>,
 	delayMs = 1000,
@@ -383,7 +439,7 @@ export async function POST(req: Request): Promise<Response> {
 										}
 									} else if (block.type === "tool_use") {
 										lastEventWasToolUse = true;
-										const { name, input } = block;
+										const { id: toolUseId, name, input } = block;
 										toolUses.push({ name, input });
 										sendEvent("tool_use", { name, input });
 										if (isV2) {
@@ -391,6 +447,7 @@ export async function POST(req: Request): Promise<Response> {
 											pendingEvents.push({
 												type: "tool_use",
 												data: {
+													toolUseId,
 													name,
 													input,
 												} as Prisma.InputJsonValue,
@@ -478,6 +535,27 @@ export async function POST(req: Request): Promise<Response> {
 										} satisfies Prisma.InputJsonValue,
 									});
 								}
+								break;
+							}
+							case "user": {
+								if (!isV2) break;
+								if (!msg.parent_tool_use_id) break;
+
+								let text = extractToolResultContent(msg);
+								if (!text) break;
+								if (text.length > MAX_TOOL_RESULT_DB_LIMIT) {
+									text = `${text.slice(0, MAX_TOOL_RESULT_DB_LIMIT)}...[truncated]`;
+								}
+
+								flushTextBuffer();
+								pendingEvents.push({
+									type: "tool_result",
+									data: {
+										toolUseId: msg.parent_tool_use_id,
+										content: text,
+										isError: extractIsError(msg.message.content),
+									} as Prisma.InputJsonValue,
+								});
 								break;
 							}
 						}
