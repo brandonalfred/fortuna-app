@@ -82,7 +82,7 @@ export function ChatInput({
 					"border-0 rounded-none bg-transparent shadow-none",
 					"text-text-primary placeholder:text-text-tertiary",
 					"focus-visible:ring-0 focus-visible:border-0",
-					"font-body text-sm",
+					"font-body",
 				)}
 			/>
 			<Button
