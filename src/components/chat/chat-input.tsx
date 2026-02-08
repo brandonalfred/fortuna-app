@@ -91,7 +91,7 @@ export function ChatInput({
 				disabled={disabled || (!isLoading && !value.trim())}
 				size="icon"
 				className={cn(
-					"absolute right-1.5 bottom-1.5 h-10 w-10 sm:right-2 sm:bottom-2 sm:h-8 sm:w-8 shrink-0",
+					"absolute right-1.5 bottom-1.5 h-9 w-9 sm:right-2 sm:bottom-2 sm:h-8 sm:w-8 shrink-0",
 					"bg-accent-primary hover:bg-accent-hover",
 					"text-text-inverse",
 					"transition-all duration-200",
