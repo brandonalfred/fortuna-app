@@ -165,6 +165,7 @@ export async function POST(req: Request): Promise<Response> {
 				let capturedSessionId: string | undefined;
 				let assistantMessageId: string | null = null;
 				let lastSaveTime = 0;
+				let saveInFlight: Promise<void> | null = null;
 				const SAVE_DEBOUNCE_MS = 2000;
 
 				function saveInBackground(): void {
@@ -174,6 +175,10 @@ export async function POST(req: Request): Promise<Response> {
 				}
 
 				async function saveAssistantMessage(isFinal = false): Promise<void> {
+					if (saveInFlight) {
+						await saveInFlight;
+					}
+
 					if (!fullAssistantContent && toolUses.length === 0) return;
 					if (
 						!isFinal &&
@@ -182,29 +187,38 @@ export async function POST(req: Request): Promise<Response> {
 					)
 						return;
 
-					const data = {
-						chatId: chat.id,
-						role: "assistant" as const,
-						content: fullAssistantContent,
-						thinking: fullThinkingContent || null,
-						stopReason: isFinal ? resultStopReason : null,
-						toolName: toolUses[0]?.name,
-						toolInput:
-							toolUses.length > 0
-								? (toolUses as unknown as Prisma.InputJsonValue)
-								: undefined,
+					const doSave = async () => {
+						const data = {
+							chatId: chat.id,
+							role: "assistant" as const,
+							content: fullAssistantContent,
+							thinking: fullThinkingContent || null,
+							stopReason: isFinal ? resultStopReason : null,
+							toolName: toolUses[0]?.name,
+							toolInput:
+								toolUses.length > 0
+									? (toolUses as unknown as Prisma.InputJsonValue)
+									: undefined,
+						};
+
+						if (!assistantMessageId) {
+							const msg = await prisma.message.create({ data });
+							assistantMessageId = msg.id;
+						} else {
+							await prisma.message.update({
+								where: { id: assistantMessageId },
+								data,
+							});
+						}
+						lastSaveTime = Date.now();
 					};
 
-					if (!assistantMessageId) {
-						const msg = await prisma.message.create({ data });
-						assistantMessageId = msg.id;
-					} else {
-						await prisma.message.update({
-							where: { id: assistantMessageId },
-							data,
-						});
+					saveInFlight = doSave();
+					try {
+						await saveInFlight;
+					} finally {
+						saveInFlight = null;
 					}
-					lastSaveTime = Date.now();
 				}
 
 				try {

@@ -136,7 +136,7 @@ export function useChat(options: UseChatOptions = {}) {
 						updatedAt: new Date().toISOString(),
 						messages: prev?.messages || [],
 					}));
-					if (!chatId) {
+					if (!chatId && !creatingChatRef.current) {
 						creatingChatRef.current = true;
 						onChatCreatedRef.current?.(initData.chatId);
 					}
@@ -503,8 +503,10 @@ export function useChat(options: UseChatOptions = {}) {
 		};
 
 		const handleVisibilityChange = () => {
-			if (document.visibilityState === "visible") {
-				tryReload();
+			if (document.visibilityState !== "visible") return;
+			tryReload();
+			if (!disconnectedChatRef.current && !isLoading && currentChat?.id) {
+				reloadChat(currentChat.id);
 			}
 		};
 
@@ -514,24 +516,7 @@ export function useChat(options: UseChatOptions = {}) {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 			window.removeEventListener("online", tryReload);
 		};
-	}, [reloadChat]);
-
-	useEffect(() => {
-		const handleVisibilityResume = () => {
-			if (document.visibilityState !== "visible") return;
-			if (disconnectedChatRef.current) return;
-			if (isLoading) return;
-			const activeChatId = currentChat?.id;
-			if (activeChatId) {
-				reloadChat(activeChatId);
-			}
-		};
-
-		document.addEventListener("visibilitychange", handleVisibilityResume);
-		return () => {
-			document.removeEventListener("visibilitychange", handleVisibilityResume);
-		};
-	}, [currentChat?.id, isLoading, reloadChat]);
+	}, [reloadChat, currentChat?.id, isLoading]);
 
 	return {
 		messages,
