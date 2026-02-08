@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { useSessionContext } from "@/lib/auth/session-context";
 import { capitalize, cn } from "@/lib/utils";
@@ -44,6 +44,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 	const [error, setError] = useState<string | null>(null);
 	const router = useRouter();
 	const { session, isPending } = useSessionContext();
+	// When a new chat is created mid-stream, we update the URL immediately via
+	// history.replaceState (to avoid unmounting the component), then sync the
+	// Next.js router once streaming completes.
+	const pendingNavigationRef = useRef<string | null>(null);
 
 	const {
 		messages,
@@ -59,13 +63,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 		chatId,
 		onError: setError,
 		onChatCreated: (newChatId) => {
-			router.replace(`/chat/${newChatId}`);
+			window.history.replaceState(null, "", `/chat/${newChatId}`);
+			pendingNavigationRef.current = newChatId;
 		},
 		onChatNotFound: () => {
 			setError("Chat not found");
 			router.replace("/new");
 		},
 	});
+
+	useEffect(() => {
+		if (isLoading || !pendingNavigationRef.current) return;
+		const chatPath = `/chat/${pendingNavigationRef.current}`;
+		pendingNavigationRef.current = null;
+		router.replace(chatPath);
+	}, [isLoading, router]);
 
 	const handleSend = useCallback(
 		(message: string) => {
