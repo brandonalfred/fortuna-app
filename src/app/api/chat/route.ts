@@ -128,10 +128,11 @@ export async function POST(req: Request): Promise<Response> {
 
 		const stream = new ReadableStream({
 			async start(controller) {
+				let eventId = 0;
 				const sendEvent = (event: string, data: unknown) => {
 					controller.enqueue(
 						encoder.encode(
-							`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+							`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
 						),
 					);
 				};

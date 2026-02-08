@@ -85,3 +85,13 @@ export interface DoneEvent {
 export interface ErrorEvent {
 	message: string;
 }
+
+export interface StreamingMessage {
+	segments: ContentSegment[];
+	isStreaming: boolean;
+}
+
+export interface QueuedMessage {
+	id: string;
+	content: string;
+}
