@@ -12,6 +12,7 @@ export interface Message {
 	chatId: string;
 	role: "user" | "assistant" | "tool_use" | "tool_result";
 	content: string;
+	thinking?: string | null;
 	toolName?: string | null;
 	toolInput?: unknown;
 	stopReason?: string | null;
