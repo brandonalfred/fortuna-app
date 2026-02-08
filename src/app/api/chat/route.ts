@@ -230,6 +230,7 @@ export async function POST(req: Request): Promise<Response> {
 				let textBuffer = "";
 				const pendingEvents: PendingEvent[] = [];
 				let safetyTimerId: ReturnType<typeof setInterval> | null = null;
+				let flushInFlight = false;
 
 				function flushTextBuffer(): void {
 					if (!textBuffer) return;
@@ -241,7 +242,8 @@ export async function POST(req: Request): Promise<Response> {
 				}
 
 				async function flushEvents(): Promise<void> {
-					if (pendingEvents.length === 0) return;
+					if (flushInFlight || pendingEvents.length === 0) return;
+					flushInFlight = true;
 					const batch = pendingEvents.splice(0, pendingEvents.length);
 					const startSeq = nextSequenceNum;
 					const creates = batch.map((e, idx) =>
@@ -255,17 +257,26 @@ export async function POST(req: Request): Promise<Response> {
 						}),
 					);
 					nextSequenceNum = startSeq + batch.length;
-					await prisma.$transaction([
-						...creates,
-						prisma.chat.update({
-							where: { id: chat.id },
-							data: { lastSequenceNum: nextSequenceNum },
-						}),
-					]);
+					try {
+						await prisma.$transaction([
+							...creates,
+							prisma.chat.update({
+								where: { id: chat.id },
+								data: { lastSequenceNum: nextSequenceNum },
+							}),
+						]);
+					} catch (error) {
+						pendingEvents.unshift(...batch);
+						nextSequenceNum = startSeq;
+						throw error;
+					} finally {
+						flushInFlight = false;
+					}
 				}
 
 				if (isV2) {
 					safetyTimerId = setInterval(() => {
+						if (flushInFlight) return;
 						if (textBuffer) {
 							flushTextBuffer();
 							flushEvents().catch((e) =>
