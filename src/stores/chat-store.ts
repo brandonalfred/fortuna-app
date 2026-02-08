@@ -93,11 +93,16 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 		},
 
 		markToolsComplete() {
-			for (const segment of get().streamingSegments) {
-				if (segment.type === "tool_use") {
-					segment.tool.status = "complete";
-				}
-			}
+			set({
+				streamingSegments: get().streamingSegments.map((segment) =>
+					segment.type === "tool_use"
+						? {
+								...segment,
+								tool: { ...segment.tool, status: "complete" as const },
+							}
+						: segment,
+				),
+			});
 			get().publishSegments();
 		},
 
