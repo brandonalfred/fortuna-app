@@ -4,6 +4,7 @@ import {
 	notFound,
 	unauthorized,
 } from "@/lib/api";
+import { eventsToMessages } from "@/lib/events";
 import { prisma } from "@/lib/prisma";
 import { updateChatSchema } from "@/lib/validations/chat";
 
@@ -26,6 +27,9 @@ export async function GET(
 			messages: {
 				orderBy: { createdAt: "asc" },
 			},
+			events: {
+				orderBy: { sequenceNum: "asc" },
+			},
 		},
 	});
 
@@ -33,7 +37,13 @@ export async function GET(
 		return notFound("Chat");
 	}
 
-	return Response.json(chat);
+	const { events, ...rest } = chat;
+	const useEvents = chat.storageVersion === 2 && events.length > 0;
+
+	return Response.json({
+		...rest,
+		messages: useEvents ? eventsToMessages(events) : rest.messages,
+	});
 }
 
 export async function PATCH(

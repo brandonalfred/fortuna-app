@@ -13,7 +13,9 @@ import {
 	serverError,
 	unauthorized,
 } from "@/lib/api";
+import { rebuildConversationHistory } from "@/lib/events";
 import { prisma } from "@/lib/prisma";
+import type { ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
 
 const TRANSIENT_DB_PATTERNS = [
@@ -62,6 +64,13 @@ async function retryOnTransientError<T>(
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+interface PendingEvent {
+	type: string;
+	data: Prisma.InputJsonValue;
+}
+
+const SAFETY_FLUSH_MS = 5000;
+
 export async function POST(req: Request): Promise<Response> {
 	try {
 		const user = await getAuthenticatedUser();
@@ -84,21 +93,32 @@ export async function POST(req: Request): Promise<Response> {
 				})
 			: null;
 
-		const existingMessages = existingChat
-			? await prisma.message.findMany({
-					where: { chatId: existingChat.id },
-					orderBy: { createdAt: "asc" },
-				})
-			: [];
+		const isV2 = existingChat ? existingChat.storageVersion === 2 : true;
+
+		let conversationHistory: ConversationMessage[];
+
+		if (existingChat && isV2) {
+			const events = await prisma.chatEvent.findMany({
+				where: { chatId: existingChat.id },
+				orderBy: { sequenceNum: "asc" },
+			});
+			conversationHistory = rebuildConversationHistory(events);
+		} else if (existingChat) {
+			const existingMessages = await prisma.message.findMany({
+				where: { chatId: existingChat.id },
+				orderBy: { createdAt: "asc" },
+			});
+			conversationHistory = existingMessages.map((m) => ({
+				role: m.role as "user" | "assistant",
+				content: m.content,
+				thinking: m.thinking,
+			}));
+		} else {
+			conversationHistory = [];
+		}
 
 		const sessionId = existingChat?.sessionId || randomUUID();
 		const workspacePath = await getOrCreateWorkspace(sessionId);
-
-		const conversationHistory = existingMessages.map((m) => ({
-			role: m.role as "user" | "assistant",
-			content: m.content,
-			thinking: m.thinking,
-		}));
 
 		const chat =
 			existingChat ||
@@ -111,16 +131,35 @@ export async function POST(req: Request): Promise<Response> {
 			}));
 
 		console.log(
-			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} history=${conversationHistory.length}`,
+			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} v=${isV2 ? 2 : 1} history=${conversationHistory.length}`,
 		);
 
-		await prisma.message.create({
-			data: {
-				chatId: chat.id,
-				role: "user",
-				content: message,
-			},
-		});
+		let nextSequenceNum = existingChat?.lastSequenceNum ?? 0;
+		if (isV2) {
+			nextSequenceNum++;
+			await prisma.$transaction([
+				prisma.chatEvent.create({
+					data: {
+						chatId: chat.id,
+						type: "user_message",
+						data: { content: message } satisfies Prisma.InputJsonValue,
+						sequenceNum: nextSequenceNum,
+					},
+				}),
+				prisma.chat.update({
+					where: { id: chat.id },
+					data: { lastSequenceNum: nextSequenceNum },
+				}),
+			]);
+		} else {
+			await prisma.message.create({
+				data: {
+					chatId: chat.id,
+					role: "user",
+					content: message,
+				},
+			});
+		}
 
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
@@ -161,19 +200,91 @@ export async function POST(req: Request): Promise<Response> {
 				let pendingThinking = "";
 				let inThinkingBlock = false;
 
-				function appendThinking(text: string): void {
-					fullThinkingContent += (fullThinkingContent ? "\n\n" : "") + text;
+				function recordThinking(thinking: string): void {
+					sendEvent("thinking", { thinking });
+					fullThinkingContent += fullThinkingContent
+						? `\n\n${thinking}`
+						: thinking;
+					if (isV2) {
+						flushTextBuffer();
+						pendingEvents.push({
+							type: "thinking",
+							data: { thinking } satisfies Prisma.InputJsonValue,
+						});
+					}
 				}
+
 				const toolUses: Array<{ name: string; input: unknown }> = [];
 				let lastEventWasToolUse = false;
 				const sentThinkingIds = new Set<string>();
 
 				let resultStopReason: string | null = null;
+				let resultSubtype: string | null = null;
 				let capturedSessionId: string | undefined;
+
 				let assistantMessageId: string | null = null;
 				let lastSaveTime = 0;
 				let saveInFlight: Promise<void> | null = null;
 				const SAVE_DEBOUNCE_MS = 2000;
+
+				let textBuffer = "";
+				const pendingEvents: PendingEvent[] = [];
+				let safetyTimerId: ReturnType<typeof setInterval> | null = null;
+				let flushInFlight = false;
+
+				function flushTextBuffer(): void {
+					if (!textBuffer) return;
+					pendingEvents.push({
+						type: "text",
+						data: { content: textBuffer } satisfies Prisma.InputJsonValue,
+					});
+					textBuffer = "";
+				}
+
+				async function flushEvents(): Promise<void> {
+					if (flushInFlight || pendingEvents.length === 0) return;
+					flushInFlight = true;
+					const batch = pendingEvents.splice(0, pendingEvents.length);
+					const startSeq = nextSequenceNum;
+					const creates = batch.map((e, idx) =>
+						prisma.chatEvent.create({
+							data: {
+								chatId: chat.id,
+								type: e.type,
+								data: e.data,
+								sequenceNum: startSeq + idx + 1,
+							},
+						}),
+					);
+					nextSequenceNum = startSeq + batch.length;
+					try {
+						await prisma.$transaction([
+							...creates,
+							prisma.chat.update({
+								where: { id: chat.id },
+								data: { lastSequenceNum: nextSequenceNum },
+							}),
+						]);
+					} catch (error) {
+						pendingEvents.unshift(...batch);
+						nextSequenceNum = startSeq;
+						throw error;
+					} finally {
+						flushInFlight = false;
+					}
+				}
+
+				if (isV2) {
+					safetyTimerId = setInterval(() => {
+						if (flushInFlight) return;
+						if (textBuffer) {
+							flushTextBuffer();
+							flushEvents().catch((e) =>
+								console.warn("[Chat API] Safety flush failed:", e),
+							);
+						}
+					}, SAFETY_FLUSH_MS);
+				}
 
 				function saveInBackground(): void {
 					saveAssistantMessage().catch((e) =>
@@ -240,7 +351,17 @@ export async function POST(req: Request): Promise<Response> {
 							sendEvent("delta", { text: "\n\n" });
 							fullAssistantContent += "\n\n";
 							lastEventWasToolUse = false;
-							saveInBackground();
+							if (isV2) {
+								textBuffer += "\n\n";
+								flushTextBuffer();
+								pendingEvents.push({
+									type: "turn_complete",
+									data: {} satisfies Prisma.InputJsonValue,
+								});
+								await retryOnTransientError(() => flushEvents());
+							} else {
+								saveInBackground();
+							}
 						}
 
 						switch (msg.type) {
@@ -249,23 +370,35 @@ export async function POST(req: Request): Promise<Response> {
 								if (!fullThinkingContent && !sentThinkingIds.has(messageId)) {
 									const thinking = extractThinkingFromMessage(msg);
 									if (thinking) {
-										sendEvent("thinking", { thinking });
 										sentThinkingIds.add(messageId);
-										appendThinking(thinking);
+										recordThinking(thinking);
 									}
 								}
 
 								for (const block of msg.message.content) {
 									if (block.type === "text") {
 										fullAssistantContent += block.text;
+										if (isV2) {
+											textBuffer += block.text;
+										}
 									} else if (block.type === "tool_use") {
 										lastEventWasToolUse = true;
 										const { name, input } = block;
 										toolUses.push({ name, input });
 										sendEvent("tool_use", { name, input });
+										if (isV2) {
+											flushTextBuffer();
+											pendingEvents.push({
+												type: "tool_use",
+												data: {
+													name,
+													input,
+												} as Prisma.InputJsonValue,
+											});
+										}
 									}
 								}
-								if (!assistantMessageId) {
+								if (!isV2 && !assistantMessageId) {
 									saveInBackground();
 								}
 								break;
@@ -277,10 +410,7 @@ export async function POST(req: Request): Promise<Response> {
 									"content_block" in event
 								) {
 									if (inThinkingBlock && pendingThinking) {
-										sendEvent("thinking", {
-											thinking: pendingThinking,
-										});
-										appendThinking(pendingThinking);
+										recordThinking(pendingThinking);
 										pendingThinking = "";
 									}
 									const block = event.content_block as {
@@ -298,6 +428,9 @@ export async function POST(req: Request): Promise<Response> {
 									};
 									if (delta.type === "text_delta" && delta.text) {
 										sendEvent("delta", { text: delta.text });
+										if (isV2) {
+											textBuffer += delta.text;
+										}
 									} else if (
 										delta.type === "thinking_delta" &&
 										delta.thinking
@@ -309,10 +442,7 @@ export async function POST(req: Request): Promise<Response> {
 									inThinkingBlock &&
 									pendingThinking
 								) {
-									sendEvent("thinking", {
-										thinking: pendingThinking,
-									});
-									appendThinking(pendingThinking);
+									recordThinking(pendingThinking);
 									pendingThinking = "";
 									inThinkingBlock = false;
 								}
@@ -321,6 +451,7 @@ export async function POST(req: Request): Promise<Response> {
 							case "result": {
 								resultStopReason =
 									"stop_reason" in msg ? (msg.stop_reason as string) : null;
+								resultSubtype = msg.subtype;
 								if (msg.session_id) {
 									capturedSessionId = msg.session_id;
 								}
@@ -336,6 +467,17 @@ export async function POST(req: Request): Promise<Response> {
 										cost_usd: msg.cost_usd,
 									}),
 								});
+
+								if (isV2) {
+									flushTextBuffer();
+									pendingEvents.push({
+										type: "result",
+										data: {
+											stopReason: resultStopReason,
+											subtype: resultSubtype,
+										} satisfies Prisma.InputJsonValue,
+									});
+								}
 								break;
 							}
 						}
@@ -345,7 +487,12 @@ export async function POST(req: Request): Promise<Response> {
 						`[Chat API] Stream complete content=${fullAssistantContent.length} tools=${toolUses.length}`,
 					);
 
-					await retryOnTransientError(() => saveAssistantMessage(true));
+					if (isV2) {
+						flushTextBuffer();
+						await retryOnTransientError(() => flushEvents());
+					} else {
+						await retryOnTransientError(() => saveAssistantMessage(true));
+					}
 
 					if (capturedSessionId) {
 						try {
@@ -381,8 +528,15 @@ export async function POST(req: Request): Promise<Response> {
 						}
 					}
 				} finally {
+					if (safetyTimerId) clearInterval(safetyTimerId);
+
 					try {
-						await saveAssistantMessage(true);
+						if (isV2) {
+							flushTextBuffer();
+							await flushEvents();
+						} else {
+							await saveAssistantMessage(true);
+						}
 					} catch (e) {
 						console.error("[Chat API] Failed to save partial response:", e);
 					}

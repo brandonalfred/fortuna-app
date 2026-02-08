@@ -10,10 +10,14 @@ import {
 import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { prisma } from "@/lib/prisma";
+import type { ConversationMessage } from "@/lib/types";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
 const SANDBOX_TIMEOUT = ms("5h");
+
+const SPAWN_LOCK_TIMEOUT = ms("2m");
+const SPAWN_POLL_INTERVAL = 1000;
 
 const AGENT_MODEL = "claude-opus-4-6";
 
@@ -95,12 +99,6 @@ function getClaudeCodeCliPath(): string {
 
 export type { Query };
 
-interface ConversationMessage {
-	role: "user" | "assistant";
-	content: string;
-	thinking?: string | null;
-}
-
 type StatusCallback = (stage: string, message: string) => void;
 
 export interface StreamAgentOptions {
@@ -112,6 +110,28 @@ export interface StreamAgentOptions {
 	timezone?: string;
 	agentSessionId?: string;
 	onStatus?: StatusCallback;
+}
+
+function summarizeToolInput(input: unknown): string {
+	if (typeof input === "string") {
+		return input.length > 50 ? input.slice(0, 50) : input;
+	}
+	if (input && typeof input === "object") {
+		const obj = input as Record<string, unknown>;
+		if (typeof obj.query === "string") return obj.query;
+		if (typeof obj.name === "string") return obj.name;
+	}
+	return "";
+}
+
+function formatToolsSummary(
+	tools: Array<{ name: string; input: unknown }>,
+): string {
+	const parts = tools.map((t) => {
+		const summary = summarizeToolInput(t.input);
+		return summary ? `${t.name}(${summary})` : t.name;
+	});
+	return `[Tools used]: ${parts.join(", ")}`;
 }
 
 function buildFullPrompt(
@@ -130,7 +150,11 @@ function buildFullPrompt(
 			const thinkingPart = msg.thinking
 				? `[Your internal reasoning]: ${msg.thinking}\n\n`
 				: "";
-			return `${thinkingPart}Assistant: ${msg.content}`;
+			const toolsPart =
+				msg.tools && msg.tools.length > 0
+					? `\n${formatToolsSummary(msg.tools)}`
+					: "";
+			return `${thinkingPart}Assistant: ${msg.content}${toolsPart}`;
 		})
 		.join("\n\n");
 
@@ -261,6 +285,49 @@ async function createSandbox(
 	}
 }
 
+async function acquireSpawnLock(chatId: string): Promise<boolean> {
+	const staleThreshold = new Date(Date.now() - SPAWN_LOCK_TIMEOUT);
+	const result = await prisma.chat.updateMany({
+		where: {
+			id: chatId,
+			OR: [
+				{ executorStatus: null },
+				{ executorStatus: "spawning", updatedAt: { lt: staleThreshold } },
+			],
+		},
+		data: { executorStatus: "spawning" },
+	});
+	return result.count > 0;
+}
+
+async function releaseSpawnLock(
+	chatId: string,
+	sandboxId: string,
+): Promise<void> {
+	await prisma.chat.update({
+		where: { id: chatId },
+		data: { executorStatus: null, sandboxId, agentSessionId: null },
+	});
+}
+
+async function clearSpawnLock(chatId: string): Promise<void> {
+	await prisma.chat.update({
+		where: { id: chatId },
+		data: { executorStatus: null, sandboxId: null, agentSessionId: null },
+	});
+}
+
+async function waitForSandbox(chatId: string): Promise<string> {
+	const deadline = Date.now() + SPAWN_LOCK_TIMEOUT;
+	while (Date.now() < deadline) {
+		await new Promise((r) => setTimeout(r, SPAWN_POLL_INTERVAL));
+		const chat = await prisma.chat.findUnique({ where: { id: chatId } });
+		if (chat?.sandboxId && !chat.executorStatus) return chat.sandboxId;
+		if (!chat?.executorStatus) break;
+	}
+	throw new Error("Timed out waiting for sandbox to be created");
+}
+
 async function getOrCreateSandbox(
 	chatId: string,
 	onStatus?: StatusCallback,
@@ -286,109 +353,132 @@ async function getOrCreateSandbox(
 		}
 	}
 
-	const snapshotId = process.env.AGENT_SANDBOX_SNAPSHOT_ID?.trim() || undefined;
-	console.log(
-		"[Sandbox] Creating new sandbox",
-		snapshotId ? `from snapshot: ${snapshotId}` : "(no snapshot)",
-	);
-
-	onStatus?.("initializing", "Initializing environment...");
-	const { sandbox, usedSnapshot } = await createSandbox(snapshotId, onStatus);
-	console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
-
-	if (!usedSnapshot) {
-		onStatus?.(
-			"installing",
-			"Setting up fresh environment (this may take a moment)...",
+	const acquired = await acquireSpawnLock(chatId);
+	if (!acquired) {
+		console.log(
+			"[Sandbox] Another request is spawning, waiting for sandbox...",
 		);
-
-		onStatus?.("installing", "Installing core tools (1/4)...");
-		await runSandboxCommand(
-			sandbox,
-			{
-				cmd: "bash",
-				args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
-			},
-			"Installing Claude Code CLI",
-		);
-
-		onStatus?.("installing", "Installing SDKs (2/4)...");
-		await runSandboxCommand(
-			sandbox,
-			{
-				cmd: "npm",
-				args: [
-					"install",
-					"@anthropic-ai/claude-agent-sdk",
-					"@anthropic-ai/sdk",
-				],
-			},
-			"Installing SDKs",
-		);
-
-		onStatus?.("installing", "Installing system tools (3/4)...");
-		await runSandboxCommand(
-			sandbox,
-			{
-				cmd: "bash",
-				args: [
-					"-c",
-					"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
-				],
-				sudo: true,
-			},
-			"Installing Python 3, pip, and system tools",
-		);
-
-		onStatus?.("installing", "Installing analysis packages (4/4)...");
-		await runSandboxCommand(
-			sandbox,
-			{
-				cmd: "bash",
-				args: [
-					"-c",
-					[
-						"PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install",
-						"pandas numpy scipy",
-						"requests httpx beautifulsoup4 lxml",
-						"python-dateutil pytz",
-						"matplotlib",
-						"scikit-learn",
-						"duckdb",
-						"nba_api",
-					].join(" "),
-				],
-				sudo: true,
-			},
-			"Installing Python packages",
-		);
-	}
-
-	onStatus?.("configuring", "Configuring tools...");
-	const skills = getSkillFiles();
-	console.log(`[Sandbox] Setting up ${skills.length} skills...`);
-
-	for (const skill of skills) {
-		const skillDir = `/vercel/sandbox/.claude/skills/${skill.name}`;
-		await sandbox.runCommand({
-			cmd: "mkdir",
-			args: ["-p", skillDir],
+		onStatus?.("preparing", "Another request is setting up the environment...");
+		const sandboxId = await waitForSandbox(chatId);
+		const sandbox = await Sandbox.get({ sandboxId });
+		const refreshed = await prisma.chat.findUnique({
+			where: { id: chatId },
 		});
-		await sandbox.writeFiles([
-			{
-				path: `${skillDir}/SKILL.md`,
-				content: Buffer.from(skill.content),
-			},
-		]);
-		console.log(`[Sandbox] Copied skill: ${skill.name}`);
+		return {
+			sandbox,
+			sandboxReused: true,
+			previousAgentSessionId: refreshed?.agentSessionId ?? null,
+		};
 	}
 
-	await prisma.chat.update({
-		where: { id: chatId },
-		data: { sandboxId: sandbox.sandboxId, agentSessionId: null },
-	});
+	try {
+		const snapshotId =
+			process.env.AGENT_SANDBOX_SNAPSHOT_ID?.trim() || undefined;
+		console.log(
+			"[Sandbox] Creating new sandbox",
+			snapshotId ? `from snapshot: ${snapshotId}` : "(no snapshot)",
+		);
 
-	return { sandbox, sandboxReused: false, previousAgentSessionId: null };
+		onStatus?.("initializing", "Initializing environment...");
+		const { sandbox, usedSnapshot } = await createSandbox(snapshotId, onStatus);
+		console.log("[Sandbox] Created new sandbox:", sandbox.sandboxId);
+
+		if (!usedSnapshot) {
+			onStatus?.(
+				"installing",
+				"Setting up fresh environment (this may take a moment)...",
+			);
+
+			onStatus?.("installing", "Installing core tools (1/4)...");
+			await runSandboxCommand(
+				sandbox,
+				{
+					cmd: "bash",
+					args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
+				},
+				"Installing Claude Code CLI",
+			);
+
+			onStatus?.("installing", "Installing SDKs (2/4)...");
+			await runSandboxCommand(
+				sandbox,
+				{
+					cmd: "npm",
+					args: [
+						"install",
+						"@anthropic-ai/claude-agent-sdk",
+						"@anthropic-ai/sdk",
+					],
+				},
+				"Installing SDKs",
+			);
+
+			onStatus?.("installing", "Installing system tools (3/4)...");
+			await runSandboxCommand(
+				sandbox,
+				{
+					cmd: "bash",
+					args: [
+						"-c",
+						"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
+					],
+					sudo: true,
+				},
+				"Installing Python 3, pip, and system tools",
+			);
+
+			onStatus?.("installing", "Installing analysis packages (4/4)...");
+			await runSandboxCommand(
+				sandbox,
+				{
+					cmd: "bash",
+					args: [
+						"-c",
+						[
+							"PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install",
+							"pandas numpy scipy",
+							"requests httpx beautifulsoup4 lxml",
+							"python-dateutil pytz",
+							"matplotlib",
+							"scikit-learn",
+							"duckdb",
+							"nba_api",
+						].join(" "),
+					],
+					sudo: true,
+				},
+				"Installing Python packages",
+			);
+		}
+
+		onStatus?.("configuring", "Configuring tools...");
+		const skills = getSkillFiles();
+		console.log(`[Sandbox] Setting up ${skills.length} skills...`);
+
+		for (const skill of skills) {
+			const skillDir = `/vercel/sandbox/.claude/skills/${skill.name}`;
+			await sandbox.runCommand({
+				cmd: "mkdir",
+				args: ["-p", skillDir],
+			});
+			await sandbox.writeFiles([
+				{
+					path: `${skillDir}/SKILL.md`,
+					content: Buffer.from(skill.content),
+				},
+			]);
+			console.log(`[Sandbox] Copied skill: ${skill.name}`);
+		}
+
+		await releaseSpawnLock(chatId, sandbox.sandboxId);
+
+		return { sandbox, sandboxReused: false, previousAgentSessionId: null };
+	} catch (error) {
+		await clearSpawnLock(chatId).catch((e) =>
+			console.error("[Sandbox] Failed to clear spawn lock:", e),
+		);
+		throw error;
+	}
 }
 
 function generateAgentScript(
