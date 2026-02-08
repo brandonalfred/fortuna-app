@@ -107,17 +107,21 @@ export function useChat(options: UseChatOptions = {}) {
 
 	const chatId = options.chatId;
 
+	const publishSegments = useCallback(() => {
+		setStreamingMessage({
+			segments: [...streamingSegmentsRef.current],
+			isStreaming: true,
+		});
+	}, []);
+
 	const markToolsComplete = useCallback(() => {
 		for (const segment of streamingSegmentsRef.current) {
 			if (segment.type === "tool_use") {
 				segment.tool.status = "complete";
 			}
 		}
-		setStreamingMessage({
-			segments: [...streamingSegmentsRef.current],
-			isStreaming: true,
-		});
-	}, []);
+		publishSegments();
+	}, [publishSegments]);
 
 	const handleEvent = useCallback(
 		(type: string, data: unknown) => {
@@ -133,7 +137,7 @@ export function useChat(options: UseChatOptions = {}) {
 						updatedAt: new Date().toISOString(),
 						messages: prev?.messages || [],
 					}));
-					if (!chatId) {
+					if (!chatId && !creatingChatRef.current) {
 						creatingChatRef.current = true;
 						onChatCreatedRef.current?.(initData.chatId);
 					}
@@ -156,10 +160,7 @@ export function useChat(options: UseChatOptions = {}) {
 						segments.push({ type: "text", text: deltaData.text });
 					}
 
-					setStreamingMessage({
-						segments: [...segments],
-						isStreaming: true,
-					});
+					publishSegments();
 					break;
 				}
 				case "thinking": {
@@ -170,10 +171,7 @@ export function useChat(options: UseChatOptions = {}) {
 						thinking: thinkingData.thinking,
 						isComplete: true,
 					});
-					setStreamingMessage({
-						segments: [...streamingSegmentsRef.current],
-						isStreaming: true,
-					});
+					publishSegments();
 					break;
 				}
 				case "tool_use": {
@@ -186,10 +184,7 @@ export function useChat(options: UseChatOptions = {}) {
 							status: "running",
 						},
 					});
-					setStreamingMessage({
-						segments: [...streamingSegmentsRef.current],
-						isStreaming: true,
-					});
+					publishSegments();
 					break;
 				}
 				case "turn_complete": {
@@ -223,7 +218,7 @@ export function useChat(options: UseChatOptions = {}) {
 				}
 			}
 		},
-		[chatId, markToolsComplete],
+		[chatId, markToolsComplete, publishSegments],
 	);
 
 	const finalizeStreamingMessage = useCallback(() => {
@@ -387,6 +382,20 @@ export function useChat(options: UseChatOptions = {}) {
 					throw new Error("Failed to send message");
 				}
 
+				const headerChatId = response.headers.get("X-Chat-Id");
+				if (headerChatId && !currentChat?.id) {
+					creatingChatRef.current = true;
+					onChatCreatedRef.current?.(headerChatId);
+					setCurrentChat((prev) => ({
+						id: headerChatId,
+						sessionId: prev?.sessionId || "",
+						title: prev?.title || "",
+						createdAt: prev?.createdAt || new Date().toISOString(),
+						updatedAt: new Date().toISOString(),
+						messages: prev?.messages || [],
+					}));
+				}
+
 				const reader = response.body?.getReader();
 				if (!reader) {
 					throw new Error("No response body");
@@ -495,8 +504,10 @@ export function useChat(options: UseChatOptions = {}) {
 		};
 
 		const handleVisibilityChange = () => {
-			if (document.visibilityState === "visible") {
-				tryReload();
+			if (document.visibilityState !== "visible") return;
+			tryReload();
+			if (!disconnectedChatRef.current && !isLoading && currentChat?.id) {
+				reloadChat(currentChat.id);
 			}
 		};
 
@@ -506,7 +517,7 @@ export function useChat(options: UseChatOptions = {}) {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 			window.removeEventListener("online", tryReload);
 		};
-	}, [reloadChat]);
+	}, [reloadChat, currentChat?.id, isLoading]);
 
 	return {
 		messages,

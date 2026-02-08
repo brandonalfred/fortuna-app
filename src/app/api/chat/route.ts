@@ -45,6 +45,20 @@ function toUserFriendlyError(error: unknown): string {
 	return "Something went wrong. Please try again.";
 }
 
+async function retryOnTransientError<T>(
+	fn: () => Promise<T>,
+	delayMs = 1000,
+): Promise<T> {
+	try {
+		return await fn();
+	} catch (error) {
+		if (!isTransientDbError(error)) throw error;
+		console.warn("[Chat API] Transient DB error, retrying:", error);
+		await new Promise((r) => setTimeout(r, delayMs));
+		return fn();
+	}
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -155,25 +169,62 @@ export async function POST(req: Request): Promise<Response> {
 
 				let resultStopReason: string | null = null;
 				let capturedSessionId: string | undefined;
-				let savedToDb = false;
-				async function saveAssistantMessage(): Promise<void> {
-					if (savedToDb) return;
+				let assistantMessageId: string | null = null;
+				let lastSaveTime = 0;
+				let saveInFlight: Promise<void> | null = null;
+				const SAVE_DEBOUNCE_MS = 2000;
+
+				function saveInBackground(): void {
+					saveAssistantMessage().catch((e) =>
+						console.warn("[Chat API] Background save failed:", e),
+					);
+				}
+
+				async function saveAssistantMessage(isFinal = false): Promise<void> {
+					if (saveInFlight) {
+						await saveInFlight;
+					}
+
 					if (!fullAssistantContent && toolUses.length === 0) return;
-					await prisma.message.create({
-						data: {
+					if (
+						!isFinal &&
+						assistantMessageId &&
+						Date.now() - lastSaveTime < SAVE_DEBOUNCE_MS
+					)
+						return;
+
+					const doSave = async () => {
+						const data = {
 							chatId: chat.id,
-							role: "assistant",
+							role: "assistant" as const,
 							content: fullAssistantContent,
 							thinking: fullThinkingContent || null,
-							stopReason: resultStopReason,
+							stopReason: isFinal ? resultStopReason : null,
 							toolName: toolUses[0]?.name,
 							toolInput:
 								toolUses.length > 0
 									? (toolUses as unknown as Prisma.InputJsonValue)
 									: undefined,
-						},
-					});
-					savedToDb = true;
+						};
+
+						if (!assistantMessageId) {
+							const msg = await prisma.message.create({ data });
+							assistantMessageId = msg.id;
+						} else {
+							await prisma.message.update({
+								where: { id: assistantMessageId },
+								data,
+							});
+						}
+						lastSaveTime = Date.now();
+					};
+
+					saveInFlight = doSave();
+					try {
+						await saveInFlight;
+					} finally {
+						saveInFlight = null;
+					}
 				}
 
 				try {
@@ -188,6 +239,7 @@ export async function POST(req: Request): Promise<Response> {
 							sendEvent("delta", { text: "\n\n" });
 							fullAssistantContent += "\n\n";
 							lastEventWasToolUse = false;
+							saveInBackground();
 						}
 
 						switch (msg.type) {
@@ -211,6 +263,9 @@ export async function POST(req: Request): Promise<Response> {
 										toolUses.push({ name, input });
 										sendEvent("tool_use", { name, input });
 									}
+								}
+								if (!assistantMessageId) {
+									saveInBackground();
 								}
 								break;
 							}
@@ -289,44 +344,24 @@ export async function POST(req: Request): Promise<Response> {
 						`[Chat API] Stream complete content=${fullAssistantContent.length} tools=${toolUses.length}`,
 					);
 
-					try {
-						await saveAssistantMessage();
-					} catch (saveError) {
-						if (!isTransientDbError(saveError)) throw saveError;
-						console.warn(
-							"[Chat API] Transient DB error, retrying save:",
-							saveError,
-						);
-						await new Promise((r) => setTimeout(r, 1000));
-						await saveAssistantMessage();
-					}
+					await retryOnTransientError(() => saveAssistantMessage(true));
 
 					if (capturedSessionId) {
 						try {
-							await prisma.chat.update({
-								where: { id: chat.id },
-								data: { agentSessionId: capturedSessionId },
-							});
+							await retryOnTransientError(() =>
+								prisma.chat.update({
+									where: { id: chat.id },
+									data: { agentSessionId: capturedSessionId },
+								}),
+							);
 							console.log(
 								`[Chat API] Persisted agentSessionId=${capturedSessionId}`,
 							);
 						} catch (err) {
-							if (isTransientDbError(err)) {
-								console.warn(
-									"[Chat API] Transient DB error persisting agentSessionId, retrying:",
-									err,
-								);
-								await new Promise((r) => setTimeout(r, 1000));
-								await prisma.chat.update({
-									where: { id: chat.id },
-									data: { agentSessionId: capturedSessionId },
-								});
-							} else {
-								console.error(
-									"[Chat API] Failed to persist agentSessionId:",
-									err,
-								);
-							}
+							console.error(
+								"[Chat API] Failed to persist agentSessionId:",
+								err,
+							);
 						}
 					}
 
@@ -346,7 +381,7 @@ export async function POST(req: Request): Promise<Response> {
 					}
 				} finally {
 					try {
-						await saveAssistantMessage();
+						await saveAssistantMessage(true);
 					} catch (e) {
 						console.error("[Chat API] Failed to save partial response:", e);
 					}
@@ -373,6 +408,7 @@ export async function POST(req: Request): Promise<Response> {
 				"Cache-Control": "no-cache, no-transform",
 				Connection: "keep-alive",
 				"X-Accel-Buffering": "no",
+				"X-Chat-Id": chat.id,
 			},
 		});
 	} catch (error) {
