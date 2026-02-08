@@ -76,6 +76,7 @@ export function ChatInput({
 				onKeyDown={handleKeyDown}
 				placeholder={placeholder}
 				disabled={disabled}
+				enterKeyHint="send"
 				rows={1}
 				className={cn(
 					"min-h-[44px] max-h-[200px] resize-none py-3 pr-12",
@@ -90,7 +91,7 @@ export function ChatInput({
 				disabled={disabled || (!isLoading && !value.trim())}
 				size="icon"
 				className={cn(
-					"absolute right-2 bottom-2 h-8 w-8 shrink-0",
+					"absolute right-2.5 bottom-2.5 h-7 w-7 shrink-0",
 					"bg-accent-primary hover:bg-accent-hover",
 					"text-text-inverse",
 					"transition-all duration-200",
@@ -98,9 +99,9 @@ export function ChatInput({
 				)}
 			>
 				{isLoading ? (
-					<Square className="h-4 w-4" />
+					<Square className="h-3.5 w-3.5" />
 				) : (
-					<ArrowUp className="h-4 w-4" />
+					<ArrowUp className="h-3.5 w-3.5" />
 				)}
 			</Button>
 		</div>
