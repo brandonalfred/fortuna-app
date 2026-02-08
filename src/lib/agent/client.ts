@@ -112,6 +112,28 @@ export interface StreamAgentOptions {
 	onStatus?: StatusCallback;
 }
 
+function summarizeToolInput(input: unknown): string {
+	if (typeof input === "string") {
+		return input.length > 50 ? input.slice(0, 50) : input;
+	}
+	if (input && typeof input === "object") {
+		const obj = input as Record<string, unknown>;
+		if (typeof obj.query === "string") return obj.query;
+		if (typeof obj.name === "string") return obj.name;
+	}
+	return "";
+}
+
+function formatToolsSummary(
+	tools: Array<{ name: string; input: unknown }>,
+): string {
+	const parts = tools.map((t) => {
+		const summary = summarizeToolInput(t.input);
+		return summary ? `${t.name}(${summary})` : t.name;
+	});
+	return `[Tools used]: ${parts.join(", ")}`;
+}
+
 function buildFullPrompt(
 	prompt: string,
 	conversationHistory: ConversationMessage[],
@@ -128,7 +150,11 @@ function buildFullPrompt(
 			const thinkingPart = msg.thinking
 				? `[Your internal reasoning]: ${msg.thinking}\n\n`
 				: "";
-			return `${thinkingPart}Assistant: ${msg.content}`;
+			const toolsPart =
+				msg.tools && msg.tools.length > 0
+					? `\n${formatToolsSummary(msg.tools)}`
+					: "";
+			return `${thinkingPart}Assistant: ${msg.content}${toolsPart}`;
 		})
 		.join("\n\n");
 
@@ -260,8 +286,15 @@ async function createSandbox(
 }
 
 async function acquireSpawnLock(chatId: string): Promise<boolean> {
+	const staleThreshold = new Date(Date.now() - SPAWN_LOCK_TIMEOUT);
 	const result = await prisma.chat.updateMany({
-		where: { id: chatId, executorStatus: null },
+		where: {
+			id: chatId,
+			OR: [
+				{ executorStatus: null },
+				{ executorStatus: "spawning", updatedAt: { lt: staleThreshold } },
+			],
+		},
 		data: { executorStatus: "spawning" },
 	});
 	return result.count > 0;
@@ -317,17 +350,6 @@ async function getOrCreateSandbox(
 				"[Sandbox] Existing sandbox expired or unavailable:",
 				error instanceof Error ? error.message : error,
 			);
-		}
-	}
-
-	// Stale lock protection: force-clear locks older than 2 minutes
-	if (chat?.executorStatus) {
-		const lockAge = Date.now() - chat.updatedAt.getTime();
-		if (lockAge > SPAWN_LOCK_TIMEOUT) {
-			console.warn(
-				`[Sandbox] Clearing stale spawn lock (age=${lockAge}ms) for chat=${chatId}`,
-			);
-			await clearSpawnLock(chatId);
 		}
 	}
 

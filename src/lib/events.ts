@@ -20,6 +20,8 @@ function appendWithSeparator(existing: string, addition: string): string {
 }
 
 export function eventsToMessages(events: ChatEvent[]): Message[] {
+	if (events.length === 0) return [];
+
 	const messages: Message[] = [];
 	let currentSegments: ContentSegment[] = [];
 	let currentContent = "";
@@ -126,16 +128,20 @@ export function rebuildConversationHistory(
 	const history: ConversationMessage[] = [];
 	let assistantContent = "";
 	let assistantThinking = "";
+	let assistantTools: Array<{ name: string; input: unknown }> = [];
 
 	function flushAssistant() {
-		if (!assistantContent && !assistantThinking) return;
+		if (!assistantContent && !assistantThinking && assistantTools.length === 0)
+			return;
 		history.push({
 			role: "assistant",
 			content: assistantContent,
 			thinking: assistantThinking || null,
+			tools: assistantTools.length > 0 ? [...assistantTools] : undefined,
 		});
 		assistantContent = "";
 		assistantThinking = "";
+		assistantTools = [];
 	}
 
 	for (const event of events) {
@@ -161,8 +167,14 @@ export function rebuildConversationHistory(
 				assistantContent += data.content ?? "";
 				break;
 			}
+			case "tool_use": {
+				assistantTools.push({
+					name: data.name ?? "",
+					input: data.input,
+				});
+				break;
+			}
 			case "turn_complete":
-			case "tool_use":
 			case "result":
 				break;
 		}

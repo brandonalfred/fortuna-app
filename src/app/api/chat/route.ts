@@ -243,17 +243,18 @@ export async function POST(req: Request): Promise<Response> {
 				async function flushEvents(): Promise<void> {
 					if (pendingEvents.length === 0) return;
 					const batch = pendingEvents.splice(0, pendingEvents.length);
-					const creates = batch.map((e) => {
-						nextSequenceNum++;
-						return prisma.chatEvent.create({
+					const startSeq = nextSequenceNum;
+					const creates = batch.map((e, idx) =>
+						prisma.chatEvent.create({
 							data: {
 								chatId: chat.id,
 								type: e.type,
 								data: e.data,
-								sequenceNum: nextSequenceNum,
+								sequenceNum: startSeq + idx + 1,
 							},
-						});
-					});
+						}),
+					);
+					nextSequenceNum = startSeq + batch.length;
 					await prisma.$transaction([
 						...creates,
 						prisma.chat.update({

@@ -96,6 +96,7 @@ export interface ConversationMessage {
 	role: "user" | "assistant";
 	content: string;
 	thinking?: string | null;
+	tools?: Array<{ name: string; input: unknown }>;
 }
 
 export interface QueuedMessage {
