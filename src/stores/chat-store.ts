@@ -1,6 +1,5 @@
 import { createStore } from "zustand/vanilla";
 import { createLogger } from "@/lib/logger";
-import { hydrateMessageSegments } from "@/lib/segments";
 import { createDeduplicator, parseSSEStream } from "@/lib/sse";
 import type {
 	Chat,
@@ -44,7 +43,6 @@ interface ChatState {
 	abortController: AbortController | null;
 	stopReason: { stopReason: string; subtype: string } | null;
 	disconnectedChatId: string | null;
-	lastReloadAttempt: number;
 	loadedChatId: string | undefined;
 	isCreatingChat: boolean;
 }
@@ -54,8 +52,6 @@ interface ChatActions {
 	publishSegments(): void;
 	markToolsComplete(): void;
 	finalizeStreamingMessage(): void;
-	fetchChat(chatId: string, opts?: { silent?: boolean }): Promise<boolean>;
-	reloadChat(chatId: string): Promise<void>;
 	sendMessage(content: string): Promise<void>;
 	stopGeneration(): void;
 	startNewChat(): void;
@@ -67,7 +63,7 @@ export type ChatStore = ChatState & ChatActions;
 
 export interface ChatStoreCallbacks {
 	onChatCreated?: (chatId: string) => void;
-	onChatNotFound?: () => void;
+	onStreamComplete?: (chatId: string) => void;
 	getQueueStore: () => QueueStore;
 }
 
@@ -84,7 +80,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 		abortController: null,
 		stopReason: null,
 		disconnectedChatId: null,
-		lastReloadAttempt: 0,
 		loadedChatId: undefined,
 		isCreatingChat: false,
 
@@ -258,43 +253,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			});
 		},
 
-		async fetchChat(chatId, opts) {
-			log.info("Fetching chat", { chatId });
-			try {
-				const response = await fetch(`/api/chats/${chatId}`);
-				if (!response.ok) {
-					if (!opts?.silent) throw new Error("Failed to load chat");
-					return false;
-				}
-				const chat: Chat = await response.json();
-				set({
-					currentChat: chat,
-					messages: (chat.messages || []).map(hydrateMessageSegments),
-					sessionId: chat.sessionId,
-				});
-				callbacks.getQueueStore().clear();
-				return true;
-			} catch (error) {
-				if (!opts?.silent) {
-					const errorMessage =
-						error instanceof Error ? error.message : "Failed to load chat";
-					set({ error: errorMessage });
-				}
-				return false;
-			}
-		},
-
-		async reloadChat(chatId) {
-			log.info("Reloading chat", { chatId });
-			const success = await get().fetchChat(chatId, { silent: true });
-			if (success) {
-				set({
-					disconnectedChatId: null,
-					error: null,
-				});
-			}
-		},
-
 		startNewChat() {
 			set({
 				currentChat: null,
@@ -403,7 +361,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							error: "Connection lost. Reloading response...",
 						});
 						log.warn("Network error, will reload", { disconnectedId });
-						setTimeout(() => get().reloadChat(disconnectedId), 2000);
 					}
 					return;
 				}
@@ -419,6 +376,10 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					statusMessage: null,
 				});
 				get().finalizeStreamingMessage();
+				const chatId = get().currentChat?.id;
+				if (chatId) {
+					callbacks.onStreamComplete?.(chatId);
+				}
 			}
 		},
 

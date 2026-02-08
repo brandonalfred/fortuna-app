@@ -1,8 +1,16 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { createContext, type ReactNode, use, useEffect, useState } from "react";
+import {
+	createContext,
+	type ReactNode,
+	use,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { useStore } from "zustand";
+import { useChatQuery, useInvalidateChat } from "@/hooks/use-chat-query";
 import { createLogger } from "@/lib/logger";
 import { type ChatStore, createChatStore } from "@/stores/chat-store";
 import { createQueueStore, type QueueStore } from "@/stores/queue-store";
@@ -15,14 +23,12 @@ type QueueStoreApi = ReturnType<typeof createQueueStore>;
 const ChatStoreContext = createContext<ChatStoreApi | null>(null);
 const QueueStoreContext = createContext<QueueStoreApi | null>(null);
 
-const RELOAD_THROTTLE_MS = 5000;
-const STALE_STREAM_THRESHOLD_MS = 2000;
-const STALE_STREAM_CHECK_DELAY_MS = 1000;
-const STALE_STREAM_RELOAD_DELAY_MS = 1000;
-
 export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	const { id: chatId } = useParams<{ id?: string }>();
 	const router = useRouter();
+	const invalidateChat = useInvalidateChat();
+	const invalidateChatRef = useRef(invalidateChat);
+	invalidateChatRef.current = invalidateChat;
 
 	const [queueStore] = useState(() => createQueueStore());
 	const [chatStore] = useState(() =>
@@ -30,18 +36,44 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			onChatCreated: (newChatId) => {
 				router.replace(`/chat/${newChatId}`);
 			},
-			onChatNotFound: () => {
-				chatStore.getState().setError("Chat not found");
-				router.replace("/new");
+			onStreamComplete: (completedChatId) => {
+				invalidateChatRef.current(completedChatId);
 			},
 			getQueueStore: () => queueStore.getState(),
 		}),
 	);
 
+	const isStreaming = useStore(chatStore, (s) => s.isLoading);
+
+	const { data: chatData, isError } = useChatQuery(chatId, isStreaming);
+
 	useEffect(() => {
 		queueStore.persist.rehydrate();
 		log.debug("Queue store hydrated");
 	}, [queueStore]);
+
+	useEffect(() => {
+		if (!chatData) return;
+		const state = chatStore.getState();
+		if (state.isLoading || state.streamingMessage) return;
+		chatStore.setState({
+			currentChat: chatData,
+			messages: chatData.messages || [],
+			sessionId: chatData.sessionId,
+			error: null,
+		});
+		queueStore.getState().clear();
+	}, [chatData, chatStore, queueStore]);
+
+	useEffect(() => {
+		if (isError && chatId) {
+			chatStore.setState({
+				loadedChatId: undefined,
+				error: "Chat not found",
+			});
+			router.replace("/new");
+		}
+	}, [isError, chatId, chatStore, router]);
 
 	useEffect(() => {
 		const state = chatStore.getState();
@@ -59,18 +91,11 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		if (chatId) {
 			if (state.loadedChatId === chatId) return;
 			chatStore.setState({ loadedChatId: chatId });
-			state.fetchChat(chatId).then((success) => {
-				if (!success) {
-					chatStore.setState({ loadedChatId: undefined });
-					chatStore.getState().setError("Chat not found");
-					router.replace("/new");
-				}
-			});
 		} else {
 			chatStore.setState({ loadedChatId: undefined });
 			state.startNewChat();
 		}
-	}, [chatId, chatStore, router]);
+	}, [chatId, chatStore]);
 
 	useEffect(() => {
 		let dequeueing = false;
@@ -119,60 +144,11 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	}, [chatStore, queueStore]);
 
 	useEffect(() => {
-		let hiddenAt: number | null = null;
-
-		const tryReloadDisconnected = () => {
-			const state = chatStore.getState();
-			const disconnectedId = state.disconnectedChatId;
-			if (!disconnectedId) return;
-			if (Date.now() - state.lastReloadAttempt < RELOAD_THROTTLE_MS) return;
-			chatStore.setState({ lastReloadAttempt: Date.now() });
-			state.reloadChat(disconnectedId);
-		};
-
-		const handleVisibilityChange = () => {
-			if (document.visibilityState === "hidden") {
-				hiddenAt = Date.now();
-				return;
+		return chatStore.subscribe((state, prev) => {
+			if (state.disconnectedChatId && !prev.disconnectedChatId) {
+				invalidateChatRef.current(state.disconnectedChatId);
 			}
-
-			const hiddenDuration = hiddenAt ? Date.now() - hiddenAt : 0;
-			hiddenAt = null;
-
-			const state = chatStore.getState();
-
-			if (state.disconnectedChatId) {
-				tryReloadDisconnected();
-				return;
-			}
-
-			if (state.isLoading && hiddenDuration > STALE_STREAM_THRESHOLD_MS) {
-				const id = state.currentChat?.id;
-				if (id) {
-					setTimeout(() => {
-						const current = chatStore.getState();
-						if (!current.isLoading) return;
-						current.abortController?.abort();
-						setTimeout(
-							() => chatStore.getState().reloadChat(id),
-							STALE_STREAM_RELOAD_DELAY_MS,
-						);
-					}, STALE_STREAM_CHECK_DELAY_MS);
-				}
-				return;
-			}
-
-			if (!state.isLoading && state.currentChat?.id) {
-				state.reloadChat(state.currentChat.id);
-			}
-		};
-
-		document.addEventListener("visibilitychange", handleVisibilityChange);
-		window.addEventListener("online", tryReloadDisconnected);
-		return () => {
-			document.removeEventListener("visibilitychange", handleVisibilityChange);
-			window.removeEventListener("online", tryReloadDisconnected);
-		};
+		});
 	}, [chatStore]);
 
 	return (
