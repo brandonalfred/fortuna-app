@@ -1,17 +1,12 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useChat } from "@/hooks/use-chat";
+import { useCallback } from "react";
+import { useActiveChat } from "@/components/chat/chat-context";
 import { useSessionContext } from "@/lib/auth/session-context";
 import { capitalize, cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
-
-interface ChatWindowProps {
-	chatId?: string;
-}
 
 interface ErrorBannerProps {
 	message: string;
@@ -40,54 +35,29 @@ function ErrorBanner({ message, onDismiss, className }: ErrorBannerProps) {
 	);
 }
 
-export function ChatWindow({ chatId }: ChatWindowProps) {
-	const [error, setError] = useState<string | null>(null);
-	const router = useRouter();
+export function ChatWindow() {
 	const { session, isPending } = useSessionContext();
-	// When a new chat is created mid-stream, we update the URL immediately via
-	// history.replaceState (to avoid unmounting the component), then sync the
-	// Next.js router once streaming completes.
-	const pendingNavigationRef = useRef<string | null>(null);
-
 	const {
 		messages,
 		streamingMessage,
 		isLoading,
 		statusMessage,
 		messageQueue,
+		error,
 		sendMessage,
 		stopGeneration,
 		queueMessage,
 		removeQueuedMessage,
-	} = useChat({
-		chatId,
-		onError: setError,
-		onChatCreated: (newChatId) => {
-			window.history.replaceState(null, "", `/chat/${newChatId}`);
-			pendingNavigationRef.current = newChatId;
-		},
-		onChatNotFound: () => {
-			setError("Chat not found");
-			router.replace("/new");
-		},
-	});
-
-	useEffect(() => {
-		if (isLoading || !pendingNavigationRef.current) return;
-		const chatPath = `/chat/${pendingNavigationRef.current}`;
-		pendingNavigationRef.current = null;
-		router.replace(chatPath);
-	}, [isLoading, router]);
+		clearError,
+	} = useActiveChat();
 
 	const handleSend = useCallback(
 		(message: string) => {
-			setError(null);
+			clearError();
 			sendMessage(message);
 		},
-		[sendMessage],
+		[sendMessage, clearError],
 	);
-
-	const dismissError = useCallback(() => setError(null), []);
 
 	const isEmpty = messages.length === 0 && !streamingMessage;
 
@@ -110,7 +80,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 				{error && (
 					<ErrorBanner
 						message={error}
-						onDismiss={dismissError}
+						onDismiss={clearError}
 						className="mb-4 w-full max-w-2xl"
 					/>
 				)}
@@ -139,7 +109,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 			{error && (
 				<ErrorBanner
 					message={error}
-					onDismiss={dismissError}
+					onDismiss={clearError}
 					className="mx-4 mb-2"
 				/>
 			)}
