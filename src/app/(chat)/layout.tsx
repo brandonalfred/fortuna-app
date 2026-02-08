@@ -39,7 +39,7 @@ export default function ChatLayout({ children }: ChatLayoutProps) {
 							onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
 						/>
 						<div className="flex flex-1 overflow-hidden">
-							<aside className="hidden w-60 shrink-0 border-r border-border-subtle lg:block">
+							<aside className="hidden w-60 shrink-0 overflow-hidden border-r border-border-subtle lg:block">
 								<ChatHistory currentChatId={currentChatId} />
 							</aside>
 
