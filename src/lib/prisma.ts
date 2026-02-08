@@ -1,4 +1,4 @@
-import { PrismaNeonHttp } from "@prisma/adapter-neon";
+import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "@prisma/client";
 
 function createPrismaClient() {
@@ -7,7 +7,7 @@ function createPrismaClient() {
 		throw new Error("DATABASE_URL environment variable is required");
 	}
 
-	const adapter = new PrismaNeonHttp(connectionString, {});
+	const adapter = new PrismaNeon({ connectionString });
 
 	return new PrismaClient({ adapter });
 }
