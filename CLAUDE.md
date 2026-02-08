@@ -12,7 +12,7 @@ bun run lint         # Lint and auto-fix with Biome
 bun run lint:check   # Lint without fixing (CI)
 bun run lint:prisma  # Lint Prisma schema naming conventions
 bun run type-check   # TypeScript type checking
-bunx prisma generate # Regenerate Prisma client (required before type-check/lint after fresh install or schema changes)
+bunx prisma generate # Regenerate Prisma client — ALWAYS run before type-check/lint (generated client is not committed)
 bun install          # Run when type-check fails with "Cannot find module" errors for installed packages
 ```
 
