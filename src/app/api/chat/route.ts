@@ -157,6 +157,12 @@ export async function POST(req: Request): Promise<Response> {
 
 				let fullAssistantContent = "";
 				let fullThinkingContent = "";
+				let pendingThinking = "";
+				let inThinkingBlock = false;
+
+				function appendThinking(text: string): void {
+					fullThinkingContent += (fullThinkingContent ? "\n\n" : "") + text;
+				}
 				const toolUses: Array<{ name: string; input: unknown }> = [];
 				let lastEventWasToolUse = false;
 				const sentThinkingIds = new Set<string>();
@@ -239,13 +245,12 @@ export async function POST(req: Request): Promise<Response> {
 						switch (msg.type) {
 							case "assistant": {
 								const messageId = msg.message.id;
-								if (!sentThinkingIds.has(messageId)) {
+								if (!fullThinkingContent && !sentThinkingIds.has(messageId)) {
 									const thinking = extractThinkingFromMessage(msg);
 									if (thinking) {
 										sendEvent("thinking", { thinking });
 										sentThinkingIds.add(messageId);
-										fullThinkingContent +=
-											(fullThinkingContent ? "\n\n" : "") + thinking;
+										appendThinking(thinking);
 									}
 								}
 
@@ -267,12 +272,48 @@ export async function POST(req: Request): Promise<Response> {
 							case "stream_event": {
 								const event = msg.event;
 								if (
-									event.type === "content_block_delta" &&
-									"delta" in event &&
-									event.delta.type === "text_delta"
+									event.type === "content_block_start" &&
+									"content_block" in event
 								) {
-									const delta = event.delta as { text: string };
-									sendEvent("delta", { text: delta.text });
+									if (inThinkingBlock && pendingThinking) {
+										sendEvent("thinking", {
+											thinking: pendingThinking,
+										});
+										appendThinking(pendingThinking);
+										pendingThinking = "";
+									}
+									const block = event.content_block as {
+										type: string;
+									};
+									inThinkingBlock = block.type === "thinking";
+								} else if (
+									event.type === "content_block_delta" &&
+									"delta" in event
+								) {
+									const delta = event.delta as {
+										type: string;
+										text?: string;
+										thinking?: string;
+									};
+									if (delta.type === "text_delta" && delta.text) {
+										sendEvent("delta", { text: delta.text });
+									} else if (
+										delta.type === "thinking_delta" &&
+										delta.thinking
+									) {
+										pendingThinking += delta.thinking;
+									}
+								} else if (
+									event.type === "content_block_stop" &&
+									inThinkingBlock &&
+									pendingThinking
+								) {
+									sendEvent("thinking", {
+										thinking: pendingThinking,
+									});
+									appendThinking(pendingThinking);
+									pendingThinking = "";
+									inThinkingBlock = false;
 								}
 								break;
 							}

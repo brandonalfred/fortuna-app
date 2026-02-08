@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { hydrateMessageSegments } from "@/lib/segments";
 import type {
 	Chat,
 	ChatInitEvent,
@@ -281,7 +282,7 @@ export function useChat(options: UseChatOptions = {}) {
 				}
 				const chat: Chat = await response.json();
 				setCurrentChat(chat);
-				setMessages(chat.messages || []);
+				setMessages((chat.messages || []).map(hydrateMessageSegments));
 				setSessionId(chat.sessionId);
 				setMessageQueue([]);
 				return true;

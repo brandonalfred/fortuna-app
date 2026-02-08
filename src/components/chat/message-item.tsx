@@ -121,10 +121,8 @@ function renderMessageContent(message: Message): ReactNode {
 		return <p>{message.content}</p>;
 	}
 
-	const hasSegments = message.segments && message.segments.length > 0;
-
-	if (hasSegments) {
-		return collapseToolSegments(message.segments!).map((segment, idx) => (
+	if (message.segments && message.segments.length > 0) {
+		return collapseToolSegments(message.segments).map((segment, idx) => (
 			<SegmentRenderer key={getSegmentKey(segment, idx)} segment={segment} />
 		));
 	}
@@ -314,11 +312,7 @@ interface SegmentRendererProps {
 function SegmentRenderer({ segment }: SegmentRendererProps) {
 	switch (segment.type) {
 		case "thinking":
-			return (
-				<div className="my-2">
-					<ThinkingBlock thinking={segment.thinking} />
-				</div>
-			);
+			return <ThinkingBlock thinking={segment.thinking} />;
 		case "text":
 			return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
 		case "tool_use":
