@@ -1,26 +1,28 @@
 ---
 name: nba-advanced-stats
-description: NBA advanced analytics via nba_api — pace, usage rate, per-100-possession stats, opponent defense, and lineup analysis
+description: Primary source for ALL NBA stats — season averages, game logs, advanced metrics, pace, usage, lineup analysis via nba_api
 ---
 
-# NBA Advanced Stats (nba_api)
+# NBA Stats (nba_api) — Primary NBA Data Source
 
-Advanced NBA analytics for betting analysis: pace, usage rate, efficiency ratings, per-100-possession stats, opponent defensive tendencies, and lineup data.
+The **primary** source for all NBA statistics. Returns bulk data (all ~524 players in one call), has a local player ID database (no API call needed for lookups), and doesn't consume any API quota.
 
-## When to Use This vs api-sports
+## When to Use This
 
-| Question | Use |
-|----------|-----|
-| Basic box score stats (PPG, RPG, APG) | api-sports |
-| Hit rate over a prop line | api-sports |
-| Pace, usage rate, offensive/defensive rating | **nba-advanced-stats** |
+| Need | Tool |
+|------|------|
+| Season averages (PTS, REB, AST, etc.) for any/all players | **nba-advanced-stats** (`LeagueDashPlayerStats` base mode) |
+| Per-game stats for hit rate / trend analysis | **nba-advanced-stats** (`PlayerGameLog`) |
+| Pace, usage rate, offensive/defensive rating | **nba-advanced-stats** (`LeagueDashPlayerStats` advanced mode) |
 | Per-100-possession stats | **nba-advanced-stats** |
 | Opponent defensive tendencies by position | **nba-advanced-stats** |
 | Lineup combinations and net rating | **nba-advanced-stats** |
 | Player tracking (speed, distance, touches) | **nba-advanced-stats** |
 | True shooting %, effective FG% | **nba-advanced-stats** |
+| NBA data and nba_api is down/failing | `api-sports` (fallback) |
+| NFL, MLB, NHL stats | `api-sports` (only option) |
 
-Use **both** together for comprehensive analysis — api-sports for game logs and hit rates, nba-advanced-stats for contextual metrics.
+**Routing rule:** For NBA, always try `nba-advanced-stats` first. Fall back to `api-sports` or web search only if nba_api requests fail after retries.
 
 ---
 
@@ -84,6 +86,8 @@ def safe_request(endpoint_class, max_retries=3, **kwargs):
 
 ## Player & Team ID Lookup
 
+These lookups use a **local static database** bundled with nba_api — no API call or network request needed. Handles accented characters (Jokić, Dončić) automatically.
+
 ```python
 from nba_api.stats.static import players, teams
 
@@ -105,7 +109,45 @@ def find_team_id(name: str) -> int:
 
 ## Endpoints
 
-### 1. Advanced Player Stats (USG%, PACE, Ratings, TS%, EFG%)
+### 1. Season Averages — All Players (Bulk)
+
+Returns all ~524 active players' standard box score averages in a single call. Use this as the starting point for any NBA analysis — pull once, filter in Python.
+
+```python
+from nba_api.stats.endpoints import LeagueDashPlayerStats
+
+df = safe_request(
+    LeagueDashPlayerStats,
+    season="2024-25",
+    per_mode_detailed="PerGame"
+)
+
+# Key columns: PLAYER_NAME, TEAM_ABBREVIATION, GP, MIN, PTS, REB, AST,
+#              STL, BLK, TOV, FGM, FGA, FG_PCT, FG3M, FG3A, FG3_PCT,
+#              FTM, FTA, FT_PCT, OREB, DREB
+```
+
+### 2. Player Game Log (Per-Game Stats)
+
+Per-game stats for an individual player — essential for hit rate calculation and trend analysis.
+
+```python
+from nba_api.stats.endpoints import PlayerGameLog
+
+player_id = find_player_id("Tyrese Maxey")
+df = safe_request(
+    PlayerGameLog,
+    player_id=player_id,
+    season="2024-25"
+)
+
+# Key columns: GAME_DATE, MATCHUP, WL, MIN, PTS, REB, AST, STL, BLK,
+#              TOV, FGM, FGA, FG_PCT, FG3M, FG3A, FG3_PCT, FTM, FTA,
+#              FT_PCT, PLUS_MINUS
+# Rows are ordered most recent first
+```
+
+### 3. Advanced Player Stats (USG%, PACE, Ratings, TS%, EFG%)
 
 ```python
 from nba_api.stats.endpoints import LeagueDashPlayerStats
@@ -121,7 +163,7 @@ df = safe_request(
 #              NET_RATING, TS_PCT, EFG_PCT, AST_PCT, AST_TO
 ```
 
-### 2. Per-100-Possession Stats (Pace-Adjusted)
+### 4. Per-100-Possession Stats (Pace-Adjusted)
 
 ```python
 from nba_api.stats.endpoints import LeagueDashPlayerStats
@@ -136,7 +178,7 @@ df = safe_request(
 # These are pace-normalized — use for fair cross-team comparisons
 ```
 
-### 3. Advanced Team Stats (Pace Rankings, Efficiency)
+### 5. Advanced Team Stats (Pace Rankings, Efficiency)
 
 ```python
 from nba_api.stats.endpoints import LeagueDashTeamStats
@@ -153,7 +195,7 @@ df = safe_request(
 # Sort by PACE to find fastest/slowest teams
 ```
 
-### 4. Opponent Defensive Tendencies
+### 6. Opponent Defensive Tendencies
 
 ```python
 from nba_api.stats.endpoints import LeagueDashPlayerStats
@@ -168,7 +210,7 @@ df = safe_request(
 # Filter by player to see how they perform against a specific defense
 ```
 
-### 5. Lineup Analysis (Net Rating by Lineup Combination)
+### 7. Lineup Analysis (Net Rating by Lineup Combination)
 
 ```python
 from nba_api.stats.endpoints import TeamDashLineups
@@ -186,7 +228,7 @@ df = safe_request(
 # Use group_quantity=2 for two-man combos
 ```
 
-### 6. Player Tracking Stats (Speed, Distance, Touches)
+### 8. Player Tracking Stats (Speed, Distance, Touches)
 
 ```python
 from nba_api.stats.endpoints import LeagueDashPtStats
@@ -208,7 +250,7 @@ df_touches = safe_request(
 # Key columns: TOUCHES, FRONT_CT_TOUCHES, TIME_OF_POSS, ELBOW_TOUCHES, PAINT_TOUCHES
 ```
 
-### 7. Per-Game Usage Rate (Box Score)
+### 9. Per-Game Usage Rate (Box Score)
 
 ```python
 from nba_api.stats.endpoints import BoxScoreUsageV3
@@ -227,7 +269,99 @@ df = safe_request(
 
 ## Betting Analysis Patterns
 
-### Pattern 1: Pace Matchup Analysis (Over/Under Impact)
+### Pattern 1: Hit Rate Calculation (Player Props)
+
+Use `PlayerGameLog` + pandas to calculate how often a player clears a prop line.
+
+```python
+import pandas as pd
+from nba_api.stats.endpoints import PlayerGameLog
+
+def calculate_hit_rate(player_name: str, stat: str, line: float, season: str = "2024-25", last_n: int = None):
+    """Calculate how often a player exceeds a prop line.
+
+    Args:
+        player_name: Full name (e.g., "Tyrese Maxey")
+        stat: Column name — "PTS", "REB", "AST", "FG3M", "STL", "BLK", etc.
+        line: The prop line to check against (e.g., 26.5)
+        season: NBA season string
+        last_n: If set, only use the last N games
+    """
+    player_id = find_player_id(player_name)
+    df = safe_request(PlayerGameLog, player_id=player_id, season=season)
+    if df is None or df.empty:
+        return None
+
+    if last_n:
+        df = df.head(last_n)
+
+    hits = (df[stat] > line).sum()
+    total = len(df)
+
+    return {
+        "player": player_name,
+        "stat": stat,
+        "line": line,
+        "games": total,
+        "hits": int(hits),
+        "hit_rate": round(hits / total * 100, 1) if total else 0,
+        "average": round(df[stat].mean(), 1),
+        "median": round(df[stat].median(), 1),
+        "max": int(df[stat].max()),
+        "min": int(df[stat].min()),
+        "last_5_avg": round(df.head(5)[stat].mean(), 1),
+    }
+```
+
+### Pattern 2: Trend Detection (Hot/Cold Streaks)
+
+```python
+def detect_trend(player_name: str, stat: str, season: str = "2024-25", recent_n: int = 5):
+    """Compare recent performance to season average."""
+    player_id = find_player_id(player_name)
+    df = safe_request(PlayerGameLog, player_id=player_id, season=season)
+    if df is None or len(df) < recent_n:
+        return None
+
+    recent_avg = df.head(recent_n)[stat].mean()
+    season_avg = df[stat].mean()
+    pct_change = ((recent_avg - season_avg) / season_avg * 100) if season_avg else 0
+
+    return {
+        "player": player_name,
+        "stat": stat,
+        "recent_avg": round(recent_avg, 1),
+        "season_avg": round(season_avg, 1),
+        "pct_change": round(pct_change, 1),
+        "trend": "HOT" if pct_change > 10 else "COLD" if pct_change < -10 else "NEUTRAL",
+        "last_5_values": df.head(5)[stat].tolist(),
+    }
+```
+
+### Pattern 3: Bulk Parlay Screening
+
+When building a parlay, pull bulk data first and filter programmatically instead of looking up players one at a time.
+
+```python
+from nba_api.stats.endpoints import LeagueDashPlayerStats
+
+def screen_prop_candidates(stat: str, min_games: int = 20, min_avg: float = 15.0, season: str = "2024-25"):
+    """Find players who consistently hit over a stat threshold.
+
+    Use this to narrow down parlay candidates before doing deep dives.
+    """
+    df = safe_request(LeagueDashPlayerStats, season=season, per_mode_detailed="PerGame")
+    if df is None:
+        return None
+
+    # Filter to players with enough games and a high enough average
+    candidates = df[(df["GP"] >= min_games) & (df[stat] >= min_avg)].copy()
+    candidates = candidates.sort_values(stat, ascending=False)
+
+    return candidates[["PLAYER_NAME", "TEAM_ABBREVIATION", "GP", "MIN", stat]].head(30)
+```
+
+### Pattern 4: Pace Matchup Analysis (Over/Under Impact)
 
 ```python
 from nba_api.stats.endpoints import LeagueDashTeamStats
@@ -267,7 +401,7 @@ def pace_matchup_analysis(team1: str, team2: str, season: str = "2024-25"):
     }
 ```
 
-### Pattern 2: Usage Redistribution (Key Player Out)
+### Pattern 5: Usage Redistribution (Key Player Out)
 
 ```python
 from nba_api.stats.endpoints import LeagueDashPlayerStats
@@ -308,7 +442,7 @@ def usage_without_player(team: str, missing_player: str, season: str = "2024-25"
     }
 ```
 
-### Pattern 3: Defensive Vulnerability by Position
+### Pattern 6: Defensive Vulnerability by Position
 
 ```python
 from nba_api.stats.endpoints import LeagueDashPlayerStats
@@ -379,22 +513,24 @@ nba_api uses `"YYYY-YY"` format for seasons:
 If nba_api requests fail after 3 retries (timeouts, rate limits):
 
 1. `safe_request` returns `None` after exhausting retries — each retry gets a fresh residential IP automatically
-2. **Web search** for the same data on Basketball Reference, Statmuse, or NBA.com
-3. **Cite** that the data was sourced from web search rather than the API directly
+2. **Fall back to `api-sports`** for the same NBA data (game logs, season stats)
+3. **Web search** for the same data on Basketball Reference, Statmuse, or NBA.com
+4. **Cite** that the data was sourced from a fallback rather than the primary API
 
 Example fallback:
 ```
-nba_api is currently unavailable. Sourcing from Basketball Reference instead.
-Web search: "Tyrese Maxey advanced stats 2024-25 basketball reference"
+nba_api is currently unavailable. Sourcing from API-Sports instead.
+# Or if API-Sports also fails:
+Web search: "Tyrese Maxey stats 2024-25 basketball reference"
 ```
 
 ---
 
 ## Complementary Tools
 
-| Tool | Use For |
-|------|---------|
-| **api-sports** | Game logs, hit rates, basic box score stats |
-| **nba-advanced-stats** | Pace, usage, efficiency, lineup data |
-| **odds-api** | Current lines and odds comparison |
-| **Web search** | Injury reports, news, fallback stats |
+| Tool | Priority for NBA | Use For |
+|------|-----------------|---------|
+| **nba-advanced-stats** | PRIMARY | All NBA stats — season averages, game logs, advanced metrics, pace, usage, lineup data |
+| **api-sports** | FALLBACK (NBA) / PRIMARY (other sports) | NBA fallback if nba_api fails; primary for NFL, MLB, NHL |
+| **odds-api** | — | Current lines and odds comparison |
+| **Web search** | LAST RESORT | Injury reports, news, fallback stats if both APIs fail |
