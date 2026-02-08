@@ -85,21 +85,31 @@ interface CollapsibleToolUse extends ToolUse {
 	_groupCount?: number;
 }
 
+function findLastNonWhitespaceSegment(
+	segments: ContentSegment[],
+): ContentSegment | undefined {
+	for (let i = segments.length - 1; i >= 0; i--) {
+		const seg = segments[i];
+		if (seg.type !== "text" || seg.text.trim() !== "") return seg;
+	}
+	return undefined;
+}
+
 function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 	const result: ContentSegment[] = [];
 	for (const seg of segments) {
-		const prev = result[result.length - 1];
-		if (
-			seg.type === "tool_use" &&
-			seg.tool.name === "Bash" &&
-			prev?.type === "tool_use" &&
-			prev.tool.name === "Bash"
-		) {
-			const prevTool = prev.tool as CollapsibleToolUse;
-			prevTool._groupCount = (prevTool._groupCount ?? 1) + 1;
-			if (seg.tool.status === "running") prevTool.status = "running";
-			continue;
+		if (seg.type === "tool_use" && seg.tool.name === "Bash") {
+			const prev = findLastNonWhitespaceSegment(result);
+			if (prev?.type === "tool_use" && prev.tool.name === "Bash") {
+				const target = prev.tool as CollapsibleToolUse;
+				target._groupCount = (target._groupCount ?? 1) + 1;
+				if (seg.tool.status === "running") target.status = "running";
+				const prevIdx = result.lastIndexOf(prev);
+				result.splice(prevIdx + 1);
+				continue;
+			}
 		}
+
 		if (seg.type === "tool_use") {
 			result.push({ type: "tool_use", tool: { ...seg.tool } });
 		} else {

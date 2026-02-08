@@ -97,6 +97,8 @@ export function useChat(options: UseChatOptions = {}) {
 	const disconnectedChatRef = useRef<string | null>(null);
 	const lastReloadAttemptRef = useRef(0);
 	const loadedChatIdRef = useRef<string | undefined>(undefined);
+	const hiddenAtRef = useRef<number | null>(null);
+	const currentChatIdRef = useRef<string | undefined>(undefined);
 	const creatingChatRef = useRef(false);
 	const onErrorRef = useRef(options.onError);
 	const onChatCreatedRef = useRef(options.onChatCreated);
@@ -495,27 +497,58 @@ export function useChat(options: UseChatOptions = {}) {
 	}, [isLoading, messageQueue]);
 
 	useEffect(() => {
-		const tryReload = () => {
+		currentChatIdRef.current = currentChat?.id;
+	}, [currentChat?.id]);
+
+	useEffect(() => {
+		const RELOAD_THROTTLE_MS = 5000;
+		const STALE_STREAM_THRESHOLD_MS = 2000;
+		const STALE_STREAM_RELOAD_DELAY_MS = 1000;
+
+		const tryReloadDisconnected = () => {
 			const disconnectedId = disconnectedChatRef.current;
-			if (disconnectedId && Date.now() - lastReloadAttemptRef.current > 5000) {
-				lastReloadAttemptRef.current = Date.now();
-				reloadChat(disconnectedId);
-			}
+			if (!disconnectedId) return;
+			if (Date.now() - lastReloadAttemptRef.current < RELOAD_THROTTLE_MS)
+				return;
+			lastReloadAttemptRef.current = Date.now();
+			reloadChat(disconnectedId);
 		};
 
 		const handleVisibilityChange = () => {
-			if (document.visibilityState !== "visible") return;
-			tryReload();
-			if (!disconnectedChatRef.current && !isLoading && currentChat?.id) {
+			if (document.visibilityState === "hidden") {
+				hiddenAtRef.current = Date.now();
+				return;
+			}
+
+			const hiddenDuration = hiddenAtRef.current
+				? Date.now() - hiddenAtRef.current
+				: 0;
+			hiddenAtRef.current = null;
+
+			if (disconnectedChatRef.current) {
+				tryReloadDisconnected();
+				return;
+			}
+
+			if (isLoading && hiddenDuration > STALE_STREAM_THRESHOLD_MS) {
+				abortControllerRef.current?.abort();
+				const id = currentChatIdRef.current;
+				if (id) {
+					setTimeout(() => reloadChat(id), STALE_STREAM_RELOAD_DELAY_MS);
+				}
+				return;
+			}
+
+			if (!isLoading && currentChat?.id) {
 				reloadChat(currentChat.id);
 			}
 		};
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
-		window.addEventListener("online", tryReload);
+		window.addEventListener("online", tryReloadDisconnected);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
-			window.removeEventListener("online", tryReload);
+			window.removeEventListener("online", tryReloadDisconnected);
 		};
 	}, [reloadChat, currentChat?.id, isLoading]);
 
