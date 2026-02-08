@@ -29,6 +29,7 @@ export function MessageList({
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const lastMessageRef = useRef<HTMLDivElement>(null);
+	const lastUserMessageRef = useRef<HTMLDivElement>(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
 	const prevMessagesLengthRef = useRef(0);
 
@@ -61,15 +62,35 @@ export function MessageList({
 		};
 	}, []);
 
+	const lastUserMessageIndex = messages.findLastIndex(
+		(msg) => msg.role === "user",
+	);
+	const lastMessageRole = messages[messages.length - 1]?.role;
+
+	function getMessageRef(
+		index: number,
+	): React.RefObject<HTMLDivElement | null> | undefined {
+		if (index === messages.length - 1) return lastMessageRef;
+		if (index === lastUserMessageIndex) return lastUserMessageRef;
+		return undefined;
+	}
+
 	useEffect(() => {
 		if (messages.length > prevMessagesLengthRef.current) {
-			lastMessageRef.current?.scrollIntoView({
-				behavior: "smooth",
-				block: "nearest",
-			});
+			if (lastMessageRole === "assistant" && lastUserMessageRef.current) {
+				lastUserMessageRef.current.scrollIntoView({
+					behavior: "smooth",
+					block: "start",
+				});
+			} else {
+				lastMessageRef.current?.scrollIntoView({
+					behavior: "smooth",
+					block: "nearest",
+				});
+			}
 		}
 		prevMessagesLengthRef.current = messages.length;
-	}, [messages.length]);
+	}, [messages.length, lastMessageRole]);
 
 	useEffect(() => {
 		if (
@@ -95,7 +116,7 @@ export function MessageList({
 			{messages.map((message, index) => (
 				<div
 					key={message.id}
-					ref={index === messages.length - 1 ? lastMessageRef : undefined}
+					ref={getMessageRef(index)}
 					className="scroll-mt-4"
 				>
 					<MessageItem message={message} />
