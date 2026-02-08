@@ -313,7 +313,7 @@ async function releaseSpawnLock(
 async function clearSpawnLock(chatId: string): Promise<void> {
 	await prisma.chat.update({
 		where: { id: chatId },
-		data: { executorStatus: null },
+		data: { executorStatus: null, sandboxId: null, agentSessionId: null },
 	});
 }
 
