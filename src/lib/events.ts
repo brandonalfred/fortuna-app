@@ -2,6 +2,8 @@ import type { ChatEvent } from "@prisma/client";
 import type {
 	ContentSegment,
 	ConversationMessage,
+	ConversationToolResult,
+	ConversationToolUse,
 	Message,
 	ToolUse,
 } from "@/lib/types";
@@ -9,8 +11,10 @@ import type {
 interface EventData {
 	content?: string;
 	thinking?: string;
+	toolUseId?: string;
 	name?: string;
 	input?: unknown;
+	isError?: boolean;
 	stopReason?: string;
 	subtype?: string;
 }
@@ -113,6 +117,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 				}
 				break;
 			}
+			case "tool_result":
 			case "turn_complete":
 				break;
 		}
@@ -128,7 +133,8 @@ export function rebuildConversationHistory(
 	const history: ConversationMessage[] = [];
 	let assistantContent = "";
 	let assistantThinking = "";
-	let assistantTools: Array<{ name: string; input: unknown }> = [];
+	let assistantTools: ConversationToolUse[] = [];
+	let assistantToolResults: ConversationToolResult[] = [];
 
 	function flushAssistant() {
 		if (!assistantContent && !assistantThinking && assistantTools.length === 0)
@@ -138,10 +144,13 @@ export function rebuildConversationHistory(
 			content: assistantContent,
 			thinking: assistantThinking || null,
 			tools: assistantTools.length > 0 ? [...assistantTools] : undefined,
+			toolResults:
+				assistantToolResults.length > 0 ? [...assistantToolResults] : undefined,
 		});
 		assistantContent = "";
 		assistantThinking = "";
 		assistantTools = [];
+		assistantToolResults = [];
 	}
 
 	for (const event of events) {
@@ -169,9 +178,20 @@ export function rebuildConversationHistory(
 			}
 			case "tool_use": {
 				assistantTools.push({
+					toolUseId: data.toolUseId,
 					name: data.name ?? "",
 					input: data.input,
 				});
+				break;
+			}
+			case "tool_result": {
+				if (data.toolUseId && data.content) {
+					assistantToolResults.push({
+						toolUseId: data.toolUseId,
+						content: data.content,
+						isError: data.isError ?? false,
+					});
+				}
 				break;
 			}
 			case "turn_complete":

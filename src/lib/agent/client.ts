@@ -10,7 +10,11 @@ import {
 import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { prisma } from "@/lib/prisma";
-import type { ConversationMessage } from "@/lib/types";
+import type {
+	ConversationMessage,
+	ConversationToolResult,
+	ConversationToolUse,
+} from "@/lib/types";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
@@ -112,6 +116,8 @@ export interface StreamAgentOptions {
 	onStatus?: StatusCallback;
 }
 
+const MAX_TOOL_RESULT_PROMPT_LIMIT = 500;
+
 function summarizeToolInput(input: unknown): string {
 	if (typeof input === "string") {
 		return input.length > 50 ? input.slice(0, 50) : input;
@@ -124,14 +130,27 @@ function summarizeToolInput(input: unknown): string {
 	return "";
 }
 
-function formatToolsSummary(
-	tools: Array<{ name: string; input: unknown }>,
+function formatToolsWithResults(
+	tools: ConversationToolUse[],
+	toolResults?: ConversationToolResult[],
 ): string {
-	const parts = tools.map((t) => {
-		const summary = summarizeToolInput(t.input);
-		return summary ? `${t.name}(${summary})` : t.name;
-	});
-	return `[Tools used]: ${parts.join(", ")}`;
+	const resultMap = new Map(toolResults?.map((r) => [r.toolUseId, r]) ?? []);
+
+	return tools
+		.map((t) => {
+			const summary = summarizeToolInput(t.input);
+			const label = summary ? `${t.name}("${summary}")` : t.name;
+			const result = t.toolUseId ? resultMap.get(t.toolUseId) : undefined;
+			if (!result) return `[Tool: ${label}]`;
+
+			let content = result.content;
+			if (content.length > MAX_TOOL_RESULT_PROMPT_LIMIT) {
+				content = `${content.slice(0, MAX_TOOL_RESULT_PROMPT_LIMIT)}...[truncated]`;
+			}
+			const prefix = result.isError ? " ERROR:" : "";
+			return `[Tool: ${label}]${prefix} → ${content}`;
+		})
+		.join("\n");
 }
 
 function buildFullPrompt(
@@ -152,7 +171,7 @@ function buildFullPrompt(
 				: "";
 			const toolsPart =
 				msg.tools && msg.tools.length > 0
-					? `\n${formatToolsSummary(msg.tools)}`
+					? `\n${formatToolsWithResults(msg.tools, msg.toolResults)}`
 					: "";
 			return `${thinkingPart}Assistant: ${msg.content}${toolsPart}`;
 		})

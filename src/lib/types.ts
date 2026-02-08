@@ -92,11 +92,24 @@ export interface StreamingMessage {
 	isStreaming: boolean;
 }
 
+export interface ConversationToolUse {
+	toolUseId?: string;
+	name: string;
+	input: unknown;
+}
+
+export interface ConversationToolResult {
+	toolUseId: string;
+	content: string;
+	isError: boolean;
+}
+
 export interface ConversationMessage {
 	role: "user" | "assistant";
 	content: string;
 	thinking?: string | null;
-	tools?: Array<{ name: string; input: unknown }>;
+	tools?: ConversationToolUse[];
+	toolResults?: ConversationToolResult[];
 }
 
 export interface QueuedMessage {
