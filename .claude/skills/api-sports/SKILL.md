@@ -7,6 +7,8 @@ description: Query player/team stats from API-Sports for multi-sport betting ana
 
 Access player and team statistics via API-Sports.io for data-driven betting analysis.
 
+> **NBA routing note:** For NBA stats, prefer `nba-advanced-stats` first — it returns all ~524 players in one bulk call, has local player ID lookups (no API call needed), and doesn't consume API quota. Use `api-sports` as a **fallback** for NBA if nba_api is down or failing. For NFL, MLB, and NHL, `api-sports` remains the **primary** source.
+
 ## Authentication
 
 ```bash
@@ -509,6 +511,9 @@ When presenting analysis:
 
 ## Complementary Tools
 
-Use alongside the `odds-api` skill for complete analysis:
-- **API-Sports**: Player/team statistics, trends, matchups
-- **The Odds API**: Current lines, odds comparison, line movement
+| Tool | Priority | Use For |
+|------|----------|---------|
+| **nba-advanced-stats** | PRIMARY for NBA | All NBA stats — bulk season averages, game logs, advanced metrics, pace, usage |
+| **api-sports** | PRIMARY for NFL/MLB/NHL, FALLBACK for NBA | Multi-sport stats; NBA fallback if nba_api fails |
+| **odds-api** | — | Current lines, odds comparison, line movement |
+| **Web search** | LAST RESORT | Injury reports, news, fallback stats |
