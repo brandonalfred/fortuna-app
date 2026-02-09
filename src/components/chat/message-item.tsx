@@ -27,6 +27,8 @@ const TOOL_LABEL_MAP: Record<string, string> = {
 	Edit: "Editing file",
 	Glob: "Searching files",
 	Grep: "Searching",
+	TodoWrite: "Updating TODOs",
+	TodoRead: "Checking TODOs",
 };
 
 function getToolLabel(name: string): string {
@@ -95,12 +97,14 @@ function findLastNonWhitespaceSegment(
 	return undefined;
 }
 
+const COLLAPSIBLE_TOOLS = new Set(["Bash", "TodoWrite"]);
+
 function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 	const result: ContentSegment[] = [];
 	for (const seg of segments) {
-		if (seg.type === "tool_use" && seg.tool.name === "Bash") {
+		if (seg.type === "tool_use" && COLLAPSIBLE_TOOLS.has(seg.tool.name)) {
 			const prev = findLastNonWhitespaceSegment(result);
-			if (prev?.type === "tool_use" && prev.tool.name === "Bash") {
+			if (prev?.type === "tool_use" && prev.tool.name === seg.tool.name) {
 				const target = prev.tool as CollapsibleToolUse;
 				target._groupCount = (target._groupCount ?? 1) + 1;
 				if (seg.tool.status === "running") target.status = "running";

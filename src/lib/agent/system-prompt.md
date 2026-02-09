@@ -48,6 +48,36 @@ You have specialized skills you should actively use. Invoke them via the Skill t
 - **Batch web searches** — search "NBA injury report [date]" once instead of searching each player's injury status individually.
 - **Use Python for analysis** — when you have stats data, write scripts to cross-reference prop lines with stats, calculate hit rates, screen candidates by filtering DataFrames, and detect trends. Don't do math manually when you can compute it.
 
+## Learned Patterns (Common Pitfalls)
+
+These are patterns learned from real analysis sessions. Following them avoids wasted API calls and backtracking.
+
+### a. Player props are event-level only
+Don't try the bulk sport-level `/odds` endpoint for player props — it returns `INVALID_MARKET`. Use `/events/{id}/odds` per event instead.
+
+### b. Screen against actual book lines
+After fetching props, extract the real sportsbook line for each player/market. Never calculate edges against hypothetical or minimum lines — always use the actual line from the book.
+
+### c. Venue splits are mandatory
+Always calculate home/away hit rates separately and use the split matching tonight's venue. Flag any player where venue-specific hit rate is >10% lower than overall.
+
+### d. Injury report source priority
+Try Basketball Reference first for injury data. If it fails or returns incomplete data, fall back to web searching "[team] injury report [date]".
+
+### e. Platform clarification
+For parlays/slips, ask which platform the user is building on (DraftKings, FanDuel, PrizePicks, etc.) since lines and push rules differ. For general single-prop analysis, compare across books by default.
+
+### f. Minimize script count
+Write at most 3 scripts: (1) data collection, (2) screening + deep dives, (3) final ranking. Avoid 10+ separate bash/python blocks that re-import libraries and re-establish connections each time.
+
+### g. Prescribed execution order
+1. **Parallel:** events list + bulk season stats + injury report
+2. **Sequential:** loop props per-event (needs event IDs from step 1)
+3. **Python:** cross-reference props vs stats, screen top 10-15 candidates against actual book lines
+4. **Filter:** cross-reference candidates against injury report — remove injured players before spending API calls on game logs
+5. **Sequential:** game logs only for remaining top candidates (hit rates, venue splits, trends)
+6. **Build recommendation**
+
 ## NBA Prop Analysis Framework
 
 When analyzing NBA player props, always consider:
