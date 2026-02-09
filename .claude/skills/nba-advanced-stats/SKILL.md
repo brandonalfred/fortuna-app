@@ -195,6 +195,24 @@ df = safe_request(
 # Sort by PACE to find fastest/slowest teams
 ```
 
+> **Note:** `LeagueDashTeamStats` returns `TEAM_NAME` (e.g., "Denver Nuggets"), **not** `TEAM_ABBREVIATION`. It also includes G-League affiliates — filter using the NBA team names list below.
+
+```python
+# All 30 NBA team names matching TEAM_NAME values from LeagueDashTeamStats.
+# Note: nba_api uses "Los Angeles Clippers" (full name), NOT "LA Clippers" (API-Sports form).
+NBA_TEAMS = [
+    "Atlanta Hawks", "Boston Celtics", "Brooklyn Nets", "Charlotte Hornets",
+    "Chicago Bulls", "Cleveland Cavaliers", "Dallas Mavericks", "Denver Nuggets",
+    "Detroit Pistons", "Golden State Warriors", "Houston Rockets", "Indiana Pacers",
+    "Los Angeles Clippers", "Los Angeles Lakers", "Memphis Grizzlies", "Miami Heat",
+    "Milwaukee Bucks", "Minnesota Timberwolves", "New Orleans Pelicans", "New York Knicks",
+    "Oklahoma City Thunder", "Orlando Magic", "Philadelphia 76ers", "Phoenix Suns",
+    "Portland Trail Blazers", "Sacramento Kings", "San Antonio Spurs", "Toronto Raptors",
+    "Utah Jazz", "Washington Wizards",
+]
+# Filter: df = df[df["TEAM_NAME"].isin(NBA_TEAMS)]
+```
+
 ### 6. Opponent Defensive Tendencies
 
 ```python

@@ -105,6 +105,8 @@ The API rate limit is 30 requests per second. To avoid 429 errors:
 
 ### Player Props
 
+> **Player prop markets must be queried via the per-event endpoint (`/events/{id}/odds`), not the sport-level endpoint (`/odds`).** The sport-level endpoint returns `INVALID_MARKET` for player props. Always fetch the events list first, then loop through event IDs to get props.
+
 | Market | Description |
 |--------|-------------|
 | `player_points` | Player points (NBA) |
