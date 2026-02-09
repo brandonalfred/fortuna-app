@@ -6,6 +6,11 @@ import {
 	extractThinkingFromMessage,
 	streamAgentResponse,
 } from "@/lib/agent/client";
+import {
+	extractIsError,
+	extractToolResultContent,
+	MAX_TOOL_RESULT_DB_LIMIT,
+} from "@/lib/agent/message-extraction";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import {
 	badRequest,
@@ -14,118 +19,30 @@ import {
 	unauthorized,
 } from "@/lib/api";
 import { rebuildConversationHistory } from "@/lib/events";
-import { prisma } from "@/lib/prisma";
+import { ChatEventBuffer } from "@/lib/persistence/event-buffer";
+import {
+	isTransientDbError,
+	prisma,
+	retryOnTransientError,
+} from "@/lib/prisma";
 import type { ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
-
-const TRANSIENT_DB_PATTERNS = [
-	"NeonDbError",
-	"requested endpoint could not be found",
-	"password authentication failed",
-	"Connection terminated",
-	"ECONNRESET",
-];
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
-function isTransientDbError(error: unknown): boolean {
-	const msg = errorMessage(error);
-	return TRANSIENT_DB_PATTERNS.some((pattern) => msg.includes(pattern));
-}
 
 function toUserFriendlyError(error: unknown): string {
 	if (isTransientDbError(error)) {
 		return "A temporary database issue occurred. Your response may not have been saved. Please try again.";
 	}
 
-	if (errorMessage(error).includes("Agent process exited with code")) {
+	const msg = error instanceof Error ? error.message : String(error);
+	if (msg.includes("Agent process exited with code")) {
 		return "The analysis encountered an unexpected error. Please try again.";
 	}
 
 	return "Something went wrong. Please try again.";
 }
 
-const MAX_TOOL_RESULT_DB_LIMIT = 2000;
-
-interface ContentBlock {
-	type: string;
-	text?: string;
-	content?: unknown;
-	is_error?: boolean;
-}
-
-function isContentBlock(value: unknown): value is ContentBlock {
-	return typeof value === "object" && value !== null && "type" in value;
-}
-
-function extractTextParts(content: unknown): string[] {
-	if (typeof content === "string") return [content];
-	if (!Array.isArray(content)) return [];
-
-	const parts: string[] = [];
-	for (const inner of content) {
-		if (isContentBlock(inner) && inner.type === "text" && inner.text) {
-			parts.push(inner.text);
-		}
-	}
-	return parts;
-}
-
-function extractToolResultContent(msg: {
-	message: { content: unknown };
-}): string {
-	const content = msg.message.content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-
-	const parts: string[] = [];
-	for (const block of content) {
-		if (!isContentBlock(block)) continue;
-
-		if (block.type === "tool_result") {
-			parts.push(...extractTextParts(block.content));
-		} else if (block.type === "text" && block.text) {
-			parts.push(block.text);
-		}
-	}
-	return parts.join("\n");
-}
-
-function extractIsError(content: unknown): boolean {
-	if (!Array.isArray(content)) return false;
-	return content.some(
-		(block) =>
-			isContentBlock(block) &&
-			block.type === "tool_result" &&
-			block.is_error === true,
-	);
-}
-
-async function retryOnTransientError<T>(
-	fn: () => Promise<T>,
-	delayMs = 1000,
-): Promise<T> {
-	try {
-		return await fn();
-	} catch (error) {
-		if (!isTransientDbError(error)) throw error;
-		console.warn("[Chat API] Transient DB error, retrying:", error);
-		await new Promise((r) => setTimeout(r, delayMs));
-		return fn();
-	}
-}
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface PendingEvent {
-	type: string;
-	data: Prisma.InputJsonValue;
-}
-
-const SAFETY_FLUSH_MS = 5000;
 
 export async function POST(req: Request): Promise<Response> {
 	try {
@@ -190,23 +107,15 @@ export async function POST(req: Request): Promise<Response> {
 			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} v=${isV2 ? 2 : 1} history=${conversationHistory.length}`,
 		);
 
-		let nextSequenceNum = existingChat?.lastSequenceNum ?? 0;
-		if (isV2) {
-			nextSequenceNum++;
-			await prisma.$transaction([
-				prisma.chatEvent.create({
-					data: {
-						chatId: chat.id,
-						type: "user_message",
-						data: { content: message } satisfies Prisma.InputJsonValue,
-						sequenceNum: nextSequenceNum,
-					},
-				}),
-				prisma.chat.update({
-					where: { id: chat.id },
-					data: { lastSequenceNum: nextSequenceNum },
-				}),
-			]);
+		const eventBuffer = isV2
+			? new ChatEventBuffer(chat.id, existingChat?.lastSequenceNum ?? 0)
+			: null;
+
+		if (eventBuffer) {
+			eventBuffer.appendEvent("user_message", {
+				content: message,
+			} satisfies Prisma.InputJsonValue);
+			await eventBuffer.flush();
 		} else {
 			await prisma.message.create({
 				data: {
@@ -261,12 +170,10 @@ export async function POST(req: Request): Promise<Response> {
 					fullThinkingContent += fullThinkingContent
 						? `\n\n${thinking}`
 						: thinking;
-					if (isV2) {
-						flushTextBuffer();
-						pendingEvents.push({
-							type: "thinking",
-							data: { thinking } satisfies Prisma.InputJsonValue,
-						});
+					if (eventBuffer) {
+						eventBuffer.appendEvent("thinking", {
+							thinking,
+						} satisfies Prisma.InputJsonValue);
 					}
 				}
 
@@ -275,7 +182,6 @@ export async function POST(req: Request): Promise<Response> {
 				const sentThinkingIds = new Set<string>();
 
 				let resultStopReason: string | null = null;
-				let resultSubtype: string | null = null;
 				let capturedSessionId: string | undefined;
 
 				let assistantMessageId: string | null = null;
@@ -283,63 +189,8 @@ export async function POST(req: Request): Promise<Response> {
 				let saveInFlight: Promise<void> | null = null;
 				const SAVE_DEBOUNCE_MS = 2000;
 
-				let textBuffer = "";
-				const pendingEvents: PendingEvent[] = [];
-				let safetyTimerId: ReturnType<typeof setInterval> | null = null;
-				let flushInFlight = false;
-
-				function flushTextBuffer(): void {
-					if (!textBuffer) return;
-					pendingEvents.push({
-						type: "text",
-						data: { content: textBuffer } satisfies Prisma.InputJsonValue,
-					});
-					textBuffer = "";
-				}
-
-				async function flushEvents(): Promise<void> {
-					if (flushInFlight || pendingEvents.length === 0) return;
-					flushInFlight = true;
-					const batch = pendingEvents.splice(0, pendingEvents.length);
-					const startSeq = nextSequenceNum;
-					const creates = batch.map((e, idx) =>
-						prisma.chatEvent.create({
-							data: {
-								chatId: chat.id,
-								type: e.type,
-								data: e.data,
-								sequenceNum: startSeq + idx + 1,
-							},
-						}),
-					);
-					nextSequenceNum = startSeq + batch.length;
-					try {
-						await prisma.$transaction([
-							...creates,
-							prisma.chat.update({
-								where: { id: chat.id },
-								data: { lastSequenceNum: nextSequenceNum },
-							}),
-						]);
-					} catch (error) {
-						pendingEvents.unshift(...batch);
-						nextSequenceNum = startSeq;
-						throw error;
-					} finally {
-						flushInFlight = false;
-					}
-				}
-
-				if (isV2) {
-					safetyTimerId = setInterval(() => {
-						if (flushInFlight) return;
-						if (textBuffer) {
-							flushTextBuffer();
-							flushEvents().catch((e) =>
-								console.warn("[Chat API] Safety flush failed:", e),
-							);
-						}
-					}, SAFETY_FLUSH_MS);
+				if (eventBuffer) {
+					eventBuffer.startSafetyTimer();
 				}
 
 				function saveInBackground(): void {
@@ -407,14 +258,13 @@ export async function POST(req: Request): Promise<Response> {
 							sendEvent("delta", { text: "\n\n" });
 							fullAssistantContent += "\n\n";
 							lastEventWasToolUse = false;
-							if (isV2) {
-								textBuffer += "\n\n";
-								flushTextBuffer();
-								pendingEvents.push({
-									type: "turn_complete",
-									data: {} satisfies Prisma.InputJsonValue,
-								});
-								await retryOnTransientError(() => flushEvents());
+							if (eventBuffer) {
+								eventBuffer.appendText("\n\n");
+								eventBuffer.appendEvent(
+									"turn_complete",
+									{} satisfies Prisma.InputJsonValue,
+								);
+								await eventBuffer.flush();
 							} else {
 								saveInBackground();
 							}
@@ -439,20 +289,16 @@ export async function POST(req: Request): Promise<Response> {
 										const { id: toolUseId, name, input } = block;
 										toolUses.push({ name, input });
 										sendEvent("tool_use", { name, input });
-										if (isV2) {
-											flushTextBuffer();
-											pendingEvents.push({
-												type: "tool_use",
-												data: {
-													toolUseId,
-													name,
-													input,
-												} as Prisma.InputJsonValue,
-											});
+										if (eventBuffer) {
+											eventBuffer.appendEvent("tool_use", {
+												toolUseId,
+												name,
+												input,
+											} as Prisma.InputJsonValue);
 										}
 									}
 								}
-								if (!isV2 && !assistantMessageId) {
+								if (!eventBuffer && !assistantMessageId) {
 									saveInBackground();
 								}
 								break;
@@ -482,8 +328,8 @@ export async function POST(req: Request): Promise<Response> {
 									};
 									if (delta.type === "text_delta" && delta.text) {
 										sendEvent("delta", { text: delta.text });
-										if (isV2) {
-											textBuffer += delta.text;
+										if (eventBuffer) {
+											eventBuffer.appendText(delta.text);
 										}
 									} else if (
 										delta.type === "thinking_delta" &&
@@ -505,7 +351,6 @@ export async function POST(req: Request): Promise<Response> {
 							case "result": {
 								resultStopReason =
 									"stop_reason" in msg ? (msg.stop_reason as string) : null;
-								resultSubtype = msg.subtype;
 								if (msg.session_id) {
 									capturedSessionId = msg.session_id;
 								}
@@ -522,20 +367,16 @@ export async function POST(req: Request): Promise<Response> {
 									}),
 								});
 
-								if (isV2) {
-									flushTextBuffer();
-									pendingEvents.push({
-										type: "result",
-										data: {
-											stopReason: resultStopReason,
-											subtype: resultSubtype,
-										} satisfies Prisma.InputJsonValue,
-									});
+								if (eventBuffer) {
+									eventBuffer.appendEvent("result", {
+										stopReason: resultStopReason,
+										subtype: msg.subtype,
+									} satisfies Prisma.InputJsonValue);
 								}
 								break;
 							}
 							case "user": {
-								if (!isV2) break;
+								if (!eventBuffer) break;
 								if (!msg.parent_tool_use_id) break;
 
 								let text = extractToolResultContent(msg);
@@ -544,15 +385,11 @@ export async function POST(req: Request): Promise<Response> {
 									text = `${text.slice(0, MAX_TOOL_RESULT_DB_LIMIT)}...[truncated]`;
 								}
 
-								flushTextBuffer();
-								pendingEvents.push({
-									type: "tool_result",
-									data: {
-										toolUseId: msg.parent_tool_use_id,
-										content: text,
-										isError: extractIsError(msg.message.content),
-									} as Prisma.InputJsonValue,
-								});
+								eventBuffer.appendEvent("tool_result", {
+									toolUseId: msg.parent_tool_use_id,
+									content: text,
+									isError: extractIsError(msg.message.content),
+								} as Prisma.InputJsonValue);
 								break;
 							}
 						}
@@ -562,9 +399,8 @@ export async function POST(req: Request): Promise<Response> {
 						`[Chat API] Stream complete content=${fullAssistantContent.length} tools=${toolUses.length}`,
 					);
 
-					if (isV2) {
-						flushTextBuffer();
-						await retryOnTransientError(() => flushEvents());
+					if (eventBuffer) {
+						await eventBuffer.flush();
 					} else {
 						await retryOnTransientError(() => saveAssistantMessage(true));
 					}
@@ -603,12 +439,9 @@ export async function POST(req: Request): Promise<Response> {
 						}
 					}
 				} finally {
-					if (safetyTimerId) clearInterval(safetyTimerId);
-
 					try {
-						if (isV2) {
-							flushTextBuffer();
-							await flushEvents();
+						if (eventBuffer) {
+							await eventBuffer.cleanup();
 						} else {
 							await saveAssistantMessage(true);
 						}
