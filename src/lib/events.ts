@@ -92,7 +92,12 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 				lastAssistantCreatedAt ??= event.createdAt;
 				const text = data.content ?? "";
 				currentContent += text;
-				currentSegments.push({ type: "text", text });
+				const lastSegment = currentSegments.at(-1);
+				if (lastSegment?.type === "text") {
+					lastSegment.text += text;
+				} else {
+					currentSegments.push({ type: "text", text });
+				}
 				break;
 			}
 			case "tool_use": {
