@@ -61,6 +61,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			messages: chatData.messages || [],
 			sessionId: chatData.sessionId,
 			error: null,
+			disconnectedChatId: null,
 		});
 		queueStore.getState().clear();
 	}, [chatData, chatStore, queueStore]);
@@ -149,6 +150,37 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 				invalidateChatRef.current(state.disconnectedChatId);
 			}
 		});
+	}, [chatStore]);
+
+	useEffect(() => {
+		const STALE_STREAM_MS = 5_000;
+		let hiddenAt: number | null = null;
+
+		function handleVisibilityChange() {
+			if (document.visibilityState === "hidden") {
+				hiddenAt = Date.now();
+				return;
+			}
+
+			if (hiddenAt === null) return;
+
+			const elapsed = Date.now() - hiddenAt;
+			hiddenAt = null;
+
+			const state = chatStore.getState();
+			if (state.isLoading && elapsed > STALE_STREAM_MS) {
+				log.info("Resuming from background, aborting stale stream", {
+					elapsed,
+					chatId: state.currentChat?.id,
+				});
+				state.abortController?.abort();
+			}
+		}
+
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
 	}, [chatStore]);
 
 	return (
