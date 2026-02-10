@@ -59,6 +59,13 @@ function collectEnvVars(keys: string[]): Record<string, string> {
 	return result;
 }
 
+function sanitizeName(name: string): string {
+	return name
+		.replace(/[^\p{L}\p{N}\s'-]/gu, "")
+		.trim()
+		.slice(0, 50);
+}
+
 function getSystemPrompt(timezone?: string, userFirstName?: string): string {
 	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
@@ -66,8 +73,9 @@ function getSystemPrompt(timezone?: string, userFirstName?: string): string {
 	const currentDate = formatCurrentDate(timezone || DEFAULT_TIMEZONE);
 	const dateContext = `\n\nIMPORTANT: Today's date is ${currentDate}. Use this as the reference for "today", "yesterday", "tomorrow", etc.\n`;
 
-	const userContext = userFirstName
-		? `\n\nThe user's name is ${userFirstName}. Use their name naturally and sparingly — in greetings and occasionally when it feels conversational. Don't use it in every message.\n`
+	const safeName = userFirstName ? sanitizeName(userFirstName) : "";
+	const userContext = safeName
+		? `\n\nThe user's name is ${safeName}. Use their name naturally and sparingly — in greetings and occasionally when it feels conversational. Don't use it in every message.\n`
 		: "";
 
 	return basePrompt + dateContext + userContext;
