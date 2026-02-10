@@ -59,14 +59,18 @@ function collectEnvVars(keys: string[]): Record<string, string> {
 	return result;
 }
 
-function getSystemPrompt(timezone?: string): string {
+function getSystemPrompt(timezone?: string, userFirstName?: string): string {
 	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
 
 	const currentDate = formatCurrentDate(timezone || DEFAULT_TIMEZONE);
 	const dateContext = `\n\nIMPORTANT: Today's date is ${currentDate}. Use this as the reference for "today", "yesterday", "tomorrow", etc.\n`;
 
-	return basePrompt + dateContext;
+	const userContext = userFirstName
+		? `\n\nThe user's name is ${userFirstName}. Use their name naturally and sparingly — in greetings and occasionally when it feels conversational. Don't use it in every message.\n`
+		: "";
+
+	return basePrompt + dateContext + userContext;
 }
 
 function getSkillFiles(): Array<{ name: string; content: string }> {
@@ -112,6 +116,7 @@ export interface StreamAgentOptions {
 	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
 	timezone?: string;
+	userFirstName?: string;
 	agentSessionId?: string;
 	onStatus?: StatusCallback;
 }
@@ -200,14 +205,15 @@ async function* singleMessageStream(
 	};
 }
 
-function buildQueryOptions(
-	workspacePath: string,
-	abortController: AbortController,
-	timezone?: string,
-	agentSessionId?: string,
-) {
+function buildQueryOptions(opts: {
+	workspacePath: string;
+	abortController: AbortController;
+	timezone?: string;
+	userFirstName?: string;
+	agentSessionId?: string;
+}) {
 	return {
-		cwd: workspacePath,
+		cwd: opts.workspacePath,
 		model: AGENT_MODEL,
 		pathToClaudeCodeExecutable: getClaudeCodeCliPath(),
 		settingSources: ["project"] satisfies SettingSource[],
@@ -216,11 +222,11 @@ function buildQueryOptions(
 		systemPrompt: {
 			type: "preset" as const,
 			preset: "claude_code" as const,
-			append: getSystemPrompt(timezone),
+			append: getSystemPrompt(opts.timezone, opts.userFirstName),
 		},
-		abortController,
+		abortController: opts.abortController,
 		includePartialMessages: true,
-		resume: agentSessionId,
+		resume: opts.agentSessionId,
 	};
 }
 
@@ -230,6 +236,7 @@ export function createLocalAgentQuery({
 	conversationHistory = [],
 	abortController = new AbortController(),
 	timezone,
+	userFirstName,
 	agentSessionId,
 }: StreamAgentOptions): Query {
 	const effectivePrompt = agentSessionId
@@ -238,12 +245,13 @@ export function createLocalAgentQuery({
 
 	return query({
 		prompt: singleMessageStream(effectivePrompt),
-		options: buildQueryOptions(
+		options: buildQueryOptions({
 			workspacePath,
 			abortController,
 			timezone,
+			userFirstName,
 			agentSessionId,
-		),
+		}),
 	});
 }
 
@@ -500,23 +508,26 @@ async function getOrCreateSandbox(
 	}
 }
 
-function generateAgentScript(
-	fullPrompt: string,
-	timezone?: string,
-	agentSessionId?: string,
-	envVars?: Record<string, string>,
-): string {
-	const promptLiteral = JSON.stringify(fullPrompt);
-	const systemPromptLiteral = JSON.stringify(getSystemPrompt(timezone));
+function generateAgentScript(opts: {
+	fullPrompt: string;
+	timezone?: string;
+	userFirstName?: string;
+	agentSessionId?: string;
+	envVars?: Record<string, string>;
+}): string {
+	const promptLiteral = JSON.stringify(opts.fullPrompt);
+	const systemPromptLiteral = JSON.stringify(
+		getSystemPrompt(opts.timezone, opts.userFirstName),
+	);
 	const modelLiteral = JSON.stringify(AGENT_MODEL);
 	const toolsLiteral = JSON.stringify(AGENT_ALLOWED_TOOLS);
-	const resumeLine = agentSessionId
-		? `        resume: ${JSON.stringify(agentSessionId)},`
+	const resumeLine = opts.agentSessionId
+		? `        resume: ${JSON.stringify(opts.agentSessionId)},`
 		: "";
 
-	const hasEnvVars = envVars && Object.keys(envVars).length > 0;
+	const hasEnvVars = opts.envVars && Object.keys(opts.envVars).length > 0;
 	const envSetup = hasEnvVars
-		? `\nObject.assign(process.env, ${JSON.stringify(envVars)});\n`
+		? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
 		: "";
 
 	return `
@@ -599,6 +610,7 @@ async function* streamViaSandbox({
 	chatId,
 	conversationHistory = [],
 	timezone,
+	userFirstName,
 	onStatus,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
@@ -627,12 +639,13 @@ async function* streamViaSandbox({
 			"WEBSHARE_PROXY_URL",
 		]);
 
-		const script = generateAgentScript(
-			effectivePrompt,
+		const script = generateAgentScript({
+			fullPrompt: effectivePrompt,
 			timezone,
-			effectiveSessionId,
+			userFirstName,
+			agentSessionId: effectiveSessionId,
 			envVars,
-		);
+		});
 
 		const envEntries = Object.entries(envVars);
 		const envExports = envEntries
