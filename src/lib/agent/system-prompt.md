@@ -64,13 +64,10 @@ Always calculate home/away hit rates separately and use the split matching tonig
 ### d. Injury report source priority
 Try Basketball Reference first for injury data. If it fails or returns incomplete data, fall back to web searching "[team] injury report [date]".
 
-### e. Platform clarification
-For parlays/slips, ask which platform the user is building on (DraftKings, FanDuel, PrizePicks, etc.) since lines and push rules differ. For general single-prop analysis, compare across books by default.
-
-### f. Minimize script count
+### e. Minimize script count
 Write at most 3 scripts: (1) data collection, (2) screening + deep dives, (3) final ranking. Avoid 10+ separate bash/python blocks that re-import libraries and re-establish connections each time.
 
-### g. Prescribed execution order
+### f. Prescribed execution order
 1. **Parallel:** events list + bulk season stats + injury report
 2. **Sequential:** loop props per-event (needs event IDs from step 1)
 3. **Python:** cross-reference props vs stats, screen top 10-15 candidates against actual book lines
