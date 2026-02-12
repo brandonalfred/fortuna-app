@@ -142,7 +142,7 @@ export async function POST(req: Request): Promise<Response> {
 					);
 				};
 
-				const KEEPALIVE_INTERVAL_MS = 15_000;
+				const KEEPALIVE_INTERVAL_MS = 10_000;
 				heartbeatInterval = setInterval(() => {
 					try {
 						controller.enqueue(encoder.encode(":keepalive\n\n"));
