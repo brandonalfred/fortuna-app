@@ -12,6 +12,7 @@ import type {
 	ResultEvent,
 	StatusEvent,
 	StreamingMessage,
+	ThinkingDeltaEvent,
 	ThinkingEvent,
 	ToolUseEvent,
 } from "@/lib/types";
@@ -153,11 +154,35 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				case "thinking": {
 					set({ statusMessage: null });
 					const thinkingData = data as ThinkingEvent;
-					state.streamingSegments.push({
-						type: "thinking",
-						thinking: thinkingData.thinking,
-						isComplete: true,
-					});
+					const segments = state.streamingSegments;
+					const lastSeg = segments[segments.length - 1];
+					if (lastSeg?.type === "thinking" && lastSeg.isComplete === false) {
+						lastSeg.thinking = thinkingData.thinking;
+						lastSeg.isComplete = true;
+					} else {
+						segments.push({
+							type: "thinking",
+							thinking: thinkingData.thinking,
+							isComplete: true,
+						});
+					}
+					state.publishSegments();
+					break;
+				}
+				case "thinking_delta": {
+					set({ statusMessage: null });
+					const deltaData = data as ThinkingDeltaEvent;
+					const segments = state.streamingSegments;
+					const lastSeg = segments[segments.length - 1];
+					if (lastSeg?.type === "thinking" && lastSeg.isComplete === false) {
+						lastSeg.thinking += deltaData.thinking;
+					} else {
+						segments.push({
+							type: "thinking",
+							thinking: deltaData.thinking,
+							isComplete: false,
+						});
+					}
 					state.publishSegments();
 					break;
 				}
@@ -217,6 +242,12 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			});
 
 			if (segments.length === 0) return;
+
+			for (const seg of segments) {
+				if (seg.type === "thinking" && seg.isComplete === false) {
+					seg.isComplete = true;
+				}
+			}
 
 			if (stopInfo) {
 				segments.push({

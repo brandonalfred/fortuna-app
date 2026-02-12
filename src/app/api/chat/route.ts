@@ -337,6 +337,9 @@ export async function POST(req: Request): Promise<Response> {
 										delta.thinking
 									) {
 										pendingThinking += delta.thinking;
+										sendEvent("thinking_delta", {
+											thinking: delta.thinking,
+										});
 									}
 								} else if (
 									event.type === "content_block_stop" &&
