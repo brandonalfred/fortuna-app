@@ -158,11 +158,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				}
 				case "thinking": {
 					const thinkingData = data as ThinkingEvent;
-					const segments = state.streamingSegments;
+					const segments = [...state.streamingSegments];
 					const lastSeg = segments[segments.length - 1];
 					if (lastSeg?.type === "thinking" && lastSeg.isComplete === false) {
-						lastSeg.thinking = thinkingData.thinking;
-						lastSeg.isComplete = true;
+						segments[segments.length - 1] = {
+							...lastSeg,
+							thinking: thinkingData.thinking,
+							isComplete: true,
+						};
 					} else {
 						segments.push({
 							type: "thinking",
@@ -170,16 +173,20 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							isComplete: true,
 						});
 					}
-					state.publishSegments();
+					set({ streamingSegments: segments });
+					get().publishSegments();
 					break;
 				}
 				case "thinking_delta": {
 					set({ statusMessage: null });
 					const deltaData = data as ThinkingDeltaEvent;
-					const segments = state.streamingSegments;
+					const segments = [...state.streamingSegments];
 					const lastSeg = segments[segments.length - 1];
 					if (lastSeg?.type === "thinking" && lastSeg.isComplete === false) {
-						lastSeg.thinking += deltaData.thinking;
+						segments[segments.length - 1] = {
+							...lastSeg,
+							thinking: lastSeg.thinking + deltaData.thinking,
+						};
 					} else {
 						segments.push({
 							type: "thinking",
@@ -187,7 +194,8 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							isComplete: false,
 						});
 					}
-					state.publishSegments();
+					set({ streamingSegments: segments });
+					get().publishSegments();
 					break;
 				}
 				case "tool_use": {
@@ -252,21 +260,21 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 			if (segments.length === 0) return;
 
-			for (const seg of segments) {
-				if (seg.type === "thinking" && seg.isComplete === false) {
-					seg.isComplete = true;
-				}
-			}
+			const finalizedSegments = segments.map((seg) =>
+				seg.type === "thinking" && seg.isComplete === false
+					? { ...seg, isComplete: true as const }
+					: seg,
+			);
 
 			if (stopInfo) {
-				segments.push({
+				finalizedSegments.push({
 					type: "stop_notice",
 					stopReason: stopInfo.stopReason,
 					subtype: stopInfo.subtype,
 				});
 			}
 
-			const content = segments
+			const content = finalizedSegments
 				.filter(
 					(s): s is Extract<ContentSegment, { type: "text" }> =>
 						s.type === "text",
@@ -274,7 +282,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				.map((s) => s.text)
 				.join("");
 
-			const toolUses = segments
+			const toolUses = finalizedSegments
 				.filter(
 					(s): s is Extract<ContentSegment, { type: "tool_use" }> =>
 						s.type === "tool_use",
@@ -291,7 +299,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						content,
 						stopReason: stopInfo?.stopReason,
 						toolInput: toolUses.length > 0 ? toolUses : undefined,
-						segments: [...segments],
+						segments: finalizedSegments,
 						createdAt: new Date().toISOString(),
 					},
 				],
