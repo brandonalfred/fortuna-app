@@ -56,11 +56,16 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		if (!chatData) return;
 		const state = chatStore.getState();
 		if (state.isLoading || state.streamingMessage) return;
+
+		const wasDisconnected = !!state.disconnectedChatId;
+
 		chatStore.setState({
 			currentChat: chatData,
 			messages: chatData.messages || [],
 			sessionId: chatData.sessionId,
-			error: null,
+			error: wasDisconnected
+				? "Your connection was interrupted and the response may be incomplete."
+				: null,
 			disconnectedChatId: null,
 		});
 		queueStore.getState().clear();
@@ -169,10 +174,17 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 			const state = chatStore.getState();
 			if (state.isLoading && elapsed > STALE_STREAM_MS) {
+				const disconnectedId = state.currentChat?.id;
 				log.info("Resuming from background, aborting stale stream", {
 					elapsed,
-					chatId: state.currentChat?.id,
+					chatId: disconnectedId,
 				});
+				if (disconnectedId) {
+					chatStore.setState({
+						disconnectedChatId: disconnectedId,
+						error: "Connection lost. Reloading response...",
+					});
+				}
 				state.abortController?.abort();
 			}
 		}
