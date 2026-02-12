@@ -274,7 +274,12 @@ export async function POST(req: Request): Promise<Response> {
 						switch (msg.type) {
 							case "assistant": {
 								const messageId = msg.message.id;
-								if (!fullThinkingContent && !sentThinkingIds.has(messageId)) {
+								if (
+									!fullThinkingContent &&
+									!sentThinkingIds.has(messageId) &&
+									!inThinkingBlock &&
+									!pendingThinking
+								) {
 									const thinking = extractThinkingFromMessage(msg);
 									if (thinking) {
 										sentThinkingIds.add(messageId);

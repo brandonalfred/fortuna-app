@@ -234,6 +234,7 @@ function buildQueryOptions(opts: {
 		},
 		abortController: opts.abortController,
 		includePartialMessages: true,
+		maxThinkingTokens: 10000,
 		resume: opts.agentSessionId,
 	};
 }
@@ -562,6 +563,7 @@ async function main() {
         env: process.env,
         abortController: new AbortController(),
         includePartialMessages: true,
+        maxThinkingTokens: 10000,
 ${resumeLine}
       },
     });
