@@ -129,6 +129,7 @@ export async function POST(req: Request): Promise<Response> {
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
 		let agentQuery: Query | null = null;
+		let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 		const stream = new ReadableStream({
 			async start(controller) {
@@ -140,6 +141,14 @@ export async function POST(req: Request): Promise<Response> {
 						),
 					);
 				};
+
+				heartbeatInterval = setInterval(() => {
+					try {
+						controller.enqueue(encoder.encode(":keepalive\n\n"));
+					} catch {
+						clearInterval(heartbeatInterval!);
+					}
+				}, 15_000);
 
 				const agentOptions = {
 					prompt: message,
@@ -440,6 +449,7 @@ export async function POST(req: Request): Promise<Response> {
 						}
 					}
 				} finally {
+					if (heartbeatInterval) clearInterval(heartbeatInterval);
 					try {
 						if (eventBuffer) {
 							await eventBuffer.cleanup();
@@ -457,6 +467,7 @@ export async function POST(req: Request): Promise<Response> {
 				}
 			},
 			cancel() {
+				if (heartbeatInterval) clearInterval(heartbeatInterval);
 				if (agentQuery) {
 					agentQuery.interrupt().catch(() => {
 						/* best-effort */
