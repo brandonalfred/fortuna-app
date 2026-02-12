@@ -32,6 +32,7 @@ export function MessageList({
 	const lastUserMessageRef = useRef<HTMLDivElement>(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
 	const prevMessagesLengthRef = useRef(0);
+	const seenMessageIds = useRef<Set<string>>(new Set());
 
 	const userScrollingRef = useRef(false);
 	const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,15 +118,19 @@ export function MessageList({
 			onScroll={handleScroll}
 			className="flex flex-col gap-4 p-4 h-full overflow-y-auto"
 		>
-			{messages.map((message, index) => (
-				<div
-					key={message.id}
-					ref={getMessageRef(index)}
-					className="scroll-mt-4"
-				>
-					<MessageItem message={message} />
-				</div>
-			))}
+			{messages.map((message, index) => {
+				const shouldAnimate = !seenMessageIds.current.has(message.id);
+				seenMessageIds.current.add(message.id);
+				return (
+					<div
+						key={message.id}
+						ref={getMessageRef(index)}
+						className="scroll-mt-4"
+					>
+						<MessageItem message={message} animate={shouldAnimate} />
+					</div>
+				);
+			})}
 			{streamingMessage?.isStreaming && (
 				<StreamingMessageItem
 					segments={streamingMessage.segments}
