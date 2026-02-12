@@ -29,6 +29,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	const invalidateChat = useInvalidateChat();
 	const invalidateChatRef = useRef(invalidateChat);
 	invalidateChatRef.current = invalidateChat;
+	const skipNextMessageReplaceRef = useRef(false);
 
 	const [queueStore] = useState(() => createQueueStore());
 	const [chatStore] = useState(() =>
@@ -37,6 +38,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 				router.replace(`/chat/${newChatId}`);
 			},
 			onStreamComplete: (completedChatId) => {
+				skipNextMessageReplaceRef.current = true;
 				invalidateChatRef.current(completedChatId);
 			},
 			getQueueStore: () => queueStore.getState(),
@@ -58,10 +60,12 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		if (state.isLoading || state.streamingMessage) return;
 
 		const wasDisconnected = !!state.disconnectedChatId;
+		const skipMessages = skipNextMessageReplaceRef.current && !wasDisconnected;
+		skipNextMessageReplaceRef.current = false;
 
 		chatStore.setState({
 			currentChat: chatData,
-			messages: chatData.messages || [],
+			messages: skipMessages ? state.messages : chatData.messages || [],
 			sessionId: chatData.sessionId,
 			disconnectedChatId: null,
 			error: wasDisconnected

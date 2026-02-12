@@ -136,42 +136,57 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					break;
 				}
 				case "delta": {
-					set({ statusMessage: null });
 					const deltaData = data as DeltaEvent;
 					const segments = state.streamingSegments;
 					const lastSegment = segments[segments.length - 1];
 
-					if (lastSegment?.type === "text") {
-						lastSegment.text += deltaData.text;
-					} else {
-						segments.push({ type: "text", text: deltaData.text });
-					}
+					const updatedSegments =
+						lastSegment?.type === "text"
+							? [
+									...segments.slice(0, -1),
+									{
+										...lastSegment,
+										text: lastSegment.text + deltaData.text,
+									},
+								]
+							: [...segments, { type: "text" as const, text: deltaData.text }];
 
-					state.publishSegments();
+					set({ statusMessage: null, streamingSegments: updatedSegments });
+					get().publishSegments();
 					break;
 				}
 				case "thinking": {
-					set({ statusMessage: null });
 					const thinkingData = data as ThinkingEvent;
-					state.streamingSegments.push({
-						type: "thinking",
-						thinking: thinkingData.thinking,
-						isComplete: true,
+					set({
+						statusMessage: null,
+						streamingSegments: [
+							...state.streamingSegments,
+							{
+								type: "thinking" as const,
+								thinking: thinkingData.thinking,
+								isComplete: true,
+							},
+						],
 					});
-					state.publishSegments();
+					get().publishSegments();
 					break;
 				}
 				case "tool_use": {
 					const toolData = data as ToolUseEvent;
-					state.streamingSegments.push({
-						type: "tool_use",
-						tool: {
-							name: toolData.name,
-							input: toolData.input,
-							status: "running",
-						},
+					set({
+						streamingSegments: [
+							...state.streamingSegments,
+							{
+								type: "tool_use" as const,
+								tool: {
+									name: toolData.name,
+									input: toolData.input,
+									status: "running",
+								},
+							},
+						],
 					});
-					state.publishSegments();
+					get().publishSegments();
 					break;
 				}
 				case "turn_complete": {
