@@ -42,6 +42,7 @@ export interface StreamEvent {
 		| "done"
 		| "error"
 		| "thinking"
+		| "thinking_delta"
 		| "turn_complete"
 		| "status";
 	data: unknown;
@@ -53,6 +54,10 @@ export interface StatusEvent {
 }
 
 export interface ThinkingEvent {
+	thinking: string;
+}
+
+export interface ThinkingDeltaEvent {
 	thinking: string;
 }
 

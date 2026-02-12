@@ -3,7 +3,6 @@
 import {
 	AlertTriangle,
 	Ban,
-	Brain,
 	ChevronDown,
 	ChevronRight,
 	Clock,
@@ -193,17 +192,24 @@ export function StreamingMessageItem({
 	isStreaming,
 	statusMessage,
 }: StreamingMessageItemProps) {
+	const collapsed = collapseToolSegments(segments);
+	const lastSeg = collapsed[collapsed.length - 1];
+	const isThinking =
+		lastSeg?.type === "thinking" && lastSeg.isComplete === false;
+
 	return (
 		<div className="animate-message-in flex w-full justify-start">
 			<div className="max-w-[85%] rounded-lg px-4 py-3 text-text-primary">
 				<div className={PROSE_CLASSES}>
-					{collapseToolSegments(segments).map((segment, idx) => (
+					{collapsed.map((segment, idx) => (
 						<SegmentRenderer
 							key={getSegmentKey(segment, idx)}
 							segment={segment}
 						/>
 					))}
-					{isStreaming && <LoadingIndicator statusMessage={statusMessage} />}
+					{isStreaming && !isThinking && (
+						<LoadingIndicator statusMessage={statusMessage} />
+					)}
 				</div>
 			</div>
 		</div>
@@ -328,7 +334,11 @@ interface SegmentRendererProps {
 function SegmentRenderer({ segment }: SegmentRendererProps) {
 	switch (segment.type) {
 		case "thinking":
-			return <ThinkingBlock thinking={segment.thinking} />;
+			return segment.isComplete === false ? (
+				<ThinkingIndicator thinking={segment.thinking} />
+			) : (
+				<ThinkingBlock thinking={segment.thinking} />
+			);
 		case "text":
 			return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
 		case "tool_use":
@@ -415,21 +425,16 @@ function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 	const Chevron = expanded ? ChevronDown : ChevronRight;
 
 	return (
-		<div className="my-2">
+		<div className="my-1">
 			<button
 				type="button"
 				onClick={() => setExpanded(!expanded)}
-				className={cn(
-					"flex items-center gap-2 rounded-lg px-3 py-2 text-sm w-full text-left",
-					"bg-bg-tertiary/50 border border-border-subtle",
-					"transition-colors hover:bg-bg-tertiary",
-				)}
+				className="flex items-center gap-2 py-1 text-sm transition-colors hover:text-text-secondary"
 			>
-				<Brain className="h-4 w-4 text-text-muted shrink-0" />
-				<span className="text-text-secondary flex-1 truncate">
+				<Chevron className="h-3.5 w-3.5 text-text-muted shrink-0" />
+				<span className="text-text-muted truncate">
 					{expanded ? "Reasoning" : summary}
 				</span>
-				<Chevron className="h-4 w-4 text-text-muted shrink-0" />
 			</button>
 			{expanded && (
 				<div className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3">
@@ -438,6 +443,23 @@ function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 					</div>
 				</div>
 			)}
+		</div>
+	);
+}
+
+interface ThinkingIndicatorProps {
+	thinking: string;
+}
+
+function ThinkingIndicator({ thinking }: ThinkingIndicatorProps) {
+	const summary = thinking ? generateThinkingSummary(thinking) : "Thinking...";
+
+	return (
+		<div className="my-1 flex items-center gap-2 py-1 text-sm">
+			<Loader2 className="h-3.5 w-3.5 animate-spin text-accent-primary shrink-0" />
+			<span className="text-text-muted animate-subtle-pulse truncate">
+				{summary}
+			</span>
 		</div>
 	);
 }

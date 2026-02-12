@@ -284,7 +284,12 @@ export async function POST(req: Request): Promise<Response> {
 						switch (msg.type) {
 							case "assistant": {
 								const messageId = msg.message.id;
-								if (!fullThinkingContent && !sentThinkingIds.has(messageId)) {
+								if (
+									!fullThinkingContent &&
+									!sentThinkingIds.has(messageId) &&
+									!inThinkingBlock &&
+									!pendingThinking
+								) {
 									const thinking = extractThinkingFromMessage(msg);
 									if (thinking) {
 										sentThinkingIds.add(messageId);
@@ -347,6 +352,9 @@ export async function POST(req: Request): Promise<Response> {
 										delta.thinking
 									) {
 										pendingThinking += delta.thinking;
+										sendEvent("thinking_delta", {
+											thinking: delta.thinking,
+										});
 									}
 								} else if (
 									event.type === "content_block_stop" &&
