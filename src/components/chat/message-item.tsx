@@ -128,6 +128,7 @@ const PROSE_CLASSES =
 
 interface MessageItemProps {
 	message: Message;
+	animate?: boolean;
 }
 
 function renderMessageContent(message: Message): ReactNode {
@@ -151,13 +152,14 @@ function renderMessageContent(message: Message): ReactNode {
 	);
 }
 
-export function MessageItem({ message }: MessageItemProps) {
+export function MessageItem({ message, animate = true }: MessageItemProps) {
 	const isUser = message.role === "user";
 
 	return (
 		<div
 			className={cn(
-				"animate-message-in flex w-full",
+				"flex w-full",
+				animate && "animate-message-in",
 				isUser ? "justify-end" : "justify-start",
 			)}
 		>
