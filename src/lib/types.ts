@@ -4,6 +4,7 @@ export interface Chat {
 	sessionId: string;
 	isProcessing?: boolean;
 	storageVersion?: number;
+	lastSequenceNum?: number;
 	createdAt: string;
 	updatedAt: string;
 	messages?: Message[];

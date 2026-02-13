@@ -155,12 +155,17 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		const STALE_STREAM_MS = 5_000;
-		const KEEPALIVE_GRACE_MS = 15_000;
+		const GRACE_PERIOD_MS = 3_000;
 		let hiddenAt: number | null = null;
+		let graceTimeout: ReturnType<typeof setTimeout> | null = null;
 
 		function handleVisibilityChange() {
 			if (document.visibilityState === "hidden") {
 				hiddenAt = Date.now();
+				if (graceTimeout) {
+					clearTimeout(graceTimeout);
+					graceTimeout = null;
+				}
 				return;
 			}
 
@@ -172,32 +177,47 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			const state = chatStore.getState();
 			if (!state.isLoading || elapsed <= STALE_STREAM_MS) return;
 
-			const timeSinceLastEvent = Date.now() - state.lastEventAt;
-			if (state.lastEventAt > 0 && timeSinceLastEvent < KEEPALIVE_GRACE_MS) {
-				log.info("Tab returned, stream still active", {
-					elapsed,
-					timeSinceLastEvent,
-				});
-				return;
-			}
+			const snapshotEventAt = state.lastEventAt;
 
-			const disconnectedId = state.currentChat?.id;
-			log.info("Tab returned, stream stale — entering recovery", {
-				elapsed,
-				chatId: disconnectedId,
-			});
-			if (disconnectedId) {
-				chatStore.setState({
-					disconnectedChatId: disconnectedId,
-					isRecovering: true,
-				});
-			}
-			state.abortController?.abort();
+			graceTimeout = setTimeout(() => {
+				graceTimeout = null;
+				const current = chatStore.getState();
+
+				if (!current.isLoading) {
+					log.info("Tab returned, stream already finished during grace period");
+					return;
+				}
+
+				if (current.lastEventAt > snapshotEventAt) {
+					log.info("Tab returned, stream resumed during grace period", {
+						elapsed,
+						eventsDelta: current.lastEventAt - snapshotEventAt,
+					});
+					return;
+				}
+
+				const disconnectedId = current.currentChat?.id;
+				log.info(
+					"Tab returned, stream stale after grace period — entering recovery",
+					{
+						elapsed,
+						chatId: disconnectedId,
+					},
+				);
+				if (disconnectedId) {
+					chatStore.setState({
+						disconnectedChatId: disconnectedId,
+						isRecovering: true,
+					});
+				}
+				current.abortController?.abort();
+			}, GRACE_PERIOD_MS);
 		}
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
+			if (graceTimeout) clearTimeout(graceTimeout);
 		};
 	}, [chatStore]);
 
@@ -206,31 +226,55 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		let recoveryStartedAt = 0;
 
 		const POLL_INTERVAL_MS = 3_000;
-		const RECOVERY_TIMEOUT_MS = 5 * 60 * 1_000;
+		const RECOVERY_TIMEOUT_MS = 2 * 60 * 1_000;
+		const STALE_POLL_LIMIT = 20;
+
+		function stopPolling(): void {
+			if (interval) clearInterval(interval);
+			interval = null;
+		}
 
 		const unsub = chatStore.subscribe((state, prev) => {
 			if (state.isRecovering && !prev.isRecovering) {
 				const targetChatId = state.disconnectedChatId || state.currentChat?.id;
 				if (!targetChatId) return;
+				const chatId: string = targetChatId;
 
 				recoveryStartedAt = Date.now();
-				log.info("Recovery polling started", { chatId: targetChatId });
+				let lastSeenSequenceNum = -1;
+				let stalePollCount = 0;
+				log.info("Recovery polling started", { chatId });
 
-				interval = setInterval(async () => {
+				function finishRecovery(
+					data: Chat & { messages: Message[] },
+					messages: Message[],
+				): void {
+					chatStore.setState({
+						messages,
+						currentChat: data,
+						isRecovering: false,
+						disconnectedChatId: null,
+						error: null,
+						sessionId: data.sessionId,
+					});
+					invalidateChatRef.current(chatId);
+					stopPolling();
+				}
+
+				async function poll() {
 					if (Date.now() - recoveryStartedAt > RECOVERY_TIMEOUT_MS) {
-						log.warn("Recovery timed out", { chatId: targetChatId });
+						log.warn("Recovery timed out", { chatId });
 						chatStore.setState({
 							isRecovering: false,
 							disconnectedChatId: null,
 							error: "The response took too long. Please try again.",
 						});
-						if (interval) clearInterval(interval);
-						interval = null;
+						stopPolling();
 						return;
 					}
 
 					try {
-						const res = await fetch(`/api/chats/${targetChatId}`);
+						const res = await fetch(`/api/chats/${chatId}`);
 						if (res.status === 401) {
 							window.location.href = "/auth/signin";
 							return;
@@ -242,37 +286,45 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 						};
 						const messages = (data.messages || []).map(hydrateMessageSegments);
 
-						if (data.isProcessing) {
-							chatStore.setState({ messages });
-						} else {
-							log.info("Recovery complete", { chatId: targetChatId });
-							chatStore.setState({
-								messages,
-								currentChat: data,
-								isRecovering: false,
-								disconnectedChatId: null,
-								error: null,
-								sessionId: data.sessionId,
-							});
-							invalidateChatRef.current(targetChatId);
-							if (interval) clearInterval(interval);
-							interval = null;
+						if (!data.isProcessing) {
+							log.info("Recovery complete", { chatId });
+							finishRecovery(data, messages);
+							return;
 						}
+
+						const currentSeqNum = data.lastSequenceNum ?? -1;
+						if (currentSeqNum === lastSeenSequenceNum) {
+							stalePollCount++;
+							if (stalePollCount >= STALE_POLL_LIMIT) {
+								log.warn("Recovery stale — no new events, forcing exit", {
+									chatId,
+									stalePollCount,
+								});
+								finishRecovery(data, messages);
+								return;
+							}
+						} else {
+							lastSeenSequenceNum = currentSeqNum;
+							stalePollCount = 0;
+						}
+						chatStore.setState({ messages });
 					} catch {
 						log.warn("Recovery poll failed");
 					}
-				}, POLL_INTERVAL_MS);
+				}
+
+				poll();
+				interval = setInterval(poll, POLL_INTERVAL_MS);
 			}
 
-			if (!state.isRecovering && prev.isRecovering && interval) {
-				clearInterval(interval);
-				interval = null;
+			if (!state.isRecovering && prev.isRecovering) {
+				stopPolling();
 			}
 		});
 
 		return () => {
 			unsub();
-			if (interval) clearInterval(interval);
+			stopPolling();
 		};
 	}, [chatStore]);
 
