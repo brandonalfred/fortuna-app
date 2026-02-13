@@ -53,3 +53,27 @@ export function extractIsError(content: unknown): boolean {
 			block.is_error === true,
 	);
 }
+
+interface ThinkingBlock {
+	type: "thinking";
+	thinking: string;
+	signature: string;
+}
+
+interface SDKMessageLike {
+	type: string;
+	message: { content: unknown };
+}
+
+export function extractThinkingFromMessage(
+	message: SDKMessageLike,
+): string | null {
+	if (message.type !== "assistant") return null;
+
+	const content = message.message.content as Array<{ type: string }>;
+	const thinkingTexts = content
+		.filter((block): block is ThinkingBlock => block.type === "thinking")
+		.map((block) => block.thinking);
+
+	return thinkingTexts.length > 0 ? thinkingTexts.join("\n\n") : null;
+}
