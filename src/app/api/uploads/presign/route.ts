@@ -20,7 +20,16 @@ export async function POST(req: Request): Promise<Response> {
 
 	const results = await Promise.all(
 		files.map(async (file) => {
-			const ext = file.filename.split(".").pop() || "bin";
+			const mimeToExt: Record<string, string> = {
+				"image/png": "png",
+				"image/jpeg": "jpg",
+				"image/webp": "webp",
+				"image/gif": "gif",
+				"application/pdf": "pdf",
+				"text/csv": "csv",
+				"text/plain": "txt",
+			};
+			const ext = mimeToExt[file.mimeType] || "bin";
 			const key = chatId
 				? `uploads/${user.id}/${chatId}/${randomUUID()}.${ext}`
 				: `uploads/${user.id}/${randomUUID()}.${ext}`;
