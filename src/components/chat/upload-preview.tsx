@@ -150,7 +150,7 @@ export function UploadPreview({ uploads, onRemove }: UploadPreviewProps) {
 
 	return (
 		<>
-			<div className="flex gap-2 overflow-x-auto pb-1 px-1">
+			<div className="flex gap-2 overflow-x-auto pt-2 pb-1 px-2">
 				{uploads.map((upload) => (
 					<UploadCard
 						key={upload.id}
