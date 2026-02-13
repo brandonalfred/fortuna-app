@@ -22,7 +22,11 @@ export function isTextMimeType(mimeType: string): boolean {
 	return TEXT_MIME_TYPES.has(mimeType);
 }
 
+let _r2Client: S3Client | null = null;
+
 function getR2Client(): S3Client {
+	if (_r2Client) return _r2Client;
+
 	const accountId = process.env.R2_ACCOUNT_ID;
 	const accessKeyId = process.env.R2_ACCESS_KEY_ID;
 	const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
@@ -31,11 +35,12 @@ function getR2Client(): S3Client {
 		throw new Error("R2 environment variables not configured");
 	}
 
-	return new S3Client({
+	_r2Client = new S3Client({
 		region: "auto",
 		endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
 		credentials: { accessKeyId, secretAccessKey },
 	});
+	return _r2Client;
 }
 
 function getBucket(): string {
@@ -84,5 +89,8 @@ export async function fetchTextContent(key: string): Promise<string> {
 		Key: key,
 	});
 	const response = await client.send(command);
-	return response.Body?.transformToString("utf-8") ?? "";
+	if (!response.Body) {
+		throw new Error(`R2 object not found: ${key}`);
+	}
+	return response.Body.transformToString("utf-8");
 }
