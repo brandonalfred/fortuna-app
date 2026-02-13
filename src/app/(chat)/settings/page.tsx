@@ -1,0 +1,62 @@
+"use client";
+
+import { ChevronLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { useSessionContext } from "@/lib/auth/session-context";
+
+export default function SettingsPage() {
+	const { session, isPending } = useSessionContext();
+	const router = useRouter();
+
+	if (isPending) {
+		return (
+			<div className="flex h-full items-center justify-center">
+				<div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-primary border-t-transparent" />
+			</div>
+		);
+	}
+
+	const user = session?.user;
+	if (!user) return null;
+
+	const initials =
+		(
+			(user.firstName?.charAt(0) || "") + (user.lastName?.charAt(0) || "")
+		).toUpperCase() || "?";
+
+	return (
+		<div className="flex h-full flex-col overflow-y-auto">
+			<div className="border-b border-border-subtle px-4 py-3">
+				<div className="flex items-center gap-2">
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={() => router.back()}
+						className="h-8 w-8 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+					>
+						<ChevronLeft className="h-5 w-5" />
+					</Button>
+					<h2 className="text-lg font-medium text-text-primary">Settings</h2>
+				</div>
+			</div>
+
+			<div className="flex-1 px-4 py-6">
+				<div className="mx-auto max-w-md space-y-6">
+					<div className="flex flex-col items-center gap-3">
+						<div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-primary text-xl font-medium text-text-inverse">
+							{initials}
+						</div>
+					</div>
+
+					<div className="space-y-1">
+						<p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+							Email
+						</p>
+						<p className="text-sm text-text-primary">{user.email}</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
