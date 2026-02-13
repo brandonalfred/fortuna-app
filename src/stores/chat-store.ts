@@ -432,14 +432,23 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				set({ error: errorMessage });
 				callbacks.getQueueStore().clear();
 			} finally {
-				set({
-					isLoading: false,
-					statusMessage: null,
-				});
-				get().finalizeStreamingMessage();
-				const chatId = get().currentChat?.id;
-				if (chatId) {
-					callbacks.onStreamComplete?.(chatId);
+				const recovering = get().isRecovering;
+
+				if (recovering) {
+					set({
+						isLoading: false,
+						statusMessage: null,
+						streamingSegments: [],
+						streamingMessage: null,
+						stopReason: null,
+					});
+				} else {
+					set({ isLoading: false, statusMessage: null });
+					get().finalizeStreamingMessage();
+					const completedChatId = get().currentChat?.id;
+					if (completedChatId) {
+						callbacks.onStreamComplete?.(completedChatId);
+					}
 				}
 			}
 		},
