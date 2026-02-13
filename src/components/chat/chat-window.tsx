@@ -4,6 +4,7 @@ import { Loader2, X } from "lucide-react";
 import { useCallback } from "react";
 import { useActiveChat } from "@/components/chat/chat-context";
 import { useSessionContext } from "@/lib/auth/session-context";
+import type { Attachment } from "@/lib/types";
 import { capitalize, cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
@@ -67,9 +68,9 @@ export function ChatWindow() {
 	} = useActiveChat();
 
 	const handleSend = useCallback(
-		(message: string) => {
+		(message: string, attachments?: Attachment[]) => {
 			clearError();
-			sendMessage(message);
+			sendMessage(message, attachments);
 		},
 		[sendMessage, clearError],
 	);

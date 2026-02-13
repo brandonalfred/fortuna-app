@@ -20,6 +20,7 @@ export interface Message {
 	toolInput?: unknown;
 	stopReason?: string | null;
 	segments?: ContentSegment[];
+	attachments?: Attachment[];
 	createdAt: string;
 }
 
@@ -117,9 +118,19 @@ export interface ConversationMessage {
 	thinking?: string | null;
 	tools?: ConversationToolUse[];
 	toolResults?: ConversationToolResult[];
+	attachments?: Attachment[];
+}
+
+export interface Attachment {
+	key: string;
+	filename: string;
+	mimeType: string;
+	size: number;
+	url?: string;
 }
 
 export interface QueuedMessage {
 	id: string;
 	content: string;
+	attachments?: Attachment[];
 }

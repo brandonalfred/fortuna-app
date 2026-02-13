@@ -7,6 +7,8 @@ import {
 	type SDKUserMessage,
 	type SettingSource,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { Attachment } from "@/lib/types";
+import { buildContentBlocks } from "./content-blocks";
 import { buildFullPrompt } from "./prompt-builder";
 import { type StreamAgentOptions, streamViaSandbox } from "./sandbox-runner";
 import {
@@ -40,18 +42,18 @@ export async function* streamAgentResponse(
 }
 
 async function* singleMessageStream(
-	text: string,
+	message: string,
+	attachments?: Attachment[],
 ): AsyncGenerator<SDKUserMessage> {
-	const message: SDKUserMessage = {
+	yield {
 		type: "user",
 		session_id: "",
 		message: {
 			role: "user",
-			content: [{ type: "text", text }],
+			content: buildContentBlocks(message, attachments),
 		},
 		parent_tool_use_id: null,
 	};
-	yield message;
 }
 
 interface QueryOptionsInput {
@@ -96,13 +98,14 @@ export function createLocalAgentQuery({
 	userFirstName,
 	userPreferences,
 	agentSessionId,
+	attachments,
 }: StreamAgentOptions): Query {
 	const effectivePrompt = agentSessionId
 		? prompt
 		: buildFullPrompt(prompt, conversationHistory);
 
 	return query({
-		prompt: singleMessageStream(effectivePrompt),
+		prompt: singleMessageStream(effectivePrompt, attachments),
 		options: buildQueryOptions({
 			workspacePath,
 			abortController,

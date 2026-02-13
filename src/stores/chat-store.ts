@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 import { createLogger } from "@/lib/logger";
 import { createDeduplicator, parseSSEStream } from "@/lib/sse";
 import type {
+	Attachment,
 	Chat,
 	ChatInitEvent,
 	ContentSegment,
@@ -55,7 +56,7 @@ interface ChatActions {
 	publishSegments(): void;
 	markToolsComplete(): void;
 	finalizeStreamingMessage(): void;
-	sendMessage(content: string): Promise<void>;
+	sendMessage(content: string, attachments?: Attachment[]): Promise<void>;
 	stopGeneration(): void;
 	startNewChat(): void;
 	clearError(): void;
@@ -328,13 +329,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			callbacks.getQueueStore().clear();
 		},
 
-		async sendMessage(content) {
+		async sendMessage(content, attachments) {
 			const state = get();
 			if (!content.trim() || state.isLoading) return;
 
 			log.info("Sending message", {
 				chatId: state.currentChat?.id,
 				length: content.length,
+				attachments: attachments?.length,
 			});
 
 			const userMessage: Message = {
@@ -342,6 +344,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				chatId: state.currentChat?.id || "",
 				role: "user",
 				content,
+				attachments,
 				createdAt: new Date().toISOString(),
 			};
 
@@ -368,6 +371,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						chatId: currentState.currentChat?.id,
 						sessionId: currentState.sessionId,
 						timezone: userTimezone,
+						attachments: attachments?.map(
+							({ key, filename, mimeType, size }) => ({
+								key,
+								filename,
+								mimeType,
+								size,
+							}),
+						),
 					}),
 					signal: abortController.signal,
 				});

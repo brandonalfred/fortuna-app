@@ -15,3 +15,16 @@ export function getInitials(firstName?: string, lastName?: string): string {
 	const last = lastName?.charAt(0) || "";
 	return (first + last).toUpperCase() || "?";
 }
+
+export const IMAGE_MIME_TYPES = new Set([
+	"image/png",
+	"image/jpeg",
+	"image/webp",
+	"image/gif",
+]);
+
+export function formatFileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}

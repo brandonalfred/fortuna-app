@@ -1,6 +1,11 @@
 "use client";
 
-import type { Message, QueuedMessage, StreamingMessage } from "@/lib/types";
+import type {
+	Attachment,
+	Message,
+	QueuedMessage,
+	StreamingMessage,
+} from "@/lib/types";
 import { useChatStore, useQueueStore } from "@/providers/chat-store-provider";
 
 interface ActiveChatValue {
@@ -11,9 +16,9 @@ interface ActiveChatValue {
 	statusMessage: string | null;
 	messageQueue: QueuedMessage[];
 	error: string | null;
-	sendMessage: (content: string) => void;
+	sendMessage: (content: string, attachments?: Attachment[]) => void;
 	stopGeneration: () => void;
-	queueMessage: (content: string) => void;
+	queueMessage: (content: string, attachments?: Attachment[]) => void;
 	removeQueuedMessage: (id: string) => void;
 	clearError: () => void;
 }
