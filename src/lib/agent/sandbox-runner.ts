@@ -52,15 +52,16 @@ function generateAgentScript(opts: AgentScriptOptions): string {
 		? `        resume: ${JSON.stringify(opts.agentSessionId)},`
 		: "";
 
-	const hasEnvVars = opts.envVars && Object.keys(opts.envVars).length > 0;
-	const envSetup = hasEnvVars
-		? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
-		: "";
+	const envKeys = Object.keys(opts.envVars ?? {});
+	const envSetup =
+		envKeys.length > 0
+			? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
+			: "";
 
 	const contentBlocks = buildContentBlocks(opts.fullPrompt, opts.attachments);
-	const hasMultiModal = contentBlocks.length > 1;
+	const hasAttachments = contentBlocks.length > 1;
 
-	const promptSetup = hasMultiModal
+	const promptSetup = hasAttachments
 		? `const contentBlocks = JSON.parse(${JSON.stringify(JSON.stringify(contentBlocks))});
 
 async function* promptStream() {
@@ -73,7 +74,7 @@ async function* promptStream() {
 }`
 		: `const prompt = ${JSON.stringify(opts.fullPrompt)};`;
 
-	const promptArg = hasMultiModal ? "promptStream()" : "prompt";
+	const promptArg = hasAttachments ? "promptStream()" : "prompt";
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -214,8 +215,9 @@ export async function* streamViaSandbox({
 
 		log.info("Env vars", {
 			vars:
-				envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ") ||
-				"(none)",
+				envEntries.length > 0
+					? envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ")
+					: "(none)",
 		});
 
 		log.debug("Writing agent runner script...");

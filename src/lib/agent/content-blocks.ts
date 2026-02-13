@@ -12,19 +12,19 @@ export function buildContentBlocks(
 ): MessageContentBlock[] {
 	const content: MessageContentBlock[] = [];
 
-	if (attachments) {
-		for (const att of attachments) {
-			if (isImageMimeType(att.mimeType) && att.url) {
-				content.push({
-					type: "image",
-					source: { type: "url", url: att.url },
-				});
-			} else if (att.mimeType === "application/pdf" && att.url) {
-				content.push({
-					type: "document",
-					source: { type: "url", url: att.url },
-				});
-			}
+	for (const att of attachments ?? []) {
+		if (!att.url) continue;
+
+		if (isImageMimeType(att.mimeType)) {
+			content.push({
+				type: "image",
+				source: { type: "url", url: att.url },
+			});
+		} else if (att.mimeType === "application/pdf") {
+			content.push({
+				type: "document",
+				source: { type: "url", url: att.url },
+			});
 		}
 	}
 

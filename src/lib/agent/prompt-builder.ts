@@ -47,20 +47,18 @@ function formatToolsWithResults(
 
 function formatMessage(message: ConversationMessage): string {
 	if (message.role === "user") {
-		const attachmentNote =
-			message.attachments && message.attachments.length > 0
-				? ` [Attached: ${message.attachments.map((a) => a.filename).join(", ")}]`
-				: "";
+		const attachmentNote = message.attachments?.length
+			? ` [Attached: ${message.attachments.map((a) => a.filename).join(", ")}]`
+			: "";
 		return `User: ${message.content}${attachmentNote}`;
 	}
 
 	const thinkingPart = message.thinking
 		? `[Your internal reasoning]: ${message.thinking}\n\n`
 		: "";
-	const toolsPart =
-		message.tools && message.tools.length > 0
-			? `\n${formatToolsWithResults(message.tools, message.toolResults)}`
-			: "";
+	const toolsPart = message.tools?.length
+		? `\n${formatToolsWithResults(message.tools, message.toolResults)}`
+		: "";
 
 	return `${thinkingPart}Assistant: ${message.content}${toolsPart}`;
 }
