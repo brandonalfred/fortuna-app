@@ -1,5 +1,6 @@
 import type { ChatEvent } from "@prisma/client";
 import type {
+	Attachment,
 	ContentSegment,
 	ConversationMessage,
 	ConversationToolResult,
@@ -17,6 +18,7 @@ interface EventData {
 	isError?: boolean;
 	stopReason?: string;
 	subtype?: string;
+	attachments?: Attachment[];
 }
 
 function appendWithSeparator(existing: string, addition: string): string {
@@ -73,6 +75,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 					chatId: event.chatId,
 					role: "user",
 					content: data.content ?? "",
+					attachments: data.attachments,
 					createdAt: event.createdAt.toISOString(),
 				});
 				break;
@@ -167,6 +170,7 @@ export function rebuildConversationHistory(
 				history.push({
 					role: "user",
 					content: data.content ?? "",
+					attachments: data.attachments,
 				});
 				break;
 			}

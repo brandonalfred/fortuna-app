@@ -1,6 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { createLogger } from "@/lib/logger";
-import type { ConversationMessage } from "@/lib/types";
+import type { Attachment, ConversationMessage } from "@/lib/types";
+import { buildContentBlocks } from "./content-blocks";
 import { buildFullPrompt } from "./prompt-builder";
 import {
 	clearSandboxRefs,
@@ -27,6 +28,7 @@ export interface StreamAgentOptions {
 	userFirstName?: string;
 	userPreferences?: string;
 	agentSessionId?: string;
+	attachments?: Attachment[];
 	onStatus?: StatusCallback;
 }
 
@@ -37,10 +39,10 @@ interface AgentScriptOptions {
 	userPreferences?: string;
 	agentSessionId?: string;
 	envVars?: Record<string, string>;
+	attachments?: Attachment[];
 }
 
 function generateAgentScript(opts: AgentScriptOptions): string {
-	const promptLiteral = JSON.stringify(opts.fullPrompt);
 	const systemPromptLiteral = JSON.stringify(
 		getSystemPrompt(opts.timezone, opts.userFirstName, opts.userPreferences),
 	);
@@ -50,21 +52,40 @@ function generateAgentScript(opts: AgentScriptOptions): string {
 		? `        resume: ${JSON.stringify(opts.agentSessionId)},`
 		: "";
 
-	const hasEnvVars = opts.envVars && Object.keys(opts.envVars).length > 0;
-	const envSetup = hasEnvVars
-		? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
-		: "";
+	const envKeys = Object.keys(opts.envVars ?? {});
+	const envSetup =
+		envKeys.length > 0
+			? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
+			: "";
+
+	const contentBlocks = buildContentBlocks(opts.fullPrompt, opts.attachments);
+	const hasAttachments = contentBlocks.length > 1;
+
+	const promptSetup = hasAttachments
+		? `const contentBlocks = JSON.parse(${JSON.stringify(JSON.stringify(contentBlocks))});
+
+async function* promptStream() {
+  yield {
+    type: "user",
+    session_id: "",
+    message: { role: "user", content: contentBlocks },
+    parent_tool_use_id: null,
+  };
+}`
+		: `const prompt = ${JSON.stringify(opts.fullPrompt)};`;
+
+	const promptArg = hasAttachments ? "promptStream()" : "prompt";
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
 ${envSetup}
-const prompt = ${promptLiteral};
+${promptSetup}
 const systemPromptAppend = ${systemPromptLiteral};
 
 async function main() {
   try {
     const generator = query({
-      prompt,
+      prompt: ${promptArg},
       options: {
         cwd: '/vercel/sandbox',
         model: ${modelLiteral},
@@ -149,6 +170,7 @@ export async function* streamViaSandbox({
 	timezone,
 	userFirstName,
 	userPreferences,
+	attachments,
 	onStatus,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	log.info("Starting streamViaSandbox");
@@ -182,6 +204,7 @@ export async function* streamViaSandbox({
 			userPreferences,
 			agentSessionId: effectiveSessionId,
 			envVars,
+			attachments,
 		});
 
 		const envEntries = Object.entries(envVars);
@@ -192,8 +215,9 @@ export async function* streamViaSandbox({
 
 		log.info("Env vars", {
 			vars:
-				envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ") ||
-				"(none)",
+				envEntries.length > 0
+					? envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ")
+					: "(none)",
 		});
 
 		log.debug("Writing agent runner script...");

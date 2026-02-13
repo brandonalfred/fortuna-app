@@ -26,7 +26,13 @@ import {
 	prisma,
 	retryOnTransientError,
 } from "@/lib/prisma";
-import type { ConversationMessage } from "@/lib/types";
+import {
+	fetchTextContent,
+	isTextMimeType,
+	MAX_TEXT_INLINE_SIZE,
+	regenerateAttachmentUrls,
+} from "@/lib/r2";
+import type { Attachment, ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
 
 function toUserFriendlyError(error: unknown): string {
@@ -60,7 +66,12 @@ export async function POST(req: Request): Promise<Response> {
 			return badRequest("Invalid request", parsed.error.flatten());
 		}
 
-		const { message, chatId, timezone } = parsed.data;
+		const {
+			message,
+			chatId,
+			timezone,
+			attachments: rawAttachments,
+		} = parsed.data;
 
 		const existingChat = chatId
 			? await prisma.chat.findUnique({
@@ -118,10 +129,24 @@ export async function POST(req: Request): Promise<Response> {
 			? new ChatEventBuffer(chat.id, existingChat?.lastSequenceNum ?? 0)
 			: null;
 
+		let attachments: Attachment[] | undefined;
+		if (rawAttachments?.length) {
+			if (!isV2) {
+				console.warn(
+					"[Chat API] Attachments present but chat uses V1 storage — attachments will not be persisted",
+				);
+			}
+			attachments = await regenerateAttachmentUrls(rawAttachments);
+		}
+
+		const attachmentMeta = attachments?.map(({ url: _, ...rest }) => rest);
+		const userEventData = {
+			content: message,
+			...(attachmentMeta && { attachments: attachmentMeta }),
+		} satisfies Prisma.InputJsonValue;
+
 		if (eventBuffer) {
-			eventBuffer.appendEvent("user_message", {
-				content: message,
-			} satisfies Prisma.InputJsonValue);
+			eventBuffer.appendEvent("user_message", userEventData);
 			await eventBuffer.flush();
 		} else {
 			await prisma.message.create({
@@ -131,6 +156,24 @@ export async function POST(req: Request): Promise<Response> {
 					content: message,
 				},
 			});
+		}
+
+		let agentPrompt = message;
+		if (attachments) {
+			for (const att of attachments) {
+				if (isTextMimeType(att.mimeType) && att.size <= MAX_TEXT_INLINE_SIZE) {
+					try {
+						const textContent = await fetchTextContent(att.key);
+						agentPrompt += `\n\n--- ${att.filename} ---\n${textContent}\n--- end ---`;
+					} catch (e) {
+						console.warn(
+							`[Chat API] Failed to fetch text content for ${att.filename}:`,
+							e,
+						);
+						agentPrompt += `\n\n--- ${att.filename} ---\n[Error: File content unavailable]\n--- end ---`;
+					}
+				}
+			}
 		}
 
 		const encoder = new TextEncoder();
@@ -171,7 +214,7 @@ export async function POST(req: Request): Promise<Response> {
 				}, KEEPALIVE_INTERVAL_MS);
 
 				const agentOptions = {
-					prompt: message,
+					prompt: agentPrompt,
 					workspacePath,
 					chatId: chat.id,
 					conversationHistory,
@@ -180,6 +223,7 @@ export async function POST(req: Request): Promise<Response> {
 					userFirstName: user.firstName ?? undefined,
 					userPreferences: user.preferences ?? undefined,
 					agentSessionId: existingChat?.agentSessionId ?? undefined,
+					attachments,
 					onStatus: (stage: string, statusMessage: string) => {
 						sendEvent("status", { stage, message: statusMessage });
 					},
