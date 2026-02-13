@@ -87,7 +87,7 @@ export function ImageLightbox({
 	return createPortal(
 		<dialog
 			ref={dialogRef}
-			className="m-0 h-dvh w-dvw max-h-none max-w-none bg-transparent p-0 outline-none backdrop:bg-black/90"
+			className="m-0 h-dvh w-dvw max-h-none max-w-none overflow-visible rounded-none border-none bg-transparent p-0 outline-none backdrop:bg-black/90"
 			onClick={(e) => {
 				if (e.target === dialogRef.current) onOpenChange(false);
 			}}
