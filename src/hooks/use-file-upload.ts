@@ -145,6 +145,7 @@ export function useFileUpload(): UseFileUploadReturn {
 					files: Array<{
 						key: string;
 						uploadUrl: string;
+						downloadUrl: string;
 						filename: string;
 						mimeType: string;
 						size: number;
@@ -178,6 +179,7 @@ export function useFileUpload(): UseFileUploadReturn {
 							filename: upload.filename,
 							mimeType: upload.mimeType,
 							size: upload.size,
+							url: presignedFile.downloadUrl,
 						};
 
 						setPendingUploads((prev) =>
