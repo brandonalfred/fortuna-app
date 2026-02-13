@@ -42,10 +42,7 @@ function UploadCardContent({
 			<button
 				type="button"
 				onClick={isClickable ? onClick : undefined}
-				className={cn(
-					"h-full w-full",
-					isClickable && "cursor-pointer transition-opacity hover:opacity-80",
-				)}
+				className={cn("h-full w-full", isClickable && "cursor-pointer")}
 			>
 				<Image
 					unoptimized
