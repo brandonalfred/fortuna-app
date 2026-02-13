@@ -9,3 +9,9 @@ export function capitalize(str: string) {
 	if (!str) return "";
 	return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
+
+export function getInitials(firstName?: string, lastName?: string): string {
+	const first = firstName?.charAt(0) || "";
+	const last = lastName?.charAt(0) || "";
+	return (first + last).toUpperCase() || "?";
+}
