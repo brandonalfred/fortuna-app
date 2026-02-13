@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { badRequest, getAuthenticatedUser, unauthorized } from "@/lib/api";
+import {
+	badRequest,
+	getAuthenticatedUser,
+	serverError,
+	unauthorized,
+} from "@/lib/api";
 import { createPresignedUploadUrl } from "@/lib/r2";
 import { presignRequestSchema } from "@/lib/validations/chat";
 
@@ -18,33 +23,38 @@ export async function POST(req: Request): Promise<Response> {
 
 	const { files, chatId } = parsed.data;
 
-	const results = await Promise.all(
-		files.map(async (file) => {
-			const mimeToExt: Record<string, string> = {
-				"image/png": "png",
-				"image/jpeg": "jpg",
-				"image/webp": "webp",
-				"image/gif": "gif",
-				"application/pdf": "pdf",
-				"text/csv": "csv",
-				"text/plain": "txt",
-			};
-			const ext = mimeToExt[file.mimeType] || "bin";
-			const key = chatId
-				? `uploads/${user.id}/${chatId}/${randomUUID()}.${ext}`
-				: `uploads/${user.id}/${randomUUID()}.${ext}`;
+	try {
+		const results = await Promise.all(
+			files.map(async (file) => {
+				const mimeToExt: Record<string, string> = {
+					"image/png": "png",
+					"image/jpeg": "jpg",
+					"image/webp": "webp",
+					"image/gif": "gif",
+					"application/pdf": "pdf",
+					"text/csv": "csv",
+					"text/plain": "txt",
+				};
+				const ext = mimeToExt[file.mimeType] || "bin";
+				const key = chatId
+					? `uploads/${user.id}/${chatId}/${randomUUID()}.${ext}`
+					: `uploads/${user.id}/${randomUUID()}.${ext}`;
 
-			const uploadUrl = await createPresignedUploadUrl(key, file.mimeType);
+				const uploadUrl = await createPresignedUploadUrl(key, file.mimeType);
 
-			return {
-				key,
-				uploadUrl,
-				filename: file.filename,
-				mimeType: file.mimeType,
-				size: file.size,
-			};
-		}),
-	);
+				return {
+					key,
+					uploadUrl,
+					filename: file.filename,
+					mimeType: file.mimeType,
+					size: file.size,
+				};
+			}),
+		);
 
-	return Response.json({ files: results });
+		return Response.json({ files: results });
+	} catch (error) {
+		console.error("[Presign] Failed to generate upload URLs:", error);
+		return serverError(error);
+	}
 }
