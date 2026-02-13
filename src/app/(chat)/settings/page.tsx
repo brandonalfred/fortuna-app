@@ -1,9 +1,11 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { signOut } from "@/lib/auth/client";
 import { useSessionContext } from "@/lib/auth/session-context";
+import { getInitials } from "@/lib/utils";
 
 export default function SettingsPage() {
 	const { session, isPending } = useSessionContext();
@@ -20,10 +22,17 @@ export default function SettingsPage() {
 	const user = session?.user;
 	if (!user) return null;
 
-	const initials =
-		(
-			(user.firstName?.charAt(0) || "") + (user.lastName?.charAt(0) || "")
-		).toUpperCase() || "?";
+	const initials = getInitials(user.firstName, user.lastName);
+
+	function handleSignOut() {
+		signOut({
+			fetchOptions: {
+				onSuccess: () => {
+					window.location.href = "/auth/signin";
+				},
+			},
+		});
+	}
 
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
@@ -69,6 +78,20 @@ export default function SettingsPage() {
 							<p className="text-xs text-text-tertiary">Personal preferences</p>
 						</div>
 						<ChevronRight className="h-4 w-4 text-text-tertiary" />
+					</button>
+
+					<button
+						type="button"
+						onClick={handleSignOut}
+						className="flex w-full items-center gap-3 rounded-lg bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
+					>
+						<div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10">
+							<LogOut className="h-4 w-4 text-red-500" />
+						</div>
+						<div className="flex-1 text-left">
+							<p className="text-sm font-medium text-red-500">Sign Out</p>
+							<p className="text-xs text-red-400">End your session</p>
+						</div>
 					</button>
 				</div>
 			</div>
