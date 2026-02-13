@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/client";
 import { useSessionContext } from "@/lib/auth/session-context";
 
-function getInitials(firstName: string, lastName: string): string {
+function getInitials(firstName?: string, lastName?: string): string {
 	const first = firstName?.charAt(0) || "";
 	const last = lastName?.charAt(0) || "";
 	return (first + last).toUpperCase() || "?";
