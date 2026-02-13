@@ -159,6 +159,7 @@ export async function POST(req: Request): Promise<Response> {
 					abortController,
 					timezone,
 					userFirstName: user.firstName ?? undefined,
+					userPreferences: user.preferences ?? undefined,
 					agentSessionId: existingChat?.agentSessionId ?? undefined,
 					onStatus: (stage: string, statusMessage: string) => {
 						sendEvent("status", { stage, message: statusMessage });
