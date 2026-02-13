@@ -6,8 +6,6 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Clock,
-	FileSpreadsheet,
-	FileText,
 	Info,
 	Loader2,
 	X,
@@ -16,6 +14,8 @@ import Image from "next/image";
 import { memo, type ReactNode, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ImageLightbox } from "@/components/chat/image-lightbox";
+import { getFileIcon } from "@/components/chat/upload-preview";
 import type { Attachment, ContentSegment, Message, ToolUse } from "@/lib/types";
 import { cn, formatFileSize, IMAGE_MIME_TYPES } from "@/lib/utils";
 
@@ -133,54 +133,73 @@ const PROSE_CLASSES =
 	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-pre:overflow-x-auto prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
 
 function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
+	const [lightboxOpen, setLightboxOpen] = useState(false);
+	const [selectedIndex, setSelectedIndex] = useState(0);
+
 	if (attachments.length === 0) return null;
 
 	const images = attachments.filter((a) => IMAGE_MIME_TYPES.has(a.mimeType));
 	const documents = attachments.filter(
 		(a) => !IMAGE_MIME_TYPES.has(a.mimeType),
 	);
+	const lightboxImages = images.map((a) => ({
+		url: a.url!,
+		filename: a.filename,
+	}));
 
 	return (
-		<div className="mb-2 flex flex-wrap gap-2">
-			{images.map((att) => (
-				<a
-					key={att.key}
-					href={att.url}
-					target="_blank"
-					rel="noopener noreferrer"
-					className="block overflow-hidden rounded-lg border border-border-subtle hover:border-accent-primary/50 transition-colors"
-				>
-					<Image
-						unoptimized
-						src={att.url!}
-						alt={att.filename}
-						width={200}
-						height={200}
-						className="h-[200px] max-w-[200px] object-cover"
-					/>
-				</a>
-			))}
-			{documents.map((att) => {
-				const Icon = att.mimeType === "text/csv" ? FileSpreadsheet : FileText;
-				return (
-					<a
+		<>
+			<div className="mb-2 flex flex-wrap gap-2">
+				{images.map((att, i) => (
+					<button
 						key={att.key}
-						href={att.url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="inline-flex items-center gap-2 rounded-lg border border-border-subtle bg-bg-tertiary px-3 py-2 text-xs hover:border-accent-primary/50 transition-colors"
+						type="button"
+						onClick={() => {
+							setSelectedIndex(i);
+							setLightboxOpen(true);
+						}}
+						className="block overflow-hidden rounded-lg border border-border-subtle hover:border-accent-primary/50 transition-colors cursor-pointer"
 					>
-						<Icon className="h-4 w-4 text-text-tertiary shrink-0" />
-						<span className="truncate max-w-[150px] text-text-secondary">
-							{att.filename}
-						</span>
-						<span className="text-text-tertiary">
-							{formatFileSize(att.size)}
-						</span>
-					</a>
-				);
-			})}
-		</div>
+						<Image
+							unoptimized
+							src={att.url!}
+							alt={att.filename}
+							width={200}
+							height={200}
+							className="h-[200px] max-w-[200px] object-cover"
+						/>
+					</button>
+				))}
+				{documents.map((att) => {
+					const Icon = getFileIcon(att.mimeType);
+					return (
+						<a
+							key={att.key}
+							href={att.url}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="inline-flex items-center gap-2 rounded-lg border border-border-subtle bg-bg-tertiary px-3 py-2 text-xs hover:border-accent-primary/50 transition-colors"
+						>
+							<Icon className="h-4 w-4 text-text-tertiary shrink-0" />
+							<span className="truncate max-w-[150px] text-text-secondary">
+								{att.filename}
+							</span>
+							<span className="text-text-tertiary">
+								{formatFileSize(att.size)}
+							</span>
+						</a>
+					);
+				})}
+			</div>
+			{lightboxImages.length > 0 && (
+				<ImageLightbox
+					images={lightboxImages}
+					initialIndex={selectedIndex}
+					open={lightboxOpen}
+					onOpenChange={setLightboxOpen}
+				/>
+			)}
+		</>
 	);
 }
 
@@ -412,11 +431,10 @@ const SegmentRenderer = memo(function SegmentRenderer({
 }: SegmentRendererProps) {
 	switch (segment.type) {
 		case "thinking":
-			return segment.isComplete === false ? (
-				<ThinkingIndicator thinking={segment.thinking} />
-			) : (
-				<ThinkingBlock thinking={segment.thinking} />
-			);
+			if (segment.isComplete === false) {
+				return <ThinkingIndicator thinking={segment.thinking} />;
+			}
+			return <ThinkingBlock thinking={segment.thinking} />;
 		case "text":
 			return <Markdown remarkPlugins={REMARK_PLUGINS}>{segment.text}</Markdown>;
 		case "tool_use":
