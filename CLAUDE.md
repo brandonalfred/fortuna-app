@@ -203,6 +203,10 @@ Each chat gets its own ephemeral Vercel Sandbox instance (5-hour timeout). Sandb
 | `WEBSHARE_PROXY_URL` | Rotating residential proxy for NBA.com API access |
 | `AGENT_SANDBOX_SNAPSHOT_ID` | Optional Vercel Sandbox snapshot for faster cold starts |
 | `DATABASE_URL_UNPOOLED` | Direct (non-pooled) DB connection, used by migration verification script |
+| `R2_ACCOUNT_ID` | Cloudflare R2 account ID for file storage |
+| `R2_ACCESS_KEY_ID` | Cloudflare R2 access key ID |
+| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 secret access key |
+| `R2_BUCKET_NAME` | Cloudflare R2 bucket name for uploads |
 
 **Vercel env var gotcha:** When setting env vars via `vercel env add` with pipe input, use `printf` instead of `echo` to avoid a trailing newline being stored as part of the value. For example:
 

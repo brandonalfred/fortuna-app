@@ -181,6 +181,7 @@ export async function POST(req: Request): Promise<Response> {
 							`[Chat API] Failed to fetch text content for ${att.filename}:`,
 							e,
 						);
+						agentPrompt += `\n\n--- ${att.filename} ---\n[Error: File content unavailable]\n--- end ---`;
 					}
 				}
 			}

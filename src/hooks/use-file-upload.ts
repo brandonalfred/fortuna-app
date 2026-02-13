@@ -36,6 +36,8 @@ export function useFileUpload(): UseFileUploadReturn {
 	const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
 	const [isUploading, setIsUploading] = useState(false);
 	const previewUrlsRef = useRef<string[]>([]);
+	const pendingUploadsRef = useRef(pendingUploads);
+	pendingUploadsRef.current = pendingUploads;
 
 	useEffect(() => {
 		return () => {
@@ -45,66 +47,63 @@ export function useFileUpload(): UseFileUploadReturn {
 		};
 	}, []);
 
-	const addFiles = useCallback(
-		(files: FileList | File[]) => {
-			const fileArray = Array.from(files);
-			const remaining = MAX_FILES_PER_MESSAGE - pendingUploads.length;
+	const addFiles = useCallback((files: FileList | File[]) => {
+		const fileArray = Array.from(files);
+		const remaining = MAX_FILES_PER_MESSAGE - pendingUploadsRef.current.length;
 
-			if (remaining <= 0) return;
+		if (remaining <= 0) return;
 
-			const newUploads: PendingUpload[] = [];
+		const newUploads: PendingUpload[] = [];
 
-			for (const file of fileArray.slice(0, remaining)) {
-				if (!isAllowedMimeType(file.type)) {
-					newUploads.push({
-						id: crypto.randomUUID(),
-						file,
-						filename: file.name,
-						mimeType: file.type,
-						size: file.size,
-						status: "error",
-						progress: 0,
-						error: "Unsupported file type",
-					});
-					continue;
-				}
-
-				if (file.size > MAX_FILE_SIZE) {
-					newUploads.push({
-						id: crypto.randomUUID(),
-						file,
-						filename: file.name,
-						mimeType: file.type,
-						size: file.size,
-						status: "error",
-						progress: 0,
-						error: "File too large (max 10MB)",
-					});
-					continue;
-				}
-
-				let previewUrl: string | undefined;
-				if (IMAGE_MIME_TYPES.has(file.type)) {
-					previewUrl = URL.createObjectURL(file);
-					previewUrlsRef.current.push(previewUrl);
-				}
-
+		for (const file of fileArray.slice(0, remaining)) {
+			if (!isAllowedMimeType(file.type)) {
 				newUploads.push({
 					id: crypto.randomUUID(),
 					file,
 					filename: file.name,
 					mimeType: file.type,
 					size: file.size,
-					status: "pending",
+					status: "error",
 					progress: 0,
-					previewUrl,
+					error: "Unsupported file type",
 				});
+				continue;
 			}
 
-			setPendingUploads((prev) => [...prev, ...newUploads]);
-		},
-		[pendingUploads.length],
-	);
+			if (file.size > MAX_FILE_SIZE) {
+				newUploads.push({
+					id: crypto.randomUUID(),
+					file,
+					filename: file.name,
+					mimeType: file.type,
+					size: file.size,
+					status: "error",
+					progress: 0,
+					error: "File too large (max 10MB)",
+				});
+				continue;
+			}
+
+			let previewUrl: string | undefined;
+			if (IMAGE_MIME_TYPES.has(file.type)) {
+				previewUrl = URL.createObjectURL(file);
+				previewUrlsRef.current.push(previewUrl);
+			}
+
+			newUploads.push({
+				id: crypto.randomUUID(),
+				file,
+				filename: file.name,
+				mimeType: file.type,
+				size: file.size,
+				status: "pending",
+				progress: 0,
+				previewUrl,
+			});
+		}
+
+		setPendingUploads((prev) => [...prev, ...newUploads]);
+	}, []);
 
 	const removeUpload = useCallback((id: string) => {
 		setPendingUploads((prev) => {
@@ -129,7 +128,9 @@ export function useFileUpload(): UseFileUploadReturn {
 
 	const uploadAll = useCallback(
 		async (chatId?: string): Promise<Attachment[]> => {
-			const valid = pendingUploads.filter((u) => u.status === "pending");
+			const valid = pendingUploadsRef.current.filter(
+				(u) => u.status === "pending",
+			);
 			if (valid.length === 0) return [];
 
 			setIsUploading(true);
@@ -189,7 +190,6 @@ export function useFileUpload(): UseFileUploadReturn {
 							filename: upload.filename,
 							mimeType: upload.mimeType,
 							size: upload.size,
-							url: upload.previewUrl,
 						};
 
 						setPendingUploads((prev) =>
@@ -228,7 +228,7 @@ export function useFileUpload(): UseFileUploadReturn {
 				setIsUploading(false);
 			}
 		},
-		[pendingUploads],
+		[],
 	);
 
 	return {
