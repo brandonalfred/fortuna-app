@@ -5,7 +5,7 @@ import {
 	serverError,
 	unauthorized,
 } from "@/lib/api";
-import { createPresignedUploadUrl } from "@/lib/r2";
+import { createPresignedDownloadUrl, createPresignedUploadUrl } from "@/lib/r2";
 import { presignRequestSchema } from "@/lib/validations/chat";
 
 export async function POST(req: Request): Promise<Response> {
@@ -40,11 +40,15 @@ export async function POST(req: Request): Promise<Response> {
 					? `uploads/${user.id}/${chatId}/${randomUUID()}.${ext}`
 					: `uploads/${user.id}/${randomUUID()}.${ext}`;
 
-				const uploadUrl = await createPresignedUploadUrl(key, file.mimeType);
+				const [uploadUrl, downloadUrl] = await Promise.all([
+					createPresignedUploadUrl(key, file.mimeType),
+					createPresignedDownloadUrl(key),
+				]);
 
 				return {
 					key,
 					uploadUrl,
+					downloadUrl,
 					filename: file.filename,
 					mimeType: file.mimeType,
 					size: file.size,
