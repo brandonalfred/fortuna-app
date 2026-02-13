@@ -46,6 +46,8 @@ interface ChatState {
 	disconnectedChatId: string | null;
 	loadedChatId: string | undefined;
 	isCreatingChat: boolean;
+	isRecovering: boolean;
+	lastEventAt: number;
 }
 
 interface ChatActions {
@@ -83,6 +85,8 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 		disconnectedChatId: null,
 		loadedChatId: undefined,
 		isCreatingChat: false,
+		isRecovering: false,
+		lastEventAt: 0,
 
 		publishSegments() {
 			set({
@@ -109,6 +113,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 		handleEvent(type: string, data: unknown) {
 			const state = get();
+			set({ lastEventAt: Date.now() });
 
 			switch (type) {
 				case "init": {
@@ -223,12 +228,13 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				case "result": {
 					state.markToolsComplete();
 					const { stop_reason, subtype } = data as ResultEvent;
-					const abnormalStop = stop_reason && stop_reason !== "end_turn";
+					const isAbnormalStop =
+						stop_reason != null && stop_reason !== "end_turn";
 
-					if (abnormalStop || subtype !== "success") {
+					if (isAbnormalStop || subtype !== "success") {
 						set({
 							stopReason: {
-								stopReason: abnormalStop ? stop_reason : subtype,
+								stopReason: isAbnormalStop ? stop_reason : subtype,
 								subtype,
 							},
 						});
@@ -312,6 +318,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				messages: [],
 				sessionId: null,
 				streamingMessage: null,
+				isRecovering: false,
 			});
 			callbacks.getQueueStore().clear();
 		},
@@ -338,6 +345,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			set({
 				messages: [...state.messages, userMessage],
 				isLoading: true,
+				lastEventAt: Date.now(),
 				streamingSegments: [],
 				streamingMessage: { segments: [], isStreaming: true },
 				abortController,
@@ -411,9 +419,9 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					if (disconnectedId) {
 						set({
 							disconnectedChatId: disconnectedId,
-							error: "Connection lost. Reloading response...",
+							isRecovering: true,
 						});
-						log.warn("Network error, will reload", { disconnectedId });
+						log.warn("Network error, recovering", { disconnectedId });
 					}
 					return;
 				}
@@ -438,8 +446,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 		stopGeneration() {
 			log.info("Stopping generation");
+			const chatId = get().currentChat?.id;
+			if (chatId) {
+				fetch(`/api/chats/${chatId}/stop`, { method: "POST" }).catch(() => {
+					// Intentional: fire-and-forget
+				});
+			}
 			get().abortController?.abort();
-			set({ isLoading: false });
+			set({ isLoading: false, isRecovering: false });
 			callbacks.getQueueStore().clear();
 			get().finalizeStreamingMessage();
 		},

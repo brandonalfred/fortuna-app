@@ -2,6 +2,7 @@ export interface Chat {
 	id: string;
 	title: string;
 	sessionId: string;
+	isProcessing?: boolean;
 	storageVersion?: number;
 	createdAt: string;
 	updatedAt: string;

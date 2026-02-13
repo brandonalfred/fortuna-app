@@ -12,6 +12,8 @@ import {
 import { useStore } from "zustand";
 import { useChatQuery, useInvalidateChat } from "@/hooks/use-chat-query";
 import { createLogger } from "@/lib/logger";
+import { hydrateMessageSegments } from "@/lib/segments";
+import type { Chat, Message } from "@/lib/types";
 import { type ChatStore, createChatStore } from "@/stores/chat-store";
 import { createQueueStore, type QueueStore } from "@/stores/queue-store";
 
@@ -57,7 +59,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (!chatData) return;
 		const state = chatStore.getState();
-		if (state.isLoading || state.streamingMessage) return;
+		if (state.isLoading || state.streamingMessage || state.isRecovering) return;
 
 		const wasDisconnected = !!state.disconnectedChatId;
 		const skipMessages = skipNextMessageReplaceRef.current && !wasDisconnected;
@@ -68,9 +70,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			messages: skipMessages ? state.messages : chatData.messages || [],
 			sessionId: chatData.sessionId,
 			disconnectedChatId: null,
-			error: wasDisconnected
-				? "Your connection was interrupted and the response may be incomplete."
-				: state.error,
+			error: wasDisconnected ? null : state.error,
 		});
 		queueStore.getState().clear();
 	}, [chatData, chatStore, queueStore]);
@@ -126,7 +126,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		async function processQueue() {
 			if (dequeueing) return;
 			const chatState = chatStore.getState();
-			if (chatState.isLoading) return;
+			if (chatState.isLoading || chatState.isRecovering) return;
 
 			const next = queueStore.getState().dequeue();
 			if (!next) return;
@@ -154,15 +154,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	}, [chatStore, queueStore]);
 
 	useEffect(() => {
-		return chatStore.subscribe((state, prev) => {
-			if (state.disconnectedChatId && !prev.disconnectedChatId) {
-				invalidateChatRef.current(state.disconnectedChatId);
-			}
-		});
-	}, [chatStore]);
-
-	useEffect(() => {
 		const STALE_STREAM_MS = 5_000;
+		const KEEPALIVE_GRACE_MS = 15_000;
 		let hiddenAt: number | null = null;
 
 		function handleVisibilityChange() {
@@ -177,25 +170,109 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			hiddenAt = null;
 
 			const state = chatStore.getState();
-			if (state.isLoading && elapsed > STALE_STREAM_MS) {
-				const disconnectedId = state.currentChat?.id;
-				log.info("Resuming from background, aborting stale stream", {
+			if (!state.isLoading || elapsed <= STALE_STREAM_MS) return;
+
+			const timeSinceLastEvent = Date.now() - state.lastEventAt;
+			if (state.lastEventAt > 0 && timeSinceLastEvent < KEEPALIVE_GRACE_MS) {
+				log.info("Tab returned, stream still active", {
 					elapsed,
-					chatId: disconnectedId,
+					timeSinceLastEvent,
 				});
-				if (disconnectedId) {
-					chatStore.setState({
-						disconnectedChatId: disconnectedId,
-						error: "Connection lost. Reloading response...",
-					});
-				}
-				state.abortController?.abort();
+				return;
 			}
+
+			const disconnectedId = state.currentChat?.id;
+			log.info("Tab returned, stream stale — entering recovery", {
+				elapsed,
+				chatId: disconnectedId,
+			});
+			if (disconnectedId) {
+				chatStore.setState({
+					disconnectedChatId: disconnectedId,
+					isRecovering: true,
+				});
+			}
+			state.abortController?.abort();
 		}
 
 		document.addEventListener("visibilitychange", handleVisibilityChange);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [chatStore]);
+
+	useEffect(() => {
+		let interval: ReturnType<typeof setInterval> | null = null;
+		let recoveryStartedAt = 0;
+
+		const POLL_INTERVAL_MS = 3_000;
+		const RECOVERY_TIMEOUT_MS = 5 * 60 * 1_000;
+
+		const unsub = chatStore.subscribe((state, prev) => {
+			if (state.isRecovering && !prev.isRecovering) {
+				const targetChatId = state.disconnectedChatId || state.currentChat?.id;
+				if (!targetChatId) return;
+
+				recoveryStartedAt = Date.now();
+				log.info("Recovery polling started", { chatId: targetChatId });
+
+				interval = setInterval(async () => {
+					if (Date.now() - recoveryStartedAt > RECOVERY_TIMEOUT_MS) {
+						log.warn("Recovery timed out", { chatId: targetChatId });
+						chatStore.setState({
+							isRecovering: false,
+							disconnectedChatId: null,
+							error: "The response took too long. Please try again.",
+						});
+						if (interval) clearInterval(interval);
+						interval = null;
+						return;
+					}
+
+					try {
+						const res = await fetch(`/api/chats/${targetChatId}`);
+						if (res.status === 401) {
+							window.location.href = "/auth/signin";
+							return;
+						}
+						if (!res.ok) return;
+
+						const data = (await res.json()) as Chat & {
+							messages: Message[];
+						};
+						const messages = (data.messages || []).map(hydrateMessageSegments);
+
+						if (data.isProcessing) {
+							chatStore.setState({ messages });
+						} else {
+							log.info("Recovery complete", { chatId: targetChatId });
+							chatStore.setState({
+								messages,
+								currentChat: data,
+								isRecovering: false,
+								disconnectedChatId: null,
+								error: null,
+								sessionId: data.sessionId,
+							});
+							invalidateChatRef.current(targetChatId);
+							if (interval) clearInterval(interval);
+							interval = null;
+						}
+					} catch {
+						log.warn("Recovery poll failed");
+					}
+				}, POLL_INTERVAL_MS);
+			}
+
+			if (!state.isRecovering && prev.isRecovering && interval) {
+				clearInterval(interval);
+				interval = null;
+			}
+		});
+
+		return () => {
+			unsub();
+			if (interval) clearInterval(interval);
 		};
 	}, [chatStore]);
 

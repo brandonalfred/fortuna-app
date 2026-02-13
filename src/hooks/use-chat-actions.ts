@@ -7,6 +7,7 @@ interface ActiveChatValue {
 	messages: Message[];
 	streamingMessage: StreamingMessage | null;
 	isLoading: boolean;
+	isRecovering: boolean;
 	statusMessage: string | null;
 	messageQueue: QueuedMessage[];
 	error: string | null;
@@ -21,6 +22,7 @@ export function useActiveChat(): ActiveChatValue {
 	const messages = useChatStore((s) => s.messages);
 	const streamingMessage = useChatStore((s) => s.streamingMessage);
 	const isLoading = useChatStore((s) => s.isLoading);
+	const isRecovering = useChatStore((s) => s.isRecovering);
 	const statusMessage = useChatStore((s) => s.statusMessage);
 	const error = useChatStore((s) => s.error);
 	const sendMessage = useChatStore((s) => s.sendMessage);
@@ -35,6 +37,7 @@ export function useActiveChat(): ActiveChatValue {
 		messages,
 		streamingMessage,
 		isLoading,
+		isRecovering,
 		statusMessage,
 		messageQueue,
 		error,
