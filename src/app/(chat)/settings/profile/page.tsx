@@ -85,7 +85,7 @@ export default function ProfilePage() {
 					<Button
 						variant="ghost"
 						size="icon"
-						onClick={() => router.push("/settings")}
+						onClick={() => router.back()}
 						className="h-8 w-8 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
 					>
 						<ChevronLeft className="h-5 w-5" />
