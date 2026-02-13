@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import { activeSessions } from "@/lib/agent/active-sessions";
 import type { Query } from "@/lib/agent/client";
 import {
 	createLocalAgentQuery,
@@ -107,6 +108,11 @@ export async function POST(req: Request): Promise<Response> {
 			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} v=${isV2 ? 2 : 1} history=${conversationHistory.length}`,
 		);
 
+		await prisma.chat.update({
+			where: { id: chat.id },
+			data: { isProcessing: true },
+		});
+
 		const eventBuffer = isV2
 			? new ChatEventBuffer(chat.id, existingChat?.lastSequenceNum ?? 0)
 			: null;
@@ -128,25 +134,37 @@ export async function POST(req: Request): Promise<Response> {
 
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
+		activeSessions.set(chat.id, abortController);
 		let agentQuery: Query | null = null;
 		let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+		let clientDisconnected = false;
 
 		const stream = new ReadableStream({
 			async start(controller) {
 				let eventId = 0;
 				const sendEvent = (event: string, data: unknown) => {
-					controller.enqueue(
-						encoder.encode(
-							`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-						),
-					);
+					if (clientDisconnected) return;
+					try {
+						controller.enqueue(
+							encoder.encode(
+								`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+							),
+						);
+					} catch {
+						clientDisconnected = true;
+					}
 				};
 
 				const KEEPALIVE_INTERVAL_MS = 10_000;
 				heartbeatInterval = setInterval(() => {
+					if (clientDisconnected) {
+						clearInterval(heartbeatInterval!);
+						return;
+					}
 					try {
 						controller.enqueue(encoder.encode(":keepalive\n\n"));
 					} catch {
+						clientDisconnected = true;
 						clearInterval(heartbeatInterval!);
 					}
 				}, KEEPALIVE_INTERVAL_MS);
@@ -460,6 +478,15 @@ export async function POST(req: Request): Promise<Response> {
 					} catch (e) {
 						console.error("[Chat API] Failed to save partial response:", e);
 					}
+					activeSessions.delete(chat.id);
+					try {
+						await prisma.chat.update({
+							where: { id: chat.id },
+							data: { isProcessing: false },
+						});
+					} catch (e) {
+						console.error("[Chat API] Failed to clear isProcessing:", e);
+					}
 					try {
 						controller.close();
 					} catch {
@@ -468,13 +495,11 @@ export async function POST(req: Request): Promise<Response> {
 				}
 			},
 			cancel() {
+				clientDisconnected = true;
 				if (heartbeatInterval) clearInterval(heartbeatInterval);
-				if (agentQuery) {
-					agentQuery.interrupt().catch(() => {
-						/* best-effort */
-					});
-				}
-				abortController.abort();
+				console.log(
+					`[Chat API] Client disconnected, agent continues chat=${chat.id}`,
+				);
 			},
 		});
 

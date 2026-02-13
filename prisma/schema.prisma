@@ -75,6 +75,7 @@ model Chat {
   sandboxId       String?   @map("sandbox_id")
   agentSessionId  String?   @map("agent_session_id")
   executorStatus  String?   @map("executor_status")
+  isProcessing    Boolean   @default(false) @map("is_processing")
   storageVersion  Int       @default(2) @map("storage_version")
   lastSequenceNum Int       @default(0) @map("last_sequence_num")
   userId    String    @map("user_id")
