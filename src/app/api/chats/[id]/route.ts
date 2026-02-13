@@ -6,6 +6,8 @@ import {
 } from "@/lib/api";
 import { eventsToMessages } from "@/lib/events";
 import { prisma } from "@/lib/prisma";
+import { regenerateAttachmentUrls } from "@/lib/r2";
+import type { Message } from "@/lib/types";
 import { updateChatSchema } from "@/lib/validations/chat";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -39,10 +41,24 @@ export async function GET(
 
 	const { events, ...rest } = chat;
 	const useEvents = chat.storageVersion === 2 && events.length > 0;
+	const messages = useEvents ? eventsToMessages(events) : rest.messages;
+
+	const refreshed = await Promise.all(
+		messages.map(async (msg) => {
+			const attachments = (msg as Message).attachments;
+			if (attachments && attachments.length > 0) {
+				return {
+					...msg,
+					attachments: await regenerateAttachmentUrls(attachments),
+				};
+			}
+			return msg;
+		}),
+	);
 
 	return Response.json({
 		...rest,
-		messages: useEvents ? eventsToMessages(events) : rest.messages,
+		messages: refreshed,
 	});
 }
 

@@ -10,7 +10,9 @@ import {
 import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { prisma } from "@/lib/prisma";
+import { isImageMimeType } from "@/lib/r2";
 import type {
+	Attachment,
 	ConversationMessage,
 	ConversationToolResult,
 	ConversationToolUse,
@@ -135,6 +137,7 @@ export interface StreamAgentOptions {
 	userFirstName?: string;
 	userPreferences?: string;
 	agentSessionId?: string;
+	attachments?: Attachment[];
 	onStatus?: StatusCallback;
 }
 
@@ -186,7 +189,11 @@ function buildFullPrompt(
 	const historyText = conversationHistory
 		.map((msg) => {
 			if (msg.role === "user") {
-				return `User: ${msg.content}`;
+				const attachmentNote =
+					msg.attachments && msg.attachments.length > 0
+						? ` [Attached: ${msg.attachments.map((a) => a.filename).join(", ")}]`
+						: "";
+				return `User: ${msg.content}${attachmentNote}`;
 			}
 			const thinkingPart = msg.thinking
 				? `[Your internal reasoning]: ${msg.thinking}\n\n`
@@ -208,15 +215,47 @@ export async function* streamAgentResponse(
 	yield* streamViaSandbox(options);
 }
 
+type MessageContentBlock =
+	| { type: "image"; source: { type: "url"; url: string } }
+	| { type: "document"; source: { type: "url"; url: string } }
+	| { type: "text"; text: string };
+
+function buildContentBlocks(
+	message: string,
+	attachments?: Attachment[],
+): MessageContentBlock[] {
+	const content: MessageContentBlock[] = [];
+
+	if (attachments) {
+		for (const att of attachments) {
+			if (isImageMimeType(att.mimeType) && att.url) {
+				content.push({
+					type: "image",
+					source: { type: "url", url: att.url },
+				});
+			} else if (att.mimeType === "application/pdf" && att.url) {
+				content.push({
+					type: "document",
+					source: { type: "url", url: att.url },
+				});
+			}
+		}
+	}
+
+	content.push({ type: "text", text: message });
+	return content;
+}
+
 async function* singleMessageStream(
 	message: string,
+	attachments?: Attachment[],
 ): AsyncGenerator<SDKUserMessage> {
 	yield {
-		type: "user" as const,
+		type: "user",
 		session_id: "",
 		message: {
-			role: "user" as const,
-			content: [{ type: "text" as const, text: message }],
+			role: "user",
+			content: buildContentBlocks(message, attachments),
 		},
 		parent_tool_use_id: null,
 	};
@@ -262,13 +301,14 @@ export function createLocalAgentQuery({
 	userFirstName,
 	userPreferences,
 	agentSessionId,
+	attachments,
 }: StreamAgentOptions): Query {
 	const effectivePrompt = agentSessionId
 		? prompt
 		: buildFullPrompt(prompt, conversationHistory);
 
 	return query({
-		prompt: singleMessageStream(effectivePrompt),
+		prompt: singleMessageStream(effectivePrompt, attachments),
 		options: buildQueryOptions({
 			workspacePath,
 			abortController,
@@ -547,8 +587,8 @@ function generateAgentScript(opts: {
 	userPreferences?: string;
 	agentSessionId?: string;
 	envVars?: Record<string, string>;
+	attachments?: Attachment[];
 }): string {
-	const promptLiteral = JSON.stringify(opts.fullPrompt);
 	const systemPromptLiteral = JSON.stringify(
 		getSystemPrompt(opts.timezone, opts.userFirstName, opts.userPreferences),
 	);
@@ -563,16 +603,34 @@ function generateAgentScript(opts: {
 		? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
 		: "";
 
+	const contentBlocks = buildContentBlocks(opts.fullPrompt, opts.attachments);
+	const hasMultiModal = contentBlocks.length > 1;
+
+	const promptSetup = hasMultiModal
+		? `const contentBlocks = JSON.parse(${JSON.stringify(JSON.stringify(contentBlocks))});
+
+async function* promptStream() {
+  yield {
+    type: "user",
+    session_id: "",
+    message: { role: "user", content: contentBlocks },
+    parent_tool_use_id: null,
+  };
+}`
+		: `const prompt = ${JSON.stringify(opts.fullPrompt)};`;
+
+	const promptArg = hasMultiModal ? "promptStream()" : "prompt";
+
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
 ${envSetup}
-const prompt = ${promptLiteral};
+${promptSetup}
 const systemPromptAppend = ${systemPromptLiteral};
 
 async function main() {
   try {
     const generator = query({
-      prompt,
+      prompt: ${promptArg},
       options: {
         cwd: '/vercel/sandbox',
         model: ${modelLiteral},
@@ -646,6 +704,7 @@ async function* streamViaSandbox({
 	timezone,
 	userFirstName,
 	userPreferences,
+	attachments,
 	onStatus,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
@@ -681,6 +740,7 @@ async function* streamViaSandbox({
 			userPreferences,
 			agentSessionId: effectiveSessionId,
 			envVars,
+			attachments,
 		});
 
 		const envEntries = Object.entries(envVars);
