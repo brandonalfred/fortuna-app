@@ -26,10 +26,10 @@ import {
 	retryOnTransientError,
 } from "@/lib/prisma";
 import {
-	createPresignedDownloadUrl,
 	fetchTextContent,
 	isTextMimeType,
 	MAX_TEXT_INLINE_SIZE,
+	regenerateAttachmentUrls,
 } from "@/lib/r2";
 import type { Attachment, ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
@@ -129,28 +129,16 @@ export async function POST(req: Request): Promise<Response> {
 			: null;
 
 		let attachments: Attachment[] | undefined;
-		if (rawAttachments && rawAttachments.length > 0) {
+		if (rawAttachments?.length) {
 			if (!isV2) {
 				console.warn(
 					"[Chat API] Attachments present but chat uses V1 storage — attachments will not be persisted",
 				);
 			}
-			attachments = await Promise.all(
-				rawAttachments.map(async (att) => ({
-					...att,
-					url: await createPresignedDownloadUrl(att.key),
-				})),
-			);
+			attachments = await regenerateAttachmentUrls(rawAttachments);
 		}
 
-		const attachmentMeta = attachments?.map(
-			({ key, filename, mimeType, size }) => ({
-				key,
-				filename,
-				mimeType,
-				size,
-			}),
-		);
+		const attachmentMeta = attachments?.map(({ url: _, ...rest }) => rest);
 		const userEventData = {
 			content: message,
 			...(attachmentMeta && { attachments: attachmentMeta }),

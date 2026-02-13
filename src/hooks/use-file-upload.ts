@@ -53,54 +53,42 @@ export function useFileUpload(): UseFileUploadReturn {
 
 		if (remaining <= 0) return;
 
-		const newUploads: PendingUpload[] = [];
-
-		for (const file of fileArray.slice(0, remaining)) {
-			if (!isAllowedMimeType(file.type)) {
-				newUploads.push({
+		const newUploads: PendingUpload[] = fileArray
+			.slice(0, remaining)
+			.map((file) => {
+				const base = {
 					id: crypto.randomUUID(),
 					file,
 					filename: file.name,
 					mimeType: file.type,
 					size: file.size,
-					status: "error",
 					progress: 0,
-					error: "Unsupported file type",
-				});
-				continue;
-			}
+				};
 
-			if (file.size > MAX_FILE_SIZE) {
-				newUploads.push({
-					id: crypto.randomUUID(),
-					file,
-					filename: file.name,
-					mimeType: file.type,
-					size: file.size,
-					status: "error",
-					progress: 0,
-					error: "File too large (max 10MB)",
-				});
-				continue;
-			}
+				if (!isAllowedMimeType(file.type)) {
+					return {
+						...base,
+						status: "error" as const,
+						error: "Unsupported file type",
+					};
+				}
 
-			let previewUrl: string | undefined;
-			if (IMAGE_MIME_TYPES.has(file.type)) {
-				previewUrl = URL.createObjectURL(file);
-				previewUrlsRef.current.push(previewUrl);
-			}
+				if (file.size > MAX_FILE_SIZE) {
+					return {
+						...base,
+						status: "error" as const,
+						error: "File too large (max 10MB)",
+					};
+				}
 
-			newUploads.push({
-				id: crypto.randomUUID(),
-				file,
-				filename: file.name,
-				mimeType: file.type,
-				size: file.size,
-				status: "pending",
-				progress: 0,
-				previewUrl,
+				let previewUrl: string | undefined;
+				if (IMAGE_MIME_TYPES.has(file.type)) {
+					previewUrl = URL.createObjectURL(file);
+					previewUrlsRef.current.push(previewUrl);
+				}
+
+				return { ...base, status: "pending" as const, previewUrl };
 			});
-		}
 
 		setPendingUploads((prev) => [...prev, ...newUploads]);
 	}, []);
