@@ -369,6 +369,13 @@ async function clearSpawnLock(chatId: string): Promise<void> {
 	});
 }
 
+async function clearSandboxRefs(chatId: string): Promise<void> {
+	await prisma.chat.update({
+		where: { id: chatId },
+		data: { sandboxId: null, agentSessionId: null },
+	});
+}
+
 async function waitForSandbox(chatId: string): Promise<string> {
 	const deadline = Date.now() + SPAWN_LOCK_TIMEOUT;
 	while (Date.now() < deadline) {
@@ -785,17 +792,23 @@ async function* streamViaSandbox({
 		}
 
 		sandbox.extendTimeout(SANDBOX_TIMEOUT).catch((err: unknown) => {
-			console.warn("[Sandbox] Failed to extend timeout (non-fatal):", err);
+			console.warn(
+				"[Sandbox] Failed to extend timeout, will create fresh sandbox next request:",
+				err,
+			);
+			clearSandboxRefs(chatId).catch((dbErr) =>
+				console.error(
+					"[Sandbox] Failed to clear sandbox refs after timeout extension failure:",
+					dbErr,
+				),
+			);
 		});
 	} catch (error) {
 		console.error("[Sandbox] Error during execution:", error);
 		try {
 			console.log("[Sandbox] Stopping sandbox due to error...");
 			await sandbox.stop();
-			await prisma.chat.update({
-				where: { id: chatId },
-				data: { sandboxId: null, agentSessionId: null },
-			});
+			await clearSandboxRefs(chatId);
 		} catch (stopError) {
 			console.error("[Sandbox] Failed to stop sandbox:", stopError);
 		}
