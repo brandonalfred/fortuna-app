@@ -312,6 +312,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			set({
 				messages: [...state.messages, userMessage],
 				isLoading: true,
+				lastEventAt: Date.now(),
 				streamingSegments: [],
 				streamingMessage: { segments: [], isStreaming: true },
 				abortController,

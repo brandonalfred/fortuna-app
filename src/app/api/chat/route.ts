@@ -479,13 +479,15 @@ export async function POST(req: Request): Promise<Response> {
 						console.error("[Chat API] Failed to save partial response:", e);
 					}
 					activeSessions.delete(chat.id);
-					try {
-						await prisma.chat.update({
-							where: { id: chat.id },
-							data: { isProcessing: false },
-						});
-					} catch (e) {
-						console.error("[Chat API] Failed to clear isProcessing:", e);
+					if (!activeSessions.has(chat.id)) {
+						try {
+							await prisma.chat.update({
+								where: { id: chat.id },
+								data: { isProcessing: false },
+							});
+						} catch (e) {
+							console.error("[Chat API] Failed to clear isProcessing:", e);
+						}
 					}
 					try {
 						controller.close();
