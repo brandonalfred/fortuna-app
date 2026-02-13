@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useSessionContext } from "@/lib/auth/session-context";
@@ -55,6 +55,21 @@ export default function SettingsPage() {
 						</p>
 						<p className="text-sm text-text-primary">{user.email}</p>
 					</div>
+
+					<button
+						type="button"
+						onClick={() => router.push("/settings/profile")}
+						className="flex w-full items-center gap-3 rounded-lg bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
+					>
+						<div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-tertiary">
+							<User className="h-4 w-4 text-text-secondary" />
+						</div>
+						<div className="flex-1 text-left">
+							<p className="text-sm font-medium text-text-primary">Profile</p>
+							<p className="text-xs text-text-tertiary">Personal preferences</p>
+						</div>
+						<ChevronRight className="h-4 w-4 text-text-tertiary" />
+					</button>
 				</div>
 			</div>
 		</div>

@@ -13,6 +13,7 @@ model User {
   firstName     String    @map("first_name")
   lastName      String    @map("last_name")
   phoneNumber   String    @map("phone_number")
+  preferences   String?   @map("preferences") @db.Text
   emailVerified Boolean   @default(false) @map("email_verified")
   image         String?
   createdAt     DateTime  @default(now()) @map("created_at")

@@ -66,7 +66,11 @@ function sanitizeName(name: string): string {
 		.slice(0, 50);
 }
 
-function getSystemPrompt(timezone?: string, userFirstName?: string): string {
+function getSystemPrompt(
+	timezone?: string,
+	userFirstName?: string,
+	userPreferences?: string,
+): string {
 	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
 
@@ -78,7 +82,11 @@ function getSystemPrompt(timezone?: string, userFirstName?: string): string {
 		? `\n\nThe user's name is ${safeName}. Use their name naturally and sparingly — in greetings and occasionally when it feels conversational. Don't use it in every message.\n`
 		: "";
 
-	return basePrompt + dateContext + userContext;
+	const preferencesContext = userPreferences
+		? `\n\nUSER PREFERENCES:\nThe user has set the following personal preferences. Respect these throughout every interaction:\n${userPreferences}\n`
+		: "";
+
+	return basePrompt + dateContext + userContext + preferencesContext;
 }
 
 function getSkillFiles(): Array<{ name: string; content: string }> {
@@ -125,6 +133,7 @@ export interface StreamAgentOptions {
 	abortController?: AbortController;
 	timezone?: string;
 	userFirstName?: string;
+	userPreferences?: string;
 	agentSessionId?: string;
 	onStatus?: StatusCallback;
 }
@@ -218,6 +227,7 @@ function buildQueryOptions(opts: {
 	abortController: AbortController;
 	timezone?: string;
 	userFirstName?: string;
+	userPreferences?: string;
 	agentSessionId?: string;
 }) {
 	return {
@@ -230,7 +240,11 @@ function buildQueryOptions(opts: {
 		systemPrompt: {
 			type: "preset" as const,
 			preset: "claude_code" as const,
-			append: getSystemPrompt(opts.timezone, opts.userFirstName),
+			append: getSystemPrompt(
+				opts.timezone,
+				opts.userFirstName,
+				opts.userPreferences,
+			),
 		},
 		abortController: opts.abortController,
 		includePartialMessages: true,
@@ -246,6 +260,7 @@ export function createLocalAgentQuery({
 	abortController = new AbortController(),
 	timezone,
 	userFirstName,
+	userPreferences,
 	agentSessionId,
 }: StreamAgentOptions): Query {
 	const effectivePrompt = agentSessionId
@@ -259,6 +274,7 @@ export function createLocalAgentQuery({
 			abortController,
 			timezone,
 			userFirstName,
+			userPreferences,
 			agentSessionId,
 		}),
 	});
@@ -521,12 +537,13 @@ function generateAgentScript(opts: {
 	fullPrompt: string;
 	timezone?: string;
 	userFirstName?: string;
+	userPreferences?: string;
 	agentSessionId?: string;
 	envVars?: Record<string, string>;
 }): string {
 	const promptLiteral = JSON.stringify(opts.fullPrompt);
 	const systemPromptLiteral = JSON.stringify(
-		getSystemPrompt(opts.timezone, opts.userFirstName),
+		getSystemPrompt(opts.timezone, opts.userFirstName, opts.userPreferences),
 	);
 	const modelLiteral = JSON.stringify(AGENT_MODEL);
 	const toolsLiteral = JSON.stringify(AGENT_ALLOWED_TOOLS);
@@ -621,6 +638,7 @@ async function* streamViaSandbox({
 	conversationHistory = [],
 	timezone,
 	userFirstName,
+	userPreferences,
 	onStatus,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	console.log("[Sandbox] Starting streamViaSandbox");
@@ -653,6 +671,7 @@ async function* streamViaSandbox({
 			fullPrompt: effectivePrompt,
 			timezone,
 			userFirstName,
+			userPreferences,
 			agentSessionId: effectiveSessionId,
 			envVars,
 		});
