@@ -25,11 +25,33 @@ export function ImageLightbox({
 	onOpenChange,
 }: ImageLightboxProps) {
 	const [index, setIndex] = useState(initialIndex);
-	const contentRef = useRef<HTMLDivElement>(null);
+	const dialogRef = useRef<HTMLDialogElement>(null);
+	const [mounted, setMounted] = useState(false);
+
+	useEffect(() => setMounted(true), []);
 
 	useEffect(() => {
-		if (open) setIndex(initialIndex);
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+
+		if (open) {
+			if (!dialog.open) dialog.showModal();
+			setIndex(initialIndex);
+		} else {
+			if (dialog.open) dialog.close();
+		}
 	}, [open, initialIndex]);
+
+	useEffect(() => {
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+
+		function onClose() {
+			onOpenChange(false);
+		}
+		dialog.addEventListener("close", onClose);
+		return () => dialog.removeEventListener("close", onClose);
+	}, [onOpenChange]);
 
 	const hasPrev = index > 0;
 	const hasNext = index < images.length - 1;
@@ -44,45 +66,35 @@ export function ImageLightbox({
 
 	useEffect(() => {
 		if (!open) return;
-
-		contentRef.current?.focus();
-
-		const prev = document.body.style.overflow;
-		document.body.style.overflow = "hidden";
-
 		function onKeyDown(e: KeyboardEvent) {
-			if (e.key === "Escape") onOpenChange(false);
-			if (e.key === "ArrowLeft") goPrev();
-			if (e.key === "ArrowRight") goNext();
+			if (e.key === "ArrowLeft") {
+				e.preventDefault();
+				goPrev();
+			}
+			if (e.key === "ArrowRight") {
+				e.preventDefault();
+				goNext();
+			}
 		}
 		window.addEventListener("keydown", onKeyDown);
-		return () => {
-			window.removeEventListener("keydown", onKeyDown);
-			document.body.style.overflow = prev;
-		};
-	}, [open, goPrev, goNext, onOpenChange]);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [open, goPrev, goNext]);
 
-	if (!open || images.length === 0) return null;
+	if (!mounted || images.length === 0) return null;
 	const current = images[index];
 	const multi = images.length > 1;
 
 	return createPortal(
-		<div
-			ref={contentRef}
-			role="dialog"
-			aria-modal="true"
-			aria-label={current?.filename ?? "Image preview"}
-			tabIndex={-1}
-			className="fixed inset-0 z-[9999] outline-none"
+		<dialog
+			ref={dialogRef}
+			className="m-0 h-dvh w-dvw max-h-none max-w-none bg-transparent p-0 outline-none backdrop:bg-black/90"
+			onClick={(e) => {
+				if (e.target === dialogRef.current) onOpenChange(false);
+			}}
+			onKeyDown={(e) => {
+				if (e.key === "Escape") onOpenChange(false);
+			}}
 		>
-			<button
-				type="button"
-				className="absolute inset-0 bg-black/90"
-				onClick={() => onOpenChange(false)}
-				aria-label="Close lightbox"
-			/>
-
-			{/* Content */}
 			<div className="relative flex h-full w-full items-center justify-center">
 				<button
 					type="button"
@@ -148,7 +160,7 @@ export function ImageLightbox({
 					</button>
 				)}
 			</div>
-		</div>,
+		</dialog>,
 		document.body,
 	);
 }
