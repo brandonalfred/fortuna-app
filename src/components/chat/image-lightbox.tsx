@@ -64,7 +64,7 @@ export function ImageLightbox({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
 				showCloseButton={false}
-				className="fixed inset-0 flex h-dvh w-dvw max-w-none translate-x-0 translate-y-0 top-0 left-0 items-center justify-center border-none bg-black/90 p-0 rounded-none"
+				className="fixed inset-0 flex h-dvh w-dvw max-w-none sm:max-w-none translate-x-0 translate-y-0 top-0 left-0 items-center justify-center border-none bg-black/90 p-0 rounded-none shadow-none"
 			>
 				<DialogTitle className="sr-only">
 					{current?.filename ?? "Image preview"}
