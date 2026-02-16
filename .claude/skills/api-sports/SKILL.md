@@ -533,11 +533,12 @@ def fetch_game_metadata(game_ids: list, sport: str = "nba") -> dict:
         "soccer": "https://v3.football.api-sports.io",
     }
     base = base_urls.get(sport, base_urls["nba"])
+    endpoint = "fixtures" if sport == "soccer" else "games"
     metadata = {}
 
     for game_id in game_ids:
         result = subprocess.run([
-            "curl", "-s", f"{base}/games?id={game_id}",
+            "curl", "-s", f"{base}/{endpoint}?id={game_id}",
             "-H", f"x-apisports-key: {os.environ['API_SPORTS_KEY']}"
         ], capture_output=True, text=True)
         data = json.loads(result.stdout)

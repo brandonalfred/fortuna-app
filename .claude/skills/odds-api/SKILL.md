@@ -111,7 +111,6 @@ The API rate limit is 30 requests per second. To avoid 429 errors:
 |--------|-------------|
 | `player_points` | Player points (NBA) |
 | `player_rebounds` | Player rebounds (NBA) |
-| `player_assists` | Player assists (NBA) |
 | `player_threes` | Player 3-pointers (NBA) |
 | `player_pass_yds` | Player passing yards (NFL) |
 | `player_rush_yds` | Player rushing yards (NFL) |
@@ -121,7 +120,7 @@ The API rate limit is 30 requests per second. To avoid 429 errors:
 | `player_goal_scorer_anytime` | Anytime goalscorer (Soccer) |
 | `player_first_goal_scorer` | First goalscorer (Soccer) |
 | `player_shots` | Player total shots O/U (Soccer) |
-| `player_assists` | Player assists O/U (Soccer) |
+| `player_assists` | Player assists O/U (NBA + Soccer — same key, disambiguated by sport event) |
 | `player_fouls` | Player fouls committed O/U (Soccer — variable coverage) |
 | `player_tackles` | Player tackles O/U (Soccer — variable coverage) |
 | `player_blocks` | Player blocks O/U (Soccer — variable coverage) |
