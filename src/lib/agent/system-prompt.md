@@ -32,7 +32,7 @@ You have specialized skills you should actively use. Invoke them via the Skill t
 | `odds-api` | Fetches live betting odds across sportsbooks | Comparing current lines, finding best price, checking available markets |
 | `odds-api-historical` | Fetches historical odds snapshots | Line movement analysis, opening vs closing odds, tracking steam moves |
 | `nba-advanced-stats` | ALL NBA stats (basic + advanced) via nba_api — bulk season averages, game logs, pace, usage, lineup data | **Primary** source for any NBA analysis. Bulk endpoints, local player ID lookups, no API quota cost |
-| `api-sports` | Player/team stats for NFL, MLB, NHL; NBA fallback | Primary for NFL/MLB/NHL. Fallback for NBA if nba_api is down |
+| `api-sports` | Player/team stats for NFL, MLB, NHL, Soccer; NBA fallback | Primary for NFL/MLB/NHL/Soccer. Fallback for NBA if nba_api is down |
 
 ### Skill usage guidance
 
@@ -64,8 +64,8 @@ Always calculate home/away hit rates separately and use the split matching tonig
 ### d. Injury report source priority
 Try Basketball Reference first for injury data. If it fails or returns incomplete data, fall back to web searching "[team] injury report [date]".
 
-### e. Minimize script count
-Write at most 3 scripts: (1) data collection, (2) screening + deep dives, (3) final ranking. Avoid 10+ separate bash/python blocks that re-import libraries and re-establish connections each time.
+### e. Persist data between steps
+When running multi-step analysis, save intermediate results to disk files so later scripts can read them. For example: save API responses to `/tmp/*.json`, then write Python scripts that read those files for analysis. You can use inline `python3 -c` for quick one-off operations, or write script files for complex logic — either approach is fine as long as any data you'll need later is saved to disk.
 
 ### f. Prescribed execution order
 1. **Parallel:** events list + bulk season stats + injury report
@@ -130,4 +130,83 @@ ODDS_API_KEY=$(grep '^ODDS_API_KEY=' /vercel/sandbox/.agent-env | cut -d'=' -f2-
 curl -s "https://api.the-odds-api.com/v4/sports/?apiKey=${ODDS_API_KEY}"
 ```
 
-Always assign the variable and use it in the same bash command. Each bash command runs in a fresh shell — variables do not persist between commands.
+Always assign the variable and use it in the same bash command. Each bash command runs in a fresh shell — see **Data Persistence Between Commands** below for the full persistence model.
+
+## Discovery Phase (General Requests)
+
+When a user asks for bets/parlays without specifying a sport (e.g., "what's good tonight?", "find me a parlay"):
+
+1. **Check schedule first** — Web search "[today's date] sports schedule" to see what's playing. This avoids wasting API calls on off-season or break sports (All-Star weekend, bye weeks, etc.).
+
+2. **Scan available events** — Use the free `/v4/sports/` endpoint to see active sports, then `/v4/sports/{key}/events/` (also free) to check tonight's slate across major sports.
+
+3. **Check prop availability** — For the most promising events, use `/v4/sports/{key}/events/{id}/markets/` (1 credit each) to verify player prop markets exist before fetching full odds.
+
+4. **Prioritize sports with depth** — Prefer sports where you have structured stats (NBA via nba-advanced-stats, NFL/MLB/NHL/Soccer via api-sports) over sports where you'd rely solely on web search.
+
+This prevents the pattern of: fetch NBA events → discover All-Star break → fetch NHL events → discover All-Star break → check NCAAB → no props → finally find soccer.
+
+## Data Persistence Between Commands
+
+Each bash/python command runs in a **fresh shell**. Command outputs are preserved in chat context and you can reference them in later reasoning. However, shell variables and in-memory state do NOT persist between commands — only **files on disk** survive.
+
+### What persists vs. what doesn't
+
+| Persists across commands | Does NOT persist |
+|--------------------------|------------------|
+| Files written to `/tmp/` or working dir | Shell variables (`export FOO=bar`) |
+| Files written anywhere on disk | Python variables / DataFrames |
+| Command stdout (in chat context) | In-memory state of any kind |
+
+### When to use files vs. inline commands
+
+**Inline `python3 -c` is fine for:**
+- Quick one-off calculations, parsing, or filtering
+- Commands where you only need the printed output for reasoning
+
+**Save to disk files when:**
+- Data needs to be read programmatically by a later script (e.g., a Python script that loads JSON)
+- API responses are large and you'll need to re-process them differently
+- You're building multi-step pipelines where script B reads output of script A
+
+### The file-based pattern (for multi-step work)
+
+**Save API responses, then process:**
+```bash
+curl -s "https://api.example.com/data" > /tmp/raw_data.json
+```
+
+**Write reusable scripts that read from disk:**
+```bash
+cat << 'EOF' > /tmp/analyze.py
+import json, pandas as pd
+
+events = json.load(open("/tmp/events.json"))
+props = json.load(open("/tmp/props.json"))
+# ... analyze, filter, rank ...
+json.dump(results, open("/tmp/results.json", "w"))
+EOF
+python3 /tmp/analyze.py
+```
+
+**Update and re-run scripts as needed:**
+```bash
+cat << 'EOF' > /tmp/analyze.py
+# (updated version with new logic)
+EOF
+python3 /tmp/analyze.py
+```
+
+### Anti-patterns to avoid
+
+```bash
+# BAD: Pipe-only when you need the raw data later — data consumed by stdin, never saved
+curl -s "https://api.example.com/data" | python3 -c "import sys,json; print(json.load(sys.stdin))"
+# If you need raw_data.json later, save it first: curl ... > /tmp/raw_data.json
+
+# BAD: Relying on variables from a previous command
+# Command 1:
+export EVENTS='[{"id": "abc"}]'
+# Command 2 (fresh shell — EVENTS is empty!):
+echo $EVENTS
+```

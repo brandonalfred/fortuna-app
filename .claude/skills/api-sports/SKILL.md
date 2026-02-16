@@ -1,13 +1,13 @@
 ---
 name: api-sports
-description: Query player/team stats from API-Sports for multi-sport betting analysis (NBA, NFL, MLB, NHL)
+description: Query player/team stats from API-Sports for multi-sport betting analysis (NBA, NFL, MLB, NHL, Soccer)
 ---
 
 # API-Sports Integration
 
 Access player and team statistics via API-Sports.io for data-driven betting analysis.
 
-> **NBA routing note:** For NBA stats, prefer `nba-advanced-stats` first — it returns all ~524 players in one bulk call, has local player ID lookups (no API call needed), and doesn't consume API quota. Use `api-sports` as a **fallback** for NBA if nba_api is down or failing. For NFL, MLB, and NHL, `api-sports` remains the **primary** source.
+> **NBA routing note:** For NBA stats, prefer `nba-advanced-stats` first — it returns all ~524 players in one bulk call, has local player ID lookups (no API call needed), and doesn't consume API quota. Use `api-sports` as a **fallback** for NBA if nba_api is down or failing. For NFL, MLB, NHL, and Soccer, `api-sports` remains the **primary** source.
 
 ## Authentication
 
@@ -32,6 +32,7 @@ Each sport has its own base URL and API version:
 | NFL | `https://v1.american-football.api-sports.io` | v1 |
 | MLB | `https://v1.baseball.api-sports.io` | v1 |
 | NHL | `https://v1.hockey.api-sports.io` | v1 |
+| Football (Soccer) | `https://v3.football.api-sports.io` | v3 |
 
 ---
 
@@ -296,6 +297,153 @@ curl -s "https://v1.hockey.api-sports.io/standings?league=57&season=2024" \
 
 ---
 
+## Football (Soccer) Endpoints
+
+Base URL: `https://v3.football.api-sports.io`
+
+Uses the same `x-apisports-key` header as other sports.
+
+**Season format:** Year (e.g., `2025` for the 2025-26 season).
+
+### League IDs
+
+| ID | League |
+|----|--------|
+| 39 | Premier League (England) |
+| 140 | La Liga (Spain) |
+| 78 | Bundesliga (Germany) |
+| 135 | Serie A (Italy) |
+| 61 | Ligue 1 (France) |
+| 2 | Champions League |
+| 3 | Europa League |
+| 253 | MLS |
+| 262 | Liga MX |
+
+### Common Team IDs
+
+| ID | Team |
+|----|------|
+| 529 | Barcelona |
+| 541 | Real Madrid |
+| 530 | Atletico Madrid |
+| 33 | Manchester United |
+| 40 | Liverpool |
+| 42 | Arsenal |
+| 49 | Chelsea |
+| 50 | Manchester City |
+| 157 | Bayern Munich |
+| 489 | AC Milan |
+| 496 | Juventus |
+| 85 | Paris Saint-Germain |
+
+### Get Fixtures by Date
+
+```bash
+curl -s "https://v3.football.api-sports.io/fixtures?date=2025-02-15" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Returns all matches across leagues for a given date. Useful for discovery ("what soccer is on tonight?").
+
+### Search Players
+
+```bash
+curl -s "https://v3.football.api-sports.io/players?search=lewandowski&league=140&season=2025" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Returns: `id`, `name`, `firstname`, `lastname`, `age`, `birth`, `nationality`, `height`, `weight`, `photo`
+
+### Player Season Statistics
+
+```bash
+curl -s "https://v3.football.api-sports.io/players?id=521&season=2025&league=140" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+**Key stat fields:**
+- `games.appearences`, `games.minutes`, `games.rating`
+- `goals.total`, `goals.assists`
+- `shots.total`, `shots.on` (on target)
+- `passes.total`, `passes.key`, `passes.accuracy`
+- `tackles.total`, `tackles.blocks`, `tackles.interceptions`
+- `duels.total`, `duels.won`
+- `dribbles.attempts`, `dribbles.success`
+- `fouls.drawn`, `fouls.committed`
+- `cards.yellow`, `cards.red`
+- `penalty.scored`, `penalty.missed`
+
+### Team Statistics
+
+```bash
+curl -s "https://v3.football.api-sports.io/teams/statistics?team=529&league=140&season=2025" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Returns: goals scored/conceded, clean sheets, form, biggest wins/losses, fixtures played/won/drawn/lost (home/away splits).
+
+### Standings
+
+```bash
+curl -s "https://v3.football.api-sports.io/standings?league=140&season=2025" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Returns: league table with rank, points, goal difference, form, home/away records.
+
+### Fixture Lineups
+
+```bash
+curl -s "https://v3.football.api-sports.io/fixtures/lineups?fixture={fixture_id}" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Available 20-40 min before kickoff. Returns formation, starting XI, and substitutes.
+
+### Injuries by Date
+
+```bash
+curl -s "https://v3.football.api-sports.io/injuries?date=2025-02-15" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Returns all injuries across leagues for a given date.
+
+### Predictions
+
+```bash
+curl -s "https://v3.football.api-sports.io/predictions?fixture={fixture_id}" \
+  -H "x-apisports-key: ${API_SPORTS_KEY}"
+```
+
+Returns algorithmic predictions (Poisson-based) and comparative team stats.
+
+### Soccer Analysis Patterns
+
+**Goals per 90 minutes:**
+```python
+goals_per_90 = goals_total / (minutes / 90)
+```
+
+**Shots per 90:**
+```python
+shots_per_90 = shots_total / (minutes / 90)
+```
+
+**Shot conversion rate:**
+```python
+conversion_rate = goals_total / shots_total
+```
+
+**Key passes per 90:**
+```python
+key_passes_per_90 = passes_key / (minutes / 90)
+```
+
+Use these per-90 metrics when evaluating anytime goalscorer props, shots O/U, and assists O/U.
+
+---
+
 ## Analysis Patterns
 
 When analyzing player props or team bets, write Python code to calculate statistics.
@@ -382,13 +530,15 @@ def fetch_game_metadata(game_ids: list, sport: str = "nba") -> dict:
         "nfl": "https://v1.american-football.api-sports.io",
         "mlb": "https://v1.baseball.api-sports.io",
         "nhl": "https://v1.hockey.api-sports.io",
+        "soccer": "https://v3.football.api-sports.io",
     }
     base = base_urls.get(sport, base_urls["nba"])
+    endpoint = "fixtures" if sport == "soccer" else "games"
     metadata = {}
 
     for game_id in game_ids:
         result = subprocess.run([
-            "curl", "-s", f"{base}/games?id={game_id}",
+            "curl", "-s", f"{base}/{endpoint}?id={game_id}",
             "-H", f"x-apisports-key: {os.environ['API_SPORTS_KEY']}"
         ], capture_output=True, text=True)
         data = json.loads(result.stdout)
@@ -514,6 +664,6 @@ When presenting analysis:
 | Tool | Priority | Use For |
 |------|----------|---------|
 | **nba-advanced-stats** | PRIMARY for NBA | All NBA stats — bulk season averages, game logs, advanced metrics, pace, usage |
-| **api-sports** | PRIMARY for NFL/MLB/NHL, FALLBACK for NBA | Multi-sport stats; NBA fallback if nba_api fails |
+| **api-sports** | PRIMARY for NFL/MLB/NHL/Soccer, FALLBACK for NBA | Multi-sport stats; NBA fallback if nba_api fails |
 | **odds-api** | — | Current lines, odds comparison, line movement |
 | **Web search** | LAST RESORT | Injury reports, news, fallback stats |
