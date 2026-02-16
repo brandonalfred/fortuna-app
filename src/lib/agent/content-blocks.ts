@@ -28,6 +28,8 @@ export function buildContentBlocks(
 		}
 	}
 
-	content.push({ type: "text", text: message });
+	if (message) {
+		content.push({ type: "text", text: message });
+	}
 	return content;
 }
