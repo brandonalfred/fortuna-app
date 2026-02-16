@@ -46,13 +46,24 @@ export const attachmentSchema = z.object({
 	size: z.number().int().positive().max(MAX_FILE_SIZE),
 });
 
-export const sendMessageSchema = z.object({
-	message: z.string().min(1).max(10000),
-	chatId: z.string().uuid().nullish(),
-	sessionId: z.string().nullish(),
-	timezone: z.string().min(1).max(100).optional(),
-	attachments: z.array(attachmentSchema).max(MAX_FILES_PER_MESSAGE).optional(),
-});
+export const sendMessageSchema = z
+	.object({
+		message: z.string().max(10000).default(""),
+		chatId: z.string().uuid().nullish(),
+		sessionId: z.string().nullish(),
+		timezone: z.string().min(1).max(100).optional(),
+		attachments: z
+			.array(attachmentSchema)
+			.max(MAX_FILES_PER_MESSAGE)
+			.optional(),
+	})
+	.refine(
+		(data) =>
+			data.message.trim().length > 0 || (data.attachments?.length ?? 0) > 0,
+		{
+			message: "Message or attachments required",
+		},
+	);
 
 export const presignRequestSchema = z.object({
 	files: z

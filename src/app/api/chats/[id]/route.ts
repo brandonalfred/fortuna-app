@@ -46,11 +46,16 @@ export async function GET(
 	const refreshed = await Promise.all(
 		messages.map(async (msg) => {
 			const attachments = (msg as Message).attachments;
-			if (attachments && attachments.length > 0) {
-				return {
-					...msg,
-					attachments: await regenerateAttachmentUrls(attachments),
-				};
+			if (attachments?.length) {
+				try {
+					return {
+						...msg,
+						attachments: await regenerateAttachmentUrls(attachments),
+					};
+				} catch (e) {
+					console.warn("[Chat GET] Failed to regenerate attachment URLs:", e);
+					return msg;
+				}
 			}
 			return msg;
 		}),

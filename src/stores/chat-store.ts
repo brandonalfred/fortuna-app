@@ -331,7 +331,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 		async sendMessage(content, attachments) {
 			const state = get();
-			if (!content.trim() || state.isLoading) return;
+			if ((!content.trim() && !attachments?.length) || state.isLoading) return;
 
 			log.info("Sending message", {
 				chatId: state.currentChat?.id,

@@ -104,12 +104,17 @@ export async function POST(req: Request): Promise<Response> {
 		const sessionId = existingChat?.sessionId || randomUUID();
 		const workspacePath = await getOrCreateWorkspace(sessionId);
 
+		let chatTitle = "New chat";
+		if (message) {
+			chatTitle = message.length > 50 ? `${message.slice(0, 50)}...` : message;
+		}
+
 		const chat =
 			existingChat ||
 			(await prisma.chat.create({
 				data: {
 					sessionId,
-					title: message.length > 50 ? `${message.slice(0, 50)}...` : message,
+					title: chatTitle,
 					userId: user.id,
 				},
 			}));
