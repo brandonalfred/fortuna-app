@@ -26,7 +26,7 @@ export interface Message {
 export interface ToolUse {
 	name: string;
 	input: unknown;
-	status?: "pending" | "running" | "complete";
+	status?: "pending" | "running" | "complete" | "interrupted";
 }
 
 export type ContentSegment =
