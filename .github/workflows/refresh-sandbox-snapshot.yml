@@ -35,18 +35,20 @@ jobs:
         id: snapshot
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          output=$(bunx tsx scripts/create-sandbox-snapshot.ts 2>&1)
-          exit_code=$?
-          echo "$output"
+          set +o pipefail
+          bunx tsx scripts/create-sandbox-snapshot.ts 2>&1 | tee /tmp/snapshot-output.txt
+          exit_code=${PIPESTATUS[0]}
+          set -o pipefail
 
           if [ $exit_code -ne 0 ]; then
             echo "::error::Failed to create snapshot"
             exit 1
           fi
 
-          # Extract snapshot ID from output
-          snapshot_id=$(echo "$output" | grep "AGENT_SANDBOX_SNAPSHOT_ID=" | cut -d'=' -f2)
+          snapshot_id=$(grep "AGENT_SANDBOX_SNAPSHOT_ID=" /tmp/snapshot-output.txt | cut -d'=' -f2)
 
           if [ -z "$snapshot_id" ]; then
             echo "::error::Could not extract snapshot ID from output"
@@ -68,7 +70,7 @@ jobs:
           vercel env rm AGENT_SANDBOX_SNAPSHOT_ID production --yes --token=$VERCEL_TOKEN 2>/dev/null || true
 
           # Add new env var
-          echo "${{ steps.snapshot.outputs.snapshot_id }}" | vercel env add AGENT_SANDBOX_SNAPSHOT_ID production --token=$VERCEL_TOKEN
+          printf "%s" "${{ steps.snapshot.outputs.snapshot_id }}" | vercel env add AGENT_SANDBOX_SNAPSHOT_ID production --token=$VERCEL_TOKEN
 
           echo "::notice::Updated AGENT_SANDBOX_SNAPSHOT_ID to ${{ steps.snapshot.outputs.snapshot_id }}"
 
