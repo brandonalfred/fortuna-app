@@ -10,7 +10,6 @@ import {
 import {
 	extractIsError,
 	extractToolResultContent,
-	MAX_TOOL_RESULT_DB_LIMIT,
 } from "@/lib/agent/message-extraction";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import {
@@ -418,11 +417,8 @@ export async function POST(req: Request): Promise<Response> {
 								if (!eventBuffer) break;
 								if (!msg.parent_tool_use_id) break;
 
-								let text = extractToolResultContent(msg);
+								const text = extractToolResultContent(msg);
 								if (!text) break;
-								if (text.length > MAX_TOOL_RESULT_DB_LIMIT) {
-									text = `${text.slice(0, MAX_TOOL_RESULT_DB_LIMIT)}...[truncated]`;
-								}
 
 								eventBuffer.appendEvent("tool_result", {
 									toolUseId: msg.parent_tool_use_id,

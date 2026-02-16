@@ -4,8 +4,6 @@ import type {
 	ConversationToolUse,
 } from "@/lib/types";
 
-const MAX_TOOL_RESULT_PROMPT_LIMIT = 500;
-
 const MAX_TOOL_INPUT_SUMMARY_LENGTH = 50;
 
 function summarizeToolInput(input: unknown): string {
@@ -35,10 +33,7 @@ function formatToolsWithResults(
 			const result = tool.toolUseId ? resultMap.get(tool.toolUseId) : undefined;
 			if (!result) return `[Tool: ${label}]`;
 
-			const content =
-				result.content.length > MAX_TOOL_RESULT_PROMPT_LIMIT
-					? `${result.content.slice(0, MAX_TOOL_RESULT_PROMPT_LIMIT)}...[truncated]`
-					: result.content;
+			const content = result.content;
 			const prefix = result.isError ? " ERROR:" : "";
 			return `[Tool: ${label}]${prefix} → ${content}`;
 		})

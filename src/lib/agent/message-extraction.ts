@@ -1,5 +1,3 @@
-export const MAX_TOOL_RESULT_DB_LIMIT = 2000;
-
 interface ContentBlock {
 	type: string;
 	text?: string;

@@ -64,8 +64,8 @@ Always calculate home/away hit rates separately and use the split matching tonig
 ### d. Injury report source priority
 Try Basketball Reference first for injury data. If it fails or returns incomplete data, fall back to web searching "[team] injury report [date]".
 
-### e. Minimize script count
-Write at most 3 Python scripts to `/tmp/`: (1) `fetch_data.py` — collect all API responses and save to `/tmp/*.json`, (2) `analyze.py` — read saved data, screen candidates, compute hit rates, save results, (3) `rank.py` — read analysis results, build final recommendation. Each script reads inputs from and writes outputs to disk files. You can update and re-run any script as needed. Avoid 10+ separate inline `python3 -c` blocks — write proper script files instead.
+### e. Persist data between steps
+When running multi-step analysis, save intermediate results to disk files so later scripts can read them. For example: save API responses to `/tmp/*.json`, then write Python scripts that read those files for analysis. You can use inline `python3 -c` for quick one-off operations, or write script files for complex logic — either approach is fine as long as any data you'll need later is saved to disk.
 
 ### f. Prescribed execution order
 1. **Parallel:** events list + bulk season stats + injury report
@@ -148,7 +148,7 @@ This prevents the pattern of: fetch NBA events → discover All-Star break → f
 
 ## Data Persistence Between Commands
 
-Each bash/python command runs in a **fresh shell**. Nothing survives between commands except **files on disk**. This is the #1 source of wasted API calls — piping data through stdin then expecting it later.
+Each bash/python command runs in a **fresh shell**. Command outputs are preserved in chat context and you can reference them in later reasoning. However, shell variables and in-memory state do NOT persist between commands — only **files on disk** survive.
 
 ### What persists vs. what doesn't
 
@@ -156,33 +156,27 @@ Each bash/python command runs in a **fresh shell**. Nothing survives between com
 |--------------------------|------------------|
 | Files written to `/tmp/` or working dir | Shell variables (`export FOO=bar`) |
 | Files written anywhere on disk | Python variables / DataFrames |
-| | Piped stdout (`curl \| python3`) |
-| | In-memory state of any kind |
+| Command stdout (in chat context) | In-memory state of any kind |
 
-### The pattern: Write files → Run files → Reuse files
+### When to use files vs. inline commands
 
-Files on disk are your workspace. Use them for everything: API responses, Python scripts, intermediate results, final output.
+**Inline `python3 -c` is fine for:**
+- Quick one-off calculations, parsing, or filtering
+- Commands where you only need the printed output for reasoning
 
-**Save API responses to files:**
+**Save to disk files when:**
+- Data needs to be read programmatically by a later script (e.g., a Python script that loads JSON)
+- API responses are large and you'll need to re-process them differently
+- You're building multi-step pipelines where script B reads output of script A
+
+### The file-based pattern (for multi-step work)
+
+**Save API responses, then process:**
 ```bash
 curl -s "https://api.example.com/data" > /tmp/raw_data.json
 ```
 
-**Write reusable Python scripts to files, then run them:**
-```bash
-cat << 'EOF' > /tmp/fetch_data.py
-import json, os, requests
-
-api_key = os.environ.get("ODDS_API_KEY", "")
-# Fetch and save data
-resp = requests.get(f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/?apiKey={api_key}")
-json.dump(resp.json(), open("/tmp/events.json", "w"))
-# ... more fetches, all saved to files ...
-EOF
-python3 /tmp/fetch_data.py
-```
-
-**Write a second script that reads outputs from the first:**
+**Write reusable scripts that read from disk:**
 ```bash
 cat << 'EOF' > /tmp/analyze.py
 import json, pandas as pd
@@ -195,29 +189,20 @@ EOF
 python3 /tmp/analyze.py
 ```
 
-**Update an existing script and re-run it:**
+**Update and re-run scripts as needed:**
 ```bash
-# Modify the analysis script to add a new filter, then re-run
 cat << 'EOF' > /tmp/analyze.py
 # (updated version with new logic)
 EOF
 python3 /tmp/analyze.py
 ```
 
-**Supported file types — not just JSON:**
-- `.json` — API responses, structured data
-- `.py` — reusable scripts (write once, run/update multiple times)
-- `.csv` — tabular data for pandas analysis
-- `.txt` — any intermediate text output
-
 ### Anti-patterns to avoid
 
 ```bash
-# BAD: Pipe-only — data consumed by stdin, gone forever
+# BAD: Pipe-only when you need the raw data later — data consumed by stdin, never saved
 curl -s "https://api.example.com/data" | python3 -c "import sys,json; print(json.load(sys.stdin))"
-
-# BAD: Inline python3 -c with complex logic — write a script file instead
-python3 -c "import json; [100 lines of logic]"
+# If you need raw_data.json later, save it first: curl ... > /tmp/raw_data.json
 
 # BAD: Relying on variables from a previous command
 # Command 1:
