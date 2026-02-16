@@ -36,15 +36,17 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          bunx tsx scripts/create-sandbox-snapshot.ts 2>&1 | tee /tmp/snapshot-output.txt
-          exit_code=${PIPESTATUS[0]}
+          output=$(bunx tsx scripts/create-sandbox-snapshot.ts 2>&1)
+          exit_code=$?
+          echo "$output"
 
           if [ $exit_code -ne 0 ]; then
             echo "::error::Failed to create snapshot"
             exit 1
           fi
 
-          snapshot_id=$(grep "AGENT_SANDBOX_SNAPSHOT_ID=" /tmp/snapshot-output.txt | cut -d'=' -f2)
+          # Extract snapshot ID from output
+          snapshot_id=$(echo "$output" | grep "AGENT_SANDBOX_SNAPSHOT_ID=" | cut -d'=' -f2)
 
           if [ -z "$snapshot_id" ]; then
             echo "::error::Could not extract snapshot ID from output"
