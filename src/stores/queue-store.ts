@@ -1,7 +1,7 @@
 import { persist } from "zustand/middleware";
 import { createStore } from "zustand/vanilla";
 import { createLogger } from "@/lib/logger";
-import type { QueuedMessage } from "@/lib/types";
+import type { Attachment, QueuedMessage } from "@/lib/types";
 
 const log = createLogger("QueueStore");
 
@@ -10,7 +10,7 @@ interface QueueState {
 }
 
 interface QueueActions {
-	enqueue(content: string): void;
+	enqueue(content: string, attachments?: Attachment[]): void;
 	dequeue(): QueuedMessage | undefined;
 	remove(id: string): void;
 	clear(): void;
@@ -24,10 +24,11 @@ export function createQueueStore() {
 			(set, get) => ({
 				pendingMessages: [],
 
-				enqueue(content: string) {
+				enqueue(content: string, attachments?: Attachment[]) {
 					const msg: QueuedMessage = {
 						id: crypto.randomUUID(),
 						content,
+						attachments: attachments?.map(({ url: _, ...rest }) => rest),
 					};
 					log.info("Enqueue", { id: msg.id, preview: content.slice(0, 50) });
 					set({ pendingMessages: [...get().pendingMessages, msg] });

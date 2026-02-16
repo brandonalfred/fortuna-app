@@ -133,7 +133,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 			dequeueing = true;
 			try {
-				await chatStore.getState().sendMessage(next.content);
+				await chatStore.getState().sendMessage(next.content, next.attachments);
 			} finally {
 				dequeueing = false;
 			}
