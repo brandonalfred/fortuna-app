@@ -123,7 +123,7 @@ function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 }
 
 const PROSE_CLASSES =
-	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
+	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-pre:overflow-x-auto prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
 
 interface MessageItemProps {
 	message: Message;
@@ -164,7 +164,7 @@ export function MessageItem({ message, animate = true }: MessageItemProps) {
 		>
 			<div
 				className={cn(
-					"max-w-[85%] rounded-lg px-4 py-3",
+					"max-w-[85%] min-w-0 rounded-lg px-4 py-3 overflow-hidden",
 					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
 				)}
 			>
@@ -199,7 +199,7 @@ export function StreamingMessageItem({
 
 	return (
 		<div className="animate-message-in flex w-full justify-start">
-			<div className="max-w-[85%] rounded-lg px-4 py-3 text-text-primary">
+			<div className="max-w-[85%] min-w-0 rounded-lg px-4 py-3 text-text-primary overflow-hidden">
 				<div className={PROSE_CLASSES}>
 					{collapsed.map((segment, idx) => (
 						<SegmentRenderer
@@ -438,7 +438,7 @@ function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 			</button>
 			{expanded && (
 				<div className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3">
-					<div className="text-sm text-text-secondary whitespace-pre-wrap font-body leading-relaxed">
+					<div className="text-sm text-text-secondary whitespace-pre-wrap break-words font-body leading-relaxed">
 						{thinking}
 					</div>
 				</div>
