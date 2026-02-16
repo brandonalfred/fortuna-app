@@ -24,25 +24,40 @@ export async function POST(
 		return notFound("Chat");
 	}
 
+	if (chat.sandboxId) {
+		try {
+			const sandbox = await Sandbox.get({ sandboxId: chat.sandboxId });
+			const streamUrl = sandbox.domain(8080);
+
+			const stopRes = await fetch(`${streamUrl}/stop`, {
+				method: "POST",
+				signal: AbortSignal.timeout(5000),
+			}).catch(() => null);
+
+			if (!stopRes || !stopRes.ok) {
+				console.warn(
+					`[Stop API] SSE server unresponsive, stopping sandbox chat=${id}`,
+				);
+				await sandbox.stop();
+				await prisma.chat.update({
+					where: { id },
+					data: {
+						sandboxId: null,
+						streamToken: null,
+						persistToken: null,
+					},
+				});
+			}
+		} catch (e) {
+			console.warn(`[Stop API] Sandbox stop failed chat=${id}:`, e);
+		}
+	}
+
 	const controller = activeSessions.get(id);
 	if (controller) {
 		controller.abort();
 		activeSessions.delete(id);
 		console.log(`[Stop API] Aborted in-memory session chat=${id}`);
-	}
-
-	if (chat.sandboxId) {
-		try {
-			const sandbox = await Sandbox.get({ sandboxId: chat.sandboxId });
-			await sandbox.stop();
-			await prisma.chat.update({
-				where: { id },
-				data: { sandboxId: null },
-			});
-			console.log(`[Stop API] Stopped sandbox chat=${id}`);
-		} catch (e) {
-			console.warn(`[Stop API] Sandbox stop failed chat=${id}:`, e);
-		}
 	}
 
 	await prisma.chat.update({

@@ -39,6 +39,7 @@ async function createFreshSandbox(): Promise<Sandbox> {
 		runtime: "node22",
 		resources: { vcpus: 4 },
 		timeout: SANDBOX_TIMEOUT,
+		ports: [8080],
 	});
 }
 
@@ -55,6 +56,7 @@ async function createSandbox(
 			source: { type: "snapshot", snapshotId },
 			resources: { vcpus: 4 },
 			timeout: SANDBOX_TIMEOUT,
+			ports: [8080],
 		});
 		return { sandbox, usedSnapshot: true };
 	} catch (error) {

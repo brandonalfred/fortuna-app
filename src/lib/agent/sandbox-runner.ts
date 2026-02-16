@@ -1,4 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Sandbox } from "@vercel/sandbox";
 import { createLogger } from "@/lib/logger";
 import type { Attachment, ConversationMessage } from "@/lib/types";
 import { buildContentBlocks } from "./content-blocks";
@@ -9,6 +10,7 @@ import {
 	SANDBOX_TIMEOUT,
 	type StatusCallback,
 } from "./sandbox";
+import { writeSSEServerFiles } from "./sandbox-sse-setup";
 import {
 	AGENT_ALLOWED_TOOLS,
 	AGENT_MODEL,
@@ -163,6 +165,96 @@ function handleSandboxLineResult(result: SandboxLineResult): SDKMessage | null {
 	}
 }
 
+async function writeSandboxEnvFiles(
+	sandbox: Sandbox,
+	envVars: Record<string, string>,
+): Promise<void> {
+	const envEntries = Object.entries(envVars);
+	const envExports = envEntries
+		.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
+		.join("\n");
+	const envPlain = envEntries.map(([k, v]) => `${k}=${v}`).join("\n");
+
+	log.info("Env vars", {
+		vars:
+			envEntries.length > 0
+				? envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ")
+				: "(none)",
+	});
+
+	await sandbox.writeFiles([
+		{
+			path: "/vercel/sandbox/.agent-env.sh",
+			content: Buffer.from(`#!/bin/bash\n${envExports}\n`),
+		},
+		{
+			path: "/vercel/sandbox/.agent-env",
+			content: Buffer.from(`${envPlain}\n`),
+		},
+	]);
+
+	const agentEnvSource =
+		"[ -f /vercel/sandbox/.agent-env.sh ] && . /vercel/sandbox/.agent-env.sh";
+	await sandbox.runCommand({
+		cmd: "bash",
+		args: [
+			"-c",
+			[
+				`for f in /etc/bashrc /etc/bash.bashrc; do [ -f "$f" ] && ! grep -q agent-env "$f" && echo '${agentEnvSource}' >> "$f"; done`,
+				`cp /vercel/sandbox/.agent-env.sh /etc/profile.d/agent-env.sh 2>/dev/null || true`,
+				`grep -q agent-env /root/.bashrc 2>/dev/null || echo '${agentEnvSource}' >> /root/.bashrc`,
+			].join(" ; "),
+		],
+	});
+}
+
+async function verifyPythonPackages(sandbox: Sandbox): Promise<void> {
+	const pipFallback = [
+		"sudo PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install -q",
+		"nba_api requests httpx beautifulsoup4 pandas numpy",
+	].join(" ");
+	const result = await sandbox.runCommand({
+		cmd: "bash",
+		args: [
+			"-c",
+			`python3 -c 'import nba_api' 2>/dev/null || (sudo dnf install -y python3 python3-pip 2>/dev/null; ${pipFallback})`,
+		],
+	});
+	if (result.exitCode !== 0) {
+		log.warn("Python package verification failed");
+	}
+}
+
+const AGENT_ENV_KEYS = ["ODDS_API_KEY", "API_SPORTS_KEY", "WEBSHARE_PROXY_URL"];
+
+interface ResolvedSandbox {
+	sandbox: Sandbox;
+	canResume: boolean;
+	effectiveSessionId: string | undefined;
+}
+
+async function resolveSandbox(
+	chatId: string,
+	onStatus?: StatusCallback,
+): Promise<ResolvedSandbox> {
+	const { sandbox, sandboxReused, previousAgentSessionId } =
+		await getOrCreateSandbox(chatId, onStatus);
+
+	const canResume = sandboxReused && !!previousAgentSessionId;
+
+	if (canResume) {
+		log.info("Resuming session", { sessionId: previousAgentSessionId });
+	} else if (previousAgentSessionId && !sandboxReused) {
+		log.info("Sandbox was recreated, cannot resume previous session");
+	}
+
+	return {
+		sandbox,
+		canResume,
+		effectiveSessionId: canResume ? previousAgentSessionId! : undefined,
+	};
+}
+
 export async function* streamViaSandbox({
 	prompt,
 	chatId,
@@ -174,28 +266,17 @@ export async function* streamViaSandbox({
 	onStatus,
 }: StreamAgentOptions): AsyncGenerator<SDKMessage> {
 	log.info("Starting streamViaSandbox");
-	const { sandbox, sandboxReused, previousAgentSessionId } =
-		await getOrCreateSandbox(chatId, onStatus);
-
-	const canResume = sandboxReused && !!previousAgentSessionId;
-	const effectiveSessionId = canResume ? previousAgentSessionId : undefined;
-
-	if (canResume) {
-		log.info("Resuming session", { sessionId: previousAgentSessionId });
-	} else if (previousAgentSessionId && !sandboxReused) {
-		log.info("Sandbox was recreated, cannot resume previous session");
-	}
+	const { sandbox, canResume, effectiveSessionId } = await resolveSandbox(
+		chatId,
+		onStatus,
+	);
 
 	try {
 		const effectivePrompt = canResume
 			? prompt
 			: buildFullPrompt(prompt, conversationHistory);
 
-		const envVars = collectEnvVars([
-			"ODDS_API_KEY",
-			"API_SPORTS_KEY",
-			"WEBSHARE_PROXY_URL",
-		]);
+		const envVars = collectEnvVars(AGENT_ENV_KEYS);
 
 		const script = generateAgentScript({
 			fullPrompt: effectivePrompt,
@@ -207,18 +288,7 @@ export async function* streamViaSandbox({
 			attachments,
 		});
 
-		const envEntries = Object.entries(envVars);
-		const envExports = envEntries
-			.map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
-			.join("\n");
-		const envPlain = envEntries.map(([k, v]) => `${k}=${v}`).join("\n");
-
-		log.info("Env vars", {
-			vars:
-				envEntries.length > 0
-					? envEntries.map(([k, v]) => `${k}=${v.length}chars`).join(", ")
-					: "(none)",
-		});
+		await writeSandboxEnvFiles(sandbox, envVars);
 
 		log.debug("Writing agent runner script...");
 		await sandbox.writeFiles([
@@ -226,45 +296,9 @@ export async function* streamViaSandbox({
 				path: "/vercel/sandbox/agent-runner.mjs",
 				content: Buffer.from(script),
 			},
-			{
-				path: "/vercel/sandbox/.agent-env.sh",
-				content: Buffer.from(`#!/bin/bash\n${envExports}\n`),
-			},
-			{
-				path: "/vercel/sandbox/.agent-env",
-				content: Buffer.from(`${envPlain}\n`),
-			},
 		]);
 
-		const agentEnvSource =
-			"[ -f /vercel/sandbox/.agent-env.sh ] && . /vercel/sandbox/.agent-env.sh";
-		await sandbox.runCommand({
-			cmd: "bash",
-			args: [
-				"-c",
-				[
-					`for f in /etc/bashrc /etc/bash.bashrc; do [ -f "$f" ] && ! grep -q agent-env "$f" && echo '${agentEnvSource}' >> "$f"; done`,
-					`cp /vercel/sandbox/.agent-env.sh /etc/profile.d/agent-env.sh 2>/dev/null || true`,
-					`grep -q agent-env /root/.bashrc 2>/dev/null || echo '${agentEnvSource}' >> /root/.bashrc`,
-				].join(" ; "),
-			],
-		});
-
-		log.debug("Verifying Python packages...");
-		const pipFallback = [
-			"sudo PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install -q",
-			"nba_api requests httpx beautifulsoup4 pandas numpy",
-		].join(" ");
-		const verifyResult = await sandbox.runCommand({
-			cmd: "bash",
-			args: [
-				"-c",
-				`python3 -c 'import nba_api' 2>/dev/null || (sudo dnf install -y python3 python3-pip 2>/dev/null; ${pipFallback})`,
-			],
-		});
-		if (verifyResult.exitCode !== 0) {
-			log.warn("Python package verification failed");
-		}
+		await verifyPythonPackages(sandbox);
 
 		onStatus?.("starting", "Starting analysis...");
 		log.info("Starting agent command...");
@@ -339,4 +373,144 @@ export async function* streamViaSandbox({
 		}
 		throw error;
 	}
+}
+
+// --- Direct Streaming Functions ---
+
+export interface DirectStreamOptions extends StreamAgentOptions {
+	persistUrl: string;
+	streamToken: string;
+	persistToken: string;
+	initialSequenceNum: number;
+}
+
+async function waitForSSEServer(
+	streamUrl: string,
+	timeoutMs = 15000,
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		try {
+			const res = await fetch(`${streamUrl}/health`, {
+				signal: AbortSignal.timeout(2000),
+			});
+			if (res.ok) return;
+		} catch {
+			// not ready yet
+		}
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	throw new Error("SSE server failed to start within timeout");
+}
+
+export async function setupDirectStream(
+	options: DirectStreamOptions,
+): Promise<{ streamUrl: string }> {
+	const {
+		prompt,
+		chatId,
+		conversationHistory = [],
+		timezone,
+		userFirstName,
+		userPreferences,
+		onStatus,
+		persistUrl,
+		streamToken,
+		persistToken,
+		initialSequenceNum,
+	} = options;
+
+	log.info("Setting up direct stream", { chatId });
+
+	const { sandbox, canResume, effectiveSessionId } = await resolveSandbox(
+		chatId,
+		onStatus,
+	);
+
+	await sandbox.runCommand({
+		cmd: "bash",
+		args: ["-c", "pkill -f sandbox-sse-server || true"],
+	});
+	await new Promise((r) => setTimeout(r, 500));
+
+	const effectivePrompt = canResume
+		? prompt
+		: buildFullPrompt(prompt, conversationHistory);
+
+	const envVars = collectEnvVars(AGENT_ENV_KEYS);
+	await writeSandboxEnvFiles(sandbox, envVars);
+
+	await writeSSEServerFiles(sandbox, {
+		streamToken,
+		persistToken,
+		persistUrl,
+		chatId,
+		port: 8080,
+		initialPrompt: effectivePrompt,
+		systemPrompt: getSystemPrompt(timezone, userFirstName, userPreferences),
+		model: AGENT_MODEL,
+		allowedTools: AGENT_ALLOWED_TOOLS,
+		agentSessionId: effectiveSessionId ?? null,
+		maxThinkingTokens: 10000,
+		initialSequenceNum,
+	});
+
+	await verifyPythonPackages(sandbox);
+
+	onStatus?.("starting", "Starting analysis...");
+	log.info("Starting SSE server...");
+
+	await sandbox.runCommand({
+		cmd: "node",
+		args: ["sandbox-sse-server.mjs"],
+		env: {
+			CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+			BASH_ENV: "/vercel/sandbox/.agent-env.sh",
+			...envVars,
+		},
+		detached: true,
+	});
+
+	let streamUrl: string;
+	try {
+		streamUrl = sandbox.domain(8080);
+	} catch {
+		log.warn("sandbox.domain(8080) failed — sandbox may lack port config");
+		throw new Error(
+			"Sandbox does not support port exposure, force-create needed",
+		);
+	}
+
+	await waitForSSEServer(streamUrl);
+	log.info("SSE server ready", { streamUrl });
+
+	return { streamUrl };
+}
+
+export async function sendMessageToSSE(options: {
+	sandboxId: string;
+	streamToken: string;
+	prompt: string;
+}): Promise<{ streamUrl: string }> {
+	const { sandboxId, streamToken: token, prompt } = options;
+	log.info("Sending message to existing SSE server", { sandboxId });
+
+	const sandbox = await Sandbox.get({ sandboxId });
+	const streamUrl = sandbox.domain(8080);
+
+	const res = await fetch(`${streamUrl}/message`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify({ prompt }),
+		signal: AbortSignal.timeout(5000),
+	});
+
+	if (!res.ok) {
+		throw new Error(`SSE server /message failed: ${res.status}`);
+	}
+
+	return { streamUrl };
 }

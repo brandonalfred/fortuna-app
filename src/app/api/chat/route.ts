@@ -11,9 +11,14 @@ import {
 	extractIsError,
 	extractToolResultContent,
 } from "@/lib/agent/message-extraction";
+import {
+	sendMessageToSSE,
+	setupDirectStream,
+} from "@/lib/agent/sandbox-runner";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import {
 	badRequest,
+	conflict,
 	getAuthenticatedUser,
 	serverError,
 	unauthorized,
@@ -184,6 +189,89 @@ export async function POST(req: Request): Promise<Response> {
 			}
 		}
 
+		if (process.env.VERCEL) {
+			if (existingChat?.isProcessing) {
+				return conflict("A response is already in progress.");
+			}
+
+			if (existingChat?.streamToken && existingChat?.sandboxId) {
+				try {
+					const result = await sendMessageToSSE({
+						sandboxId: existingChat.sandboxId,
+						streamToken: existingChat.streamToken,
+						prompt: agentPrompt,
+					});
+					return Response.json(
+						{
+							chatId: chat.id,
+							sessionId,
+							streamUrl: result.streamUrl,
+							streamToken: existingChat.streamToken,
+							mode: "direct",
+						},
+						{ headers: { "X-Chat-Id": chat.id } },
+					);
+				} catch {
+					console.log("[Chat API] SSE server not available, full setup needed");
+				}
+			}
+
+			const newStreamToken = randomUUID();
+			const newPersistToken = randomUUID();
+
+			await prisma.chat.update({
+				where: { id: chat.id },
+				data: {
+					streamToken: newStreamToken,
+					persistToken: newPersistToken,
+				},
+			});
+
+			const persistUrl =
+				process.env.BETTER_AUTH_URL || `https://${process.env.VERCEL_URL}`;
+
+			try {
+				const result = await setupDirectStream({
+					prompt: agentPrompt,
+					workspacePath,
+					chatId: chat.id,
+					conversationHistory,
+					timezone,
+					userFirstName: user.firstName ?? undefined,
+					userPreferences: user.preferences ?? undefined,
+					agentSessionId: existingChat?.agentSessionId ?? undefined,
+					attachments,
+					persistUrl,
+					streamToken: newStreamToken,
+					persistToken: newPersistToken,
+					initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
+				});
+
+				return Response.json(
+					{
+						chatId: chat.id,
+						sessionId,
+						streamUrl: result.streamUrl,
+						streamToken: newStreamToken,
+						mode: "direct",
+					},
+					{ headers: { "X-Chat-Id": chat.id } },
+				);
+			} catch (error) {
+				console.error("[Chat API] Direct stream setup failed:", error);
+				await prisma.chat.update({
+					where: { id: chat.id },
+					data: {
+						streamToken: null,
+						persistToken: null,
+						isProcessing: false,
+					},
+				});
+				return serverError(error);
+			}
+		}
+
+		// --- Local Dev: Inline SSE Streaming (unchanged) ---
 		const encoder = new TextEncoder();
 		const abortController = new AbortController();
 		activeSessions.set(chat.id, abortController);
