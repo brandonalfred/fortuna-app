@@ -10,7 +10,7 @@ import {
 	Loader2,
 	X,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { memo, type ReactNode, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ContentSegment, Message, ToolUse } from "@/lib/types";
@@ -96,6 +96,7 @@ function findLastNonWhitespaceSegment(
 	return undefined;
 }
 
+const REMARK_PLUGINS = [remarkGfm];
 const COLLAPSIBLE_TOOLS = new Set(["Bash", "TodoWrite"]);
 
 function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
@@ -104,10 +105,13 @@ function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 		if (seg.type === "tool_use" && COLLAPSIBLE_TOOLS.has(seg.tool.name)) {
 			const prev = findLastNonWhitespaceSegment(result);
 			if (prev?.type === "tool_use" && prev.tool.name === seg.tool.name) {
-				const target = prev.tool as CollapsibleToolUse;
-				target._groupCount = (target._groupCount ?? 1) + 1;
-				if (seg.tool.status === "running") target.status = "running";
 				const prevIdx = result.lastIndexOf(prev);
+				const updatedTool: CollapsibleToolUse = {
+					...prev.tool,
+					_groupCount: ((prev.tool as CollapsibleToolUse)._groupCount ?? 1) + 1,
+					...(seg.tool.status === "running" && { status: "running" }),
+				};
+				result[prevIdx] = { type: "tool_use", tool: updatedTool };
 				result.splice(prevIdx + 1);
 				continue;
 			}
@@ -130,20 +134,28 @@ interface MessageItemProps {
 	animate?: boolean;
 }
 
-function renderMessageContent(message: Message): ReactNode {
+function MessageContent({ message }: { message: Message }): ReactNode {
+	const collapsed = useMemo(
+		() =>
+			message.segments && message.segments.length > 0
+				? collapseToolSegments(message.segments)
+				: null,
+		[message.segments],
+	);
+
 	if (message.role === "user") {
 		return <p>{message.content}</p>;
 	}
 
-	if (message.segments && message.segments.length > 0) {
-		return collapseToolSegments(message.segments).map((segment, idx) => (
+	if (collapsed) {
+		return collapsed.map((segment, idx) => (
 			<SegmentRenderer key={getSegmentKey(segment, idx)} segment={segment} />
 		));
 	}
 
 	return (
 		<>
-			<Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+			<Markdown remarkPlugins={REMARK_PLUGINS}>{message.content}</Markdown>
 			{message.stopReason && message.stopReason !== "end_turn" && (
 				<StopNoticeBanner stopReason={message.stopReason} />
 			)}
@@ -168,7 +180,9 @@ export function MessageItem({ message, animate = true }: MessageItemProps) {
 					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
 				)}
 			>
-				<div className={PROSE_CLASSES}>{renderMessageContent(message)}</div>
+				<div className={PROSE_CLASSES}>
+					<MessageContent message={message} />
+				</div>
 			</div>
 		</div>
 	);
@@ -192,7 +206,7 @@ export function StreamingMessageItem({
 	isStreaming,
 	statusMessage,
 }: StreamingMessageItemProps) {
-	const collapsed = collapseToolSegments(segments);
+	const collapsed = useMemo(() => collapseToolSegments(segments), [segments]);
 	const lastSeg = collapsed[collapsed.length - 1];
 	const isThinking =
 		lastSeg?.type === "thinking" && lastSeg.isComplete === false;
@@ -331,7 +345,9 @@ interface SegmentRendererProps {
 	segment: ContentSegment;
 }
 
-function SegmentRenderer({ segment }: SegmentRendererProps) {
+const SegmentRenderer = memo(function SegmentRenderer({
+	segment,
+}: SegmentRendererProps) {
 	switch (segment.type) {
 		case "thinking":
 			return segment.isComplete === false ? (
@@ -340,7 +356,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
 				<ThinkingBlock thinking={segment.thinking} />
 			);
 		case "text":
-			return <Markdown remarkPlugins={[remarkGfm]}>{segment.text}</Markdown>;
+			return <Markdown remarkPlugins={REMARK_PLUGINS}>{segment.text}</Markdown>;
 		case "tool_use":
 			return (
 				<div className="my-2">
@@ -357,7 +373,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
 		default:
 			return null;
 	}
-}
+});
 
 interface ToolUsePillProps {
 	tool: ToolUse;
@@ -376,6 +392,7 @@ function ToolUsePill({ tool }: ToolUsePillProps) {
 		groupCount && groupCount > 1 ? `${baseLabel} (${groupCount})` : baseLabel;
 	const summary = getToolSummary(tool.name, tool.input);
 	const isRunning = tool.status === "running";
+	const isInterrupted = tool.status === "interrupted";
 	const Chevron = expanded ? ChevronDown : ChevronRight;
 
 	return (
@@ -388,12 +405,16 @@ function ToolUsePill({ tool }: ToolUsePillProps) {
 					"bg-tool-bg border border-tool-border text-tool-text",
 					"transition-colors hover:bg-tool-bg/80 cursor-pointer",
 					isRunning && "animate-subtle-pulse",
+					isInterrupted && "opacity-60 border-border-subtle",
 				)}
 			>
 				<Chevron className="h-3 w-3 shrink-0" />
 				<span>{label}</span>
 				{isRunning && (
 					<span className="h-1.5 w-1.5 rounded-full bg-accent-primary animate-pulse" />
+				)}
+				{isInterrupted && (
+					<span className="text-text-tertiary text-[10px]">stopped</span>
 				)}
 			</button>
 			{summary && !expanded && (

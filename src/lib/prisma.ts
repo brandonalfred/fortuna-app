@@ -30,25 +30,31 @@ const TRANSIENT_DB_PATTERNS = [
 	"ECONNRESET",
 ];
 
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 export function isTransientDbError(error: unknown): boolean {
-	const msg = errorMessage(error);
+	const msg = error instanceof Error ? error.message : String(error);
 	return TRANSIENT_DB_PATTERNS.some((pattern) => msg.includes(pattern));
 }
 
 export async function retryOnTransientError<T>(
 	fn: () => Promise<T>,
-	delayMs = 1000,
+	maxRetries = 3,
 ): Promise<T> {
-	try {
-		return await fn();
-	} catch (error) {
-		if (!isTransientDbError(error)) throw error;
-		console.warn("[Prisma] Transient DB error, retrying:", error);
-		await new Promise((r) => setTimeout(r, delayMs));
-		return fn();
+	let attempt = 0;
+	while (true) {
+		try {
+			return await fn();
+		} catch (error) {
+			const retriable = isTransientDbError(error) && attempt < maxRetries;
+			if (!retriable) throw error;
+
+			const baseMs = 500 * 2 ** attempt;
+			const jitter = Math.random() * baseMs * 0.5;
+			const delayMs = baseMs + jitter;
+			console.warn(
+				`[Prisma] Transient error (attempt ${attempt + 1}/${maxRetries}), retrying in ${Math.round(delayMs)}ms`,
+			);
+			await new Promise((r) => setTimeout(r, delayMs));
+			attempt++;
+		}
 	}
 }

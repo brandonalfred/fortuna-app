@@ -266,11 +266,16 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 			if (segments.length === 0) return;
 
-			const finalizedSegments = segments.map((seg) =>
-				seg.type === "thinking" && seg.isComplete === false
-					? { ...seg, isComplete: true as const }
-					: seg,
-			);
+			const finalizedSegments = segments.map((seg) => {
+				if (seg.type === "thinking" && seg.isComplete === false)
+					return { ...seg, isComplete: true as const };
+				if (seg.type === "tool_use" && seg.tool.status === "running")
+					return {
+						...seg,
+						tool: { ...seg.tool, status: "interrupted" as const },
+					};
+				return seg;
+			});
 
 			if (stopInfo) {
 				finalizedSegments.push({
