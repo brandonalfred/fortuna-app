@@ -8,6 +8,8 @@ import { eventsToMessages } from "@/lib/events";
 import { prisma } from "@/lib/prisma";
 import { updateChatSchema } from "@/lib/validations/chat";
 
+const STALE_PROCESSING_MS = 15 * 60 * 1000;
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(
@@ -35,6 +37,17 @@ export async function GET(
 
 	if (!chat) {
 		return notFound("Chat");
+	}
+
+	if (
+		chat.isProcessing &&
+		Date.now() - chat.updatedAt.getTime() > STALE_PROCESSING_MS
+	) {
+		await prisma.chat.update({
+			where: { id: chat.id },
+			data: { isProcessing: false },
+		});
+		chat.isProcessing = false;
 	}
 
 	const { events, ...rest } = chat;
