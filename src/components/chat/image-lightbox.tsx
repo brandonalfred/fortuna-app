@@ -18,6 +18,9 @@ interface ImageLightboxProps {
 	onOpenChange: (open: boolean) => void;
 }
 
+const NAV_BUTTON_BASE =
+	"absolute z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors";
+
 export function ImageLightbox({
 	images,
 	initialIndex,
@@ -75,11 +78,9 @@ export function ImageLightbox({
 	}, [open, goPrev, goNext, onOpenChange]);
 
 	if (!mounted || !open || images.length === 0) return null;
+
 	const current = images[index];
 	const multi = images.length > 1;
-
-	const navButtonBase =
-		"absolute z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors";
 
 	return createPortal(
 		<div
@@ -108,7 +109,7 @@ export function ImageLightbox({
 					onClick={goPrev}
 					disabled={!hasPrev}
 					className={cn(
-						navButtonBase,
+						NAV_BUTTON_BASE,
 						"left-4",
 						hasPrev
 							? "hover:bg-white/20 cursor-pointer"
@@ -147,7 +148,7 @@ export function ImageLightbox({
 					onClick={goNext}
 					disabled={!hasNext}
 					className={cn(
-						navButtonBase,
+						NAV_BUTTON_BASE,
 						"right-4",
 						hasNext
 							? "hover:bg-white/20 cursor-pointer"
