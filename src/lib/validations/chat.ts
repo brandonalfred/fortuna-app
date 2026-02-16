@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const ALLOWED_MIME_TYPES = [
+export const ALLOWED_MIME_TYPES = [
 	"image/png",
 	"image/jpeg",
 	"image/webp",
@@ -10,10 +10,20 @@ const ALLOWED_MIME_TYPES = [
 	"text/plain",
 ] as const;
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_FILES_PER_MESSAGE = 5;
+type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 
-export { ALLOWED_MIME_TYPES, MAX_FILE_SIZE, MAX_FILES_PER_MESSAGE };
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_FILES_PER_MESSAGE = 5;
+
+export const MIME_TO_EXT: Record<AllowedMimeType, string> = {
+	"image/png": "png",
+	"image/jpeg": "jpg",
+	"image/webp": "webp",
+	"image/gif": "gif",
+	"application/pdf": "pdf",
+	"text/csv": "csv",
+	"text/plain": "txt",
+};
 
 const ALLOWED_MIME_SET = new Set<string>(ALLOWED_MIME_TYPES);
 

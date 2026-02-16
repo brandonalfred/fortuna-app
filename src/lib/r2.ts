@@ -12,8 +12,6 @@ const DOWNLOAD_URL_EXPIRY = 7 * 24 * 3600;
 
 const TEXT_MIME_TYPES = new Set(["text/csv", "text/plain"]);
 
-export const MAX_TEXT_INLINE_SIZE = 100 * 1024;
-
 export function isImageMimeType(mimeType: string): boolean {
 	return IMAGE_MIME_TYPES.has(mimeType);
 }
@@ -52,12 +50,14 @@ function getBucket(): string {
 export async function createPresignedUploadUrl(
 	key: string,
 	contentType: string,
+	contentLength: number,
 ): Promise<string> {
 	const client = getR2Client();
 	const command = new PutObjectCommand({
 		Bucket: getBucket(),
 		Key: key,
 		ContentType: contentType,
+		ContentLength: contentLength,
 	});
 	return getSignedUrl(client, command, { expiresIn: UPLOAD_URL_EXPIRY });
 }

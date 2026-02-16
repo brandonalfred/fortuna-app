@@ -6,7 +6,7 @@ import {
 	unauthorized,
 } from "@/lib/api";
 import { createPresignedDownloadUrl, createPresignedUploadUrl } from "@/lib/r2";
-import { presignRequestSchema } from "@/lib/validations/chat";
+import { MIME_TO_EXT, presignRequestSchema } from "@/lib/validations/chat";
 
 export async function POST(req: Request): Promise<Response> {
 	const user = await getAuthenticatedUser();
@@ -26,22 +26,13 @@ export async function POST(req: Request): Promise<Response> {
 	try {
 		const results = await Promise.all(
 			files.map(async (file) => {
-				const mimeToExt: Record<string, string> = {
-					"image/png": "png",
-					"image/jpeg": "jpg",
-					"image/webp": "webp",
-					"image/gif": "gif",
-					"application/pdf": "pdf",
-					"text/csv": "csv",
-					"text/plain": "txt",
-				};
-				const ext = mimeToExt[file.mimeType] || "bin";
+				const ext = MIME_TO_EXT[file.mimeType] || "bin";
 				const key = chatId
 					? `uploads/${user.id}/${chatId}/${randomUUID()}.${ext}`
 					: `uploads/${user.id}/${randomUUID()}.${ext}`;
 
 				const [uploadUrl, downloadUrl] = await Promise.all([
-					createPresignedUploadUrl(key, file.mimeType),
+					createPresignedUploadUrl(key, file.mimeType, file.size),
 					createPresignedDownloadUrl(key),
 				]);
 

@@ -28,7 +28,6 @@ import {
 import {
 	fetchTextContent,
 	isTextMimeType,
-	MAX_TEXT_INLINE_SIZE,
 	regenerateAttachmentUrls,
 } from "@/lib/r2";
 import type { Attachment, ConversationMessage } from "@/lib/types";
@@ -130,6 +129,11 @@ export async function POST(req: Request): Promise<Response> {
 
 		let attachments: Attachment[] | undefined;
 		if (rawAttachments?.length) {
+			for (const att of rawAttachments) {
+				if (!att.key.startsWith(`uploads/${user.id}/`)) {
+					return badRequest("Invalid attachment key");
+				}
+			}
 			if (!isV2) {
 				console.warn(
 					"[Chat API] Attachments present but chat uses V1 storage — attachments will not be persisted",
@@ -160,7 +164,7 @@ export async function POST(req: Request): Promise<Response> {
 		let agentPrompt = message;
 		if (attachments) {
 			for (const att of attachments) {
-				if (isTextMimeType(att.mimeType) && att.size <= MAX_TEXT_INLINE_SIZE) {
+				if (isTextMimeType(att.mimeType)) {
 					try {
 						const textContent = await fetchTextContent(att.key);
 						agentPrompt += `\n\n--- ${att.filename} ---\n${textContent}\n--- end ---`;

@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import type { Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ALLOWED_MIME_TYPES } from "@/lib/validations/chat";
 
 interface ChatInputProps {
 	onSend: (message: string, attachments?: Attachment[]) => void;
@@ -171,7 +172,7 @@ export function ChatInput({
 					ref={fileInputRef}
 					type="file"
 					multiple
-					accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/csv,text/plain"
+					accept={ALLOWED_MIME_TYPES.join(",")}
 					onChange={handleFileInputChange}
 					className="hidden"
 				/>
