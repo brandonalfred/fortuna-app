@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Attachment } from "@/lib/types";
-import { IMAGE_MIME_TYPES } from "@/lib/utils";
 import {
+	IMAGE_MIME_TYPES,
 	isAllowedMimeType,
 	MAX_FILE_SIZE,
 	MAX_FILES_PER_MESSAGE,

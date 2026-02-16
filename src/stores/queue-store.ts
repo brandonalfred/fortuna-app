@@ -28,7 +28,7 @@ export function createQueueStore() {
 					const msg: QueuedMessage = {
 						id: crypto.randomUUID(),
 						content,
-						attachments,
+						attachments: attachments?.map(({ url: _, ...rest }) => rest),
 					};
 					log.info("Enqueue", { id: msg.id, preview: content.slice(0, 50) });
 					set({ pendingMessages: [...get().pendingMessages, msg] });

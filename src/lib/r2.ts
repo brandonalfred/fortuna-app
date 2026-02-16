@@ -5,12 +5,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Attachment } from "@/lib/types";
-import { IMAGE_MIME_TYPES } from "@/lib/utils";
+import { IMAGE_MIME_TYPES, TEXT_MIME_TYPES } from "@/lib/validations/chat";
 
 const UPLOAD_URL_EXPIRY = 3600;
 const DOWNLOAD_URL_EXPIRY = 7 * 24 * 3600;
-
-const TEXT_MIME_TYPES = new Set(["text/csv", "text/plain"]);
 
 export function isImageMimeType(mimeType: string): boolean {
 	return IMAGE_MIME_TYPES.has(mimeType);

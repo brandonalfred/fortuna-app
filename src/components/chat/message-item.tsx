@@ -17,7 +17,8 @@ import remarkGfm from "remark-gfm";
 import { ImageLightbox } from "@/components/chat/image-lightbox";
 import { getFileIcon } from "@/components/chat/upload-preview";
 import type { Attachment, ContentSegment, Message, ToolUse } from "@/lib/types";
-import { cn, formatFileSize, IMAGE_MIME_TYPES } from "@/lib/utils";
+import { cn, formatFileSize } from "@/lib/utils";
+import { IMAGE_MIME_TYPES } from "@/lib/validations/chat";
 
 const TOOL_LABEL_MAP: Record<string, string> = {
 	Skill: "Analyzing",
@@ -132,18 +133,23 @@ function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 const PROSE_CLASSES =
 	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-pre:overflow-x-auto prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
 
+type AttachmentWithUrl = Attachment & { url: string };
+
+function hasUrl(a: Attachment): a is AttachmentWithUrl {
+	return !!a.url;
+}
+
 function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 	const [selectedIndex, setSelectedIndex] = useState(0);
 
 	if (attachments.length === 0) return null;
 
-	const images = attachments.filter((a) => IMAGE_MIME_TYPES.has(a.mimeType));
-	const documents = attachments.filter(
-		(a) => !IMAGE_MIME_TYPES.has(a.mimeType),
-	);
+	const withUrls = attachments.filter(hasUrl);
+	const images = withUrls.filter((a) => IMAGE_MIME_TYPES.has(a.mimeType));
+	const documents = withUrls.filter((a) => !IMAGE_MIME_TYPES.has(a.mimeType));
 	const lightboxImages = images.map((a) => ({
-		url: a.url!,
+		url: a.url,
 		filename: a.filename,
 	}));
 
@@ -162,7 +168,7 @@ function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
 					>
 						<Image
 							unoptimized
-							src={att.url!}
+							src={att.url}
 							alt={att.filename}
 							width={200}
 							height={200}

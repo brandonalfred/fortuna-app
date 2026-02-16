@@ -27,6 +27,14 @@ export const MIME_TO_EXT: Record<AllowedMimeType, string> = {
 
 const ALLOWED_MIME_SET = new Set<string>(ALLOWED_MIME_TYPES);
 
+export const IMAGE_MIME_TYPES = new Set<string>(
+	ALLOWED_MIME_TYPES.filter((t) => t.startsWith("image/")),
+);
+
+export const TEXT_MIME_TYPES = new Set<string>(
+	ALLOWED_MIME_TYPES.filter((t) => t.startsWith("text/")),
+);
+
 export function isAllowedMimeType(type: string): boolean {
 	return ALLOWED_MIME_SET.has(type);
 }
