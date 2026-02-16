@@ -19,11 +19,16 @@ async function runStep(
 }
 
 async function createSnapshot(): Promise<void> {
+	const token = process.env.VERCEL_TOKEN;
+	const teamId = process.env.VERCEL_ORG_ID;
+	const projectId = process.env.VERCEL_PROJECT_ID;
+
 	console.log("Creating sandbox...");
 	const sandbox = await Sandbox.create({
 		runtime: "node22",
 		resources: { vcpus: 4 },
 		timeout: ms("45m"),
+		...(token && teamId && projectId ? { token, teamId, projectId } : {}),
 	});
 
 	console.log("Sandbox created:", sandbox.sandboxId);
