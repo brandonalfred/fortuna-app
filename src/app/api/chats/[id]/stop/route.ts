@@ -31,6 +31,9 @@ export async function POST(
 
 			const stopRes = await fetch(`${streamUrl}/stop`, {
 				method: "POST",
+				headers: {
+					Authorization: `Bearer ${chat.streamToken}`,
+				},
 				signal: AbortSignal.timeout(5000),
 			}).catch(() => null);
 
@@ -62,7 +65,7 @@ export async function POST(
 
 	await prisma.chat.update({
 		where: { id },
-		data: { isProcessing: false },
+		data: { isProcessing: false, streamToken: null, persistToken: null },
 	});
 
 	return new Response(null, { status: 204 });

@@ -258,6 +258,11 @@ function readBody(req) {
 	});
 }
 
+function isAuthorized(req) {
+	const authHeader = req.headers.authorization;
+	return authHeader === `Bearer ${streamToken}`;
+}
+
 const server = createServer(async (req, res) => {
 	handleCORS(res);
 
@@ -316,16 +321,17 @@ const server = createServer(async (req, res) => {
 	}
 
 	if (req.method === "POST" && url.pathname === "/message") {
+		if (!isAuthorized(req)) {
+			res.writeHead(403);
+			res.end("Forbidden");
+			return;
+		}
+
 		try {
 			const body = await readBody(req);
-			const authHeader = req.headers.authorization;
-			if (!authHeader || authHeader !== `Bearer ${streamToken}`) {
-				res.writeHead(403);
-				res.end("Forbidden");
-				return;
-			}
 
 			isProcessingTurn = true;
+			translator.reset();
 			enqueueMessage({
 				type: "user",
 				session_id: "",
@@ -343,6 +349,12 @@ const server = createServer(async (req, res) => {
 	}
 
 	if (req.method === "POST" && url.pathname === "/stop") {
+		if (!isAuthorized(req)) {
+			res.writeHead(403);
+			res.end("Forbidden");
+			return;
+		}
+
 		if (activeQuery && typeof activeQuery.interrupt === "function") {
 			activeQuery.interrupt();
 			console.log("[SSE Server] Query interrupted");
