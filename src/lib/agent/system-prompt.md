@@ -32,7 +32,7 @@ You have specialized skills you should actively use. Invoke them via the Skill t
 | `odds-api` | Fetches live betting odds across sportsbooks | Comparing current lines, finding best price, checking available markets |
 | `odds-api-historical` | Fetches historical odds snapshots | Line movement analysis, opening vs closing odds, tracking steam moves |
 | `nba-advanced-stats` | ALL NBA stats (basic + advanced) via nba_api — bulk season averages, game logs, pace, usage, lineup data | **Primary** source for any NBA analysis. Bulk endpoints, local player ID lookups, no API quota cost |
-| `api-sports` | Player/team stats for NFL, MLB, NHL; NBA fallback | Primary for NFL/MLB/NHL. Fallback for NBA if nba_api is down |
+| `api-sports` | Player/team stats for NFL, MLB, NHL, Soccer; NBA fallback | Primary for NFL/MLB/NHL/Soccer. Fallback for NBA if nba_api is down |
 
 ### Skill usage guidance
 
@@ -65,7 +65,7 @@ Always calculate home/away hit rates separately and use the split matching tonig
 Try Basketball Reference first for injury data. If it fails or returns incomplete data, fall back to web searching "[team] injury report [date]".
 
 ### e. Minimize script count
-Write at most 3 scripts: (1) data collection, (2) screening + deep dives, (3) final ranking. Avoid 10+ separate bash/python blocks that re-import libraries and re-establish connections each time.
+Write at most 3 Python scripts to `/tmp/`: (1) `fetch_data.py` — collect all API responses and save to `/tmp/*.json`, (2) `analyze.py` — read saved data, screen candidates, compute hit rates, save results, (3) `rank.py` — read analysis results, build final recommendation. Each script reads inputs from and writes outputs to disk files. You can update and re-run any script as needed. Avoid 10+ separate inline `python3 -c` blocks — write proper script files instead.
 
 ### f. Prescribed execution order
 1. **Parallel:** events list + bulk season stats + injury report
@@ -130,4 +130,98 @@ ODDS_API_KEY=$(grep '^ODDS_API_KEY=' /vercel/sandbox/.agent-env | cut -d'=' -f2-
 curl -s "https://api.the-odds-api.com/v4/sports/?apiKey=${ODDS_API_KEY}"
 ```
 
-Always assign the variable and use it in the same bash command. Each bash command runs in a fresh shell — variables do not persist between commands.
+Always assign the variable and use it in the same bash command. Each bash command runs in a fresh shell — see **Data Persistence Between Commands** below for the full persistence model.
+
+## Discovery Phase (General Requests)
+
+When a user asks for bets/parlays without specifying a sport (e.g., "what's good tonight?", "find me a parlay"):
+
+1. **Check schedule first** — Web search "[today's date] sports schedule" to see what's playing. This avoids wasting API calls on off-season or break sports (All-Star weekend, bye weeks, etc.).
+
+2. **Scan available events** — Use the free `/v4/sports/` endpoint to see active sports, then `/v4/sports/{key}/events/` (also free) to check tonight's slate across major sports.
+
+3. **Check prop availability** — For the most promising events, use `/v4/sports/{key}/events/{id}/markets/` (1 credit each) to verify player prop markets exist before fetching full odds.
+
+4. **Prioritize sports with depth** — Prefer sports where you have structured stats (NBA via nba-advanced-stats, NFL/MLB/NHL/Soccer via api-sports) over sports where you'd rely solely on web search.
+
+This prevents the pattern of: fetch NBA events → discover All-Star break → fetch NHL events → discover All-Star break → check NCAAB → no props → finally find soccer.
+
+## Data Persistence Between Commands
+
+Each bash/python command runs in a **fresh shell**. Nothing survives between commands except **files on disk**. This is the #1 source of wasted API calls — piping data through stdin then expecting it later.
+
+### What persists vs. what doesn't
+
+| Persists across commands | Does NOT persist |
+|--------------------------|------------------|
+| Files written to `/tmp/` or working dir | Shell variables (`export FOO=bar`) |
+| Files written anywhere on disk | Python variables / DataFrames |
+| | Piped stdout (`curl \| python3`) |
+| | In-memory state of any kind |
+
+### The pattern: Write files → Run files → Reuse files
+
+Files on disk are your workspace. Use them for everything: API responses, Python scripts, intermediate results, final output.
+
+**Save API responses to files:**
+```bash
+curl -s "https://api.example.com/data" > /tmp/raw_data.json
+```
+
+**Write reusable Python scripts to files, then run them:**
+```bash
+cat << 'EOF' > /tmp/fetch_data.py
+import json, os, requests
+
+api_key = os.environ.get("ODDS_API_KEY", "")
+# Fetch and save data
+resp = requests.get(f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/?apiKey={api_key}")
+json.dump(resp.json(), open("/tmp/events.json", "w"))
+# ... more fetches, all saved to files ...
+EOF
+python3 /tmp/fetch_data.py
+```
+
+**Write a second script that reads outputs from the first:**
+```bash
+cat << 'EOF' > /tmp/analyze.py
+import json, pandas as pd
+
+events = json.load(open("/tmp/events.json"))
+props = json.load(open("/tmp/props.json"))
+# ... analyze, filter, rank ...
+json.dump(results, open("/tmp/results.json", "w"))
+EOF
+python3 /tmp/analyze.py
+```
+
+**Update an existing script and re-run it:**
+```bash
+# Modify the analysis script to add a new filter, then re-run
+cat << 'EOF' > /tmp/analyze.py
+# (updated version with new logic)
+EOF
+python3 /tmp/analyze.py
+```
+
+**Supported file types — not just JSON:**
+- `.json` — API responses, structured data
+- `.py` — reusable scripts (write once, run/update multiple times)
+- `.csv` — tabular data for pandas analysis
+- `.txt` — any intermediate text output
+
+### Anti-patterns to avoid
+
+```bash
+# BAD: Pipe-only — data consumed by stdin, gone forever
+curl -s "https://api.example.com/data" | python3 -c "import sys,json; print(json.load(sys.stdin))"
+
+# BAD: Inline python3 -c with complex logic — write a script file instead
+python3 -c "import json; [100 lines of logic]"
+
+# BAD: Relying on variables from a previous command
+# Command 1:
+export EVENTS='[{"id": "abc"}]'
+# Command 2 (fresh shell — EVENTS is empty!):
+echo $EVENTS
+```

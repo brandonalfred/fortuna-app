@@ -118,6 +118,14 @@ The API rate limit is 30 requests per second. To avoid 429 errors:
 | `player_reception_yds` | Player receiving yards (NFL) |
 | `pitcher_strikeouts` | Pitcher strikeouts (MLB) |
 | `batter_total_bases` | Batter total bases (MLB) |
+| `player_goal_scorer_anytime` | Anytime goalscorer (Soccer) |
+| `player_first_goal_scorer` | First goalscorer (Soccer) |
+| `player_shots` | Player total shots O/U (Soccer) |
+| `player_assists` | Player assists O/U (Soccer) |
+| `player_fouls` | Player fouls committed O/U (Soccer — variable coverage) |
+| `player_tackles` | Player tackles O/U (Soccer — variable coverage) |
+| `player_blocks` | Player blocks O/U (Soccer — variable coverage) |
+| `player_pass_attempts` | Player pass attempts O/U (Soccer — variable coverage) |
 
 ## API Endpoints
 
