@@ -59,6 +59,7 @@ async function createSandbox(
 		return { sandbox, usedSnapshot: true };
 	} catch (error) {
 		log.warn("Snapshot unavailable, falling back to fresh sandbox", {
+			snapshotId,
 			error: error instanceof Error ? error.message : String(error),
 		});
 		onStatus?.(
