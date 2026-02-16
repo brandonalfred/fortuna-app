@@ -16,8 +16,8 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.40",
     "@neondatabase/serverless": "^1.0.2",
-    "@prisma/adapter-neon": "^7.3.0",
-    "@prisma/client": "7.3.0",
+    "@prisma/adapter-neon": "^7.4.0",
+    "@prisma/client": "7.4.0",
     "@tailwindcss/typography": "0.5.16",
     "@tanstack/react-query": "5.90.21",
     "@vercel/sandbox": "^1.4.1",
@@ -48,7 +48,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
-    "prisma": "7.3.0",
+    "prisma": "7.4.0",
     "prisma-lint": "^0.13.1",
     "tailwindcss": "^4",
     "typescript": "^5"
