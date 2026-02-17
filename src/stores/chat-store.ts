@@ -458,10 +458,10 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						callbacks.onChatCreated?.(respChatId);
 					}
 
-					const sseResponse = await fetch(
-						`${streamUrl}/stream?token=${respStreamToken}`,
-						{ signal: abortController.signal },
-					);
+					const sseResponse = await fetch(`${streamUrl}/stream`, {
+						headers: { Authorization: `Bearer ${respStreamToken}` },
+						signal: abortController.signal,
+					});
 
 					if (!sseResponse.ok) {
 						throw new Error("Failed to connect to analysis engine");

@@ -281,8 +281,7 @@ const server = createServer(async (req, res) => {
 	}
 
 	if (req.method === "GET" && url.pathname === "/stream") {
-		const token = url.searchParams.get("token");
-		if (token !== streamToken) {
+		if (!isAuthorized(req)) {
 			res.writeHead(403);
 			res.end("Forbidden");
 			return;
@@ -357,6 +356,9 @@ const server = createServer(async (req, res) => {
 
 		if (activeQuery && typeof activeQuery.interrupt === "function") {
 			activeQuery.interrupt();
+			flushPersistence({ turnComplete: true });
+			isProcessingTurn = false;
+			translator.reset();
 			console.log("[SSE Server] Query interrupted");
 		}
 		res.writeHead(200, { "Content-Type": "application/json" });

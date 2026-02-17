@@ -264,6 +264,7 @@ export async function POST(req: Request): Promise<Response> {
 					data: {
 						streamToken: null,
 						persistToken: null,
+						sandboxId: null,
 						isProcessing: false,
 					},
 				});
