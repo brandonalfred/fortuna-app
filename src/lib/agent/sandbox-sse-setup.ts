@@ -15,6 +15,7 @@ interface SSEConfig {
 	agentSessionId: string | null;
 	maxThinkingTokens: number;
 	initialSequenceNum: number;
+	protectionBypassSecret: string | null;
 }
 
 export async function writeSSEServerFiles(

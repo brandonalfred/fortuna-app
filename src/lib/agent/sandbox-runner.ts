@@ -383,6 +383,7 @@ export interface DirectStreamOptions extends StreamAgentOptions {
 	streamToken: string;
 	persistToken: string;
 	initialSequenceNum: number;
+	protectionBypassSecret?: string;
 }
 
 async function waitForSSEServer(
@@ -419,6 +420,7 @@ export async function setupDirectStream(
 		streamToken,
 		persistToken,
 		initialSequenceNum,
+		protectionBypassSecret,
 	} = options;
 
 	log.info("Setting up direct stream", { chatId });
@@ -454,6 +456,7 @@ export async function setupDirectStream(
 		agentSessionId: effectiveSessionId ?? null,
 		maxThinkingTokens: 10000,
 		initialSequenceNum,
+		protectionBypassSecret: protectionBypassSecret ?? null,
 	});
 
 	await verifyPythonPackages(sandbox);

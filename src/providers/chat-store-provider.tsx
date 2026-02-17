@@ -42,6 +42,11 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			onStreamComplete: (completedChatId) => {
 				skipNextMessageReplaceRef.current = true;
 				invalidateChatRef.current(completedChatId);
+				fetch(`/api/chats/${completedChatId}/complete`, {
+					method: "POST",
+				}).catch(() => {
+					/* fire-and-forget */
+				});
 			},
 			getQueueStore: () => queueStore.getState(),
 		}),

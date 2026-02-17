@@ -32,6 +32,7 @@ const {
 	agentSessionId,
 	maxThinkingTokens,
 	initialSequenceNum,
+	protectionBypassSecret,
 } = config;
 
 // --- Message Queue (infinite generator pattern) ---
@@ -103,12 +104,16 @@ const MAX_RETRIES = 3;
 async function postPersist(payload) {
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 		try {
+			const headers = {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${persistToken}`,
+			};
+			if (protectionBypassSecret) {
+				headers["x-vercel-protection-bypass"] = protectionBypassSecret;
+			}
 			const res = await fetch(`${persistUrl}/api/chat/persist`, {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${persistToken}`,
-				},
+				headers,
 				body: JSON.stringify(payload),
 			});
 			if (res.ok) return;

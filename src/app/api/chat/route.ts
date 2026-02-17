@@ -245,6 +245,7 @@ export async function POST(req: Request): Promise<Response> {
 					streamToken: newStreamToken,
 					persistToken: newPersistToken,
 					initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
+					protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
 				});
 
 				return Response.json(
