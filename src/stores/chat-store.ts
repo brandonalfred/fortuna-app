@@ -84,6 +84,10 @@ async function consumeSSEEvents(
 		if (dedup.isDuplicate(event.id)) continue;
 		get().handleEvent(event.type, event.data);
 
+		if (event.type === "done") {
+			break;
+		}
+
 		if (
 			event.type === "turn_complete" &&
 			queueStore().pendingMessages.length > 0
