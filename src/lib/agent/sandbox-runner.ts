@@ -7,6 +7,7 @@ import { buildFullPrompt } from "./prompt-builder";
 import {
 	clearSandboxRefs,
 	getOrCreateSandbox,
+	SANDBOX_SSE_PORT,
 	SANDBOX_TIMEOUT,
 	type StatusCallback,
 } from "./sandbox";
@@ -445,7 +446,7 @@ export async function setupDirectStream(
 		persistToken,
 		persistUrl,
 		chatId,
-		port: 8080,
+		port: SANDBOX_SSE_PORT,
 		initialPrompt: effectivePrompt,
 		systemPrompt: getSystemPrompt(timezone, userFirstName, userPreferences),
 		model: AGENT_MODEL,
@@ -473,9 +474,9 @@ export async function setupDirectStream(
 
 	let streamUrl: string;
 	try {
-		streamUrl = sandbox.domain(8080);
+		streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
 	} catch {
-		log.warn("sandbox.domain(8080) failed — sandbox may lack port config");
+		log.warn("sandbox.domain() failed — sandbox may lack port config");
 		throw new Error(
 			"Sandbox does not support port exposure, force-create needed",
 		);
@@ -496,7 +497,7 @@ export async function sendMessageToSSE(options: {
 	log.info("Sending message to existing SSE server", { sandboxId });
 
 	const sandbox = await Sandbox.get({ sandboxId });
-	const streamUrl = sandbox.domain(8080);
+	const streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
 
 	const res = await fetch(`${streamUrl}/message`, {
 		method: "POST",

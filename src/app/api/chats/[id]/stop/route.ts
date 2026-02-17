@@ -1,5 +1,6 @@
 import { Sandbox } from "@vercel/sandbox";
 import { activeSessions } from "@/lib/agent/active-sessions";
+import { SANDBOX_SSE_PORT } from "@/lib/agent/sandbox";
 import { getAuthenticatedUser, notFound, unauthorized } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
@@ -27,7 +28,7 @@ export async function POST(
 	if (chat.sandboxId) {
 		try {
 			const sandbox = await Sandbox.get({ sandboxId: chat.sandboxId });
-			const streamUrl = sandbox.domain(8080);
+			const streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
 
 			const stopRes = await fetch(`${streamUrl}/stop`, {
 				method: "POST",

@@ -7,6 +7,7 @@ import { getSkillFiles } from "./system-prompt";
 const log = createLogger("Sandbox");
 
 export const SANDBOX_TIMEOUT = ms("5h");
+export const SANDBOX_SSE_PORT = 3000;
 
 const SPAWN_LOCK_TIMEOUT = ms("2m");
 const SPAWN_POLL_INTERVAL = 1000;
@@ -39,7 +40,7 @@ async function createFreshSandbox(): Promise<Sandbox> {
 		runtime: "node22",
 		resources: { vcpus: 4 },
 		timeout: SANDBOX_TIMEOUT,
-		ports: [8080],
+		ports: [SANDBOX_SSE_PORT],
 	});
 }
 
@@ -56,7 +57,7 @@ async function createSandbox(
 			source: { type: "snapshot", snapshotId },
 			resources: { vcpus: 4 },
 			timeout: SANDBOX_TIMEOUT,
-			ports: [8080],
+			ports: [SANDBOX_SSE_PORT],
 		});
 		return { sandbox, usedSnapshot: true };
 	} catch (error) {
