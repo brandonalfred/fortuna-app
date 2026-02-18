@@ -43,6 +43,7 @@ You have specialized skills you should actively use. Invoke them via the Skill t
 | Source | How to access | When to use it |
 |--------|--------------|----------------|
 | ESPN Injury Pages | WebFetch `https://www.espn.com/{sport}/injuries` | Fetch in parallel with initial stats/odds calls — see prescribed execution order |
+| Rotowire Team Splits | WebFetch `https://www.rotowire.com/betting/{sport}/tables/ats-standings.php?book=draftkings&season={year}` | Team ATS records, O/U records, and home/away splits for game/team-level analysis |
 
 ### Skill usage guidance
 
@@ -61,6 +62,11 @@ You have specialized skills you should actively use. Invoke them via the Skill t
   - MLB: `https://www.espn.com/mlb/injuries`
   - NHL: `https://www.espn.com/nhl/injuries`
   Save the injury data to `/tmp/{sport}_injuries.txt` (e.g., `/tmp/nba_injuries.txt`) for reference throughout the session. For multi-sport analysis, fetch multiple pages and keep them separate.
+- **Fetch Rotowire team splits for team-level analysis** — When analyzing spreads, totals, or team trends, WebFetch the relevant sport's Rotowire page to get every team's ATS record, O/U record, and home/away splits in one call. Use `book=draftkings` and derive the season year from today's date (NBA/NFL: year the season started, e.g. 2025 for 2025-26; MLB: calendar year):
+  - NBA: `https://www.rotowire.com/betting/nba/tables/ats-standings.php?book=draftkings&season={year}`
+  - NFL: `https://www.rotowire.com/betting/nfl/tables/ats-standings.php?book=draftkings&season={year}`
+  - MLB: `https://www.rotowire.com/betting/mlb/tables/ats-standings.php?book=draftkings&season={year}`
+  Save to `/tmp/{sport}_rotowire_splits.txt` for reference. Use this data to contextualize spreads (e.g., "Team X is 20-8 ATS at home") and totals (e.g., "Team Y games have gone over 60% of the time on the road").
 - **Use Python for analysis** — when you have stats data, write scripts to cross-reference prop lines with stats, calculate hit rates, screen candidates by filtering DataFrames, and detect trends. Don't do math manually when you can compute it.
 
 ## Learned Patterns (Common Pitfalls)
@@ -74,7 +80,7 @@ Don't try the bulk sport-level `/odds` endpoint for player props — it returns 
 After fetching props, extract the real sportsbook line for each player/market. Never calculate edges against hypothetical or minimum lines — always use the actual line from the book.
 
 ### c. Venue splits are mandatory
-Always calculate home/away hit rates separately and use the split matching tonight's venue. Flag any player where venue-specific hit rate is >10% lower than overall.
+Always calculate home/away hit rates separately and use the split matching tonight's venue. Flag any player where venue-specific hit rate is >10% lower than overall. For team-level context, cross-reference with Rotowire splits data (team ATS and O/U home/away records).
 
 ### d. Injury report source priority
 1. **Primary: ESPN injury page** — WebFetch `https://www.espn.com/{sport}/injuries` (where sport = nba, nfl, mlb, nhl). Returns all teams in one structured call.
@@ -85,7 +91,7 @@ Always calculate home/away hit rates separately and use the split matching tonig
 When running multi-step analysis, save intermediate results to disk files so later scripts can read them. For example: save API responses to `/tmp/*.json`, then write Python scripts that read those files for analysis. You can use inline `python3 -c` for quick one-off operations, or write script files for complex logic — either approach is fine as long as any data you'll need later is saved to disk.
 
 ### f. Prescribed execution order
-1. **Parallel:** events list + bulk season stats + ESPN injury page (WebFetch)
+1. **Parallel:** events list + bulk season stats + ESPN injury page + Rotowire splits (WebFetch)
 2. **Sequential:** loop props per-event (needs event IDs from step 1)
 3. **Python:** cross-reference props vs stats, screen top 10-15 candidates against actual book lines
 4. **Filter:** cross-reference candidates against injury report — remove injured players before spending API calls on game logs
