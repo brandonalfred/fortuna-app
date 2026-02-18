@@ -279,26 +279,40 @@ export async function POST(req: Request): Promise<Response> {
 					const sse = createSSEWriter(controller);
 
 					try {
-						const result = await setupDirectStream({
-							prompt: agentPrompt,
-							workspacePath,
-							chatId: chat.id,
-							conversationHistory,
-							timezone,
-							userFirstName: user.firstName ?? undefined,
-							userPreferences: user.preferences ?? undefined,
-							agentSessionId: existingChat?.agentSessionId ?? undefined,
-							attachments,
-							persistUrl,
-							streamToken: newStreamToken,
-							persistToken: newPersistToken,
-							initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
-							protectionBypassSecret:
-								process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
-							onStatus: (stage: string, statusMessage: string) => {
-								sse.send("status", { stage, message: statusMessage });
-							},
+						sse.send("chat_created", { chatId: chat.id, sessionId });
+
+						const SETUP_TIMEOUT_MS = 120_000;
+						let timeoutHandle: ReturnType<typeof setTimeout>;
+						const timeoutPromise = new Promise<never>((_, reject) => {
+							timeoutHandle = setTimeout(
+								() => reject(new Error("Sandbox setup timed out")),
+								SETUP_TIMEOUT_MS,
+							);
 						});
+
+						const result = await Promise.race([
+							setupDirectStream({
+								prompt: agentPrompt,
+								workspacePath,
+								chatId: chat.id,
+								conversationHistory,
+								timezone,
+								userFirstName: user.firstName ?? undefined,
+								userPreferences: user.preferences ?? undefined,
+								agentSessionId: existingChat?.agentSessionId ?? undefined,
+								attachments,
+								persistUrl,
+								streamToken: newStreamToken,
+								persistToken: newPersistToken,
+								initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
+								protectionBypassSecret:
+									process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+								onStatus: (stage: string, statusMessage: string) => {
+									sse.send("status", { stage, message: statusMessage });
+								},
+							}),
+							timeoutPromise,
+						]).finally(() => clearTimeout(timeoutHandle));
 
 						sse.send("ready", {
 							chatId: chat.id,
