@@ -244,6 +244,7 @@ export async function POST(req: Request): Promise<Response> {
 						sandboxId: existingChat.sandboxId,
 						streamToken: existingChat.streamToken,
 						prompt: agentPrompt,
+						attachments,
 					});
 					return Response.json(
 						{

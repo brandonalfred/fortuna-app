@@ -21,6 +21,14 @@ import {
 
 const log = createLogger("SandboxRunner");
 
+function buildContentBlocksIfNeeded(
+	prompt: string,
+	attachments?: Attachment[],
+): ReturnType<typeof buildContentBlocks> | null {
+	if (!attachments?.some((a) => a.url)) return null;
+	return buildContentBlocks(prompt, attachments);
+}
+
 export interface StreamAgentOptions {
 	prompt: string;
 	workspacePath: string;
@@ -61,10 +69,13 @@ function generateAgentScript(opts: AgentScriptOptions): string {
 			? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
 			: "";
 
-	const contentBlocks = buildContentBlocks(opts.fullPrompt, opts.attachments);
-	const hasAttachments = contentBlocks.length > 1;
+	const contentBlocks = buildContentBlocksIfNeeded(
+		opts.fullPrompt,
+		opts.attachments,
+	);
+	const hasMediaBlocks = contentBlocks && contentBlocks.length > 1;
 
-	const promptSetup = hasAttachments
+	const promptSetup = hasMediaBlocks
 		? `const contentBlocks = JSON.parse(${JSON.stringify(JSON.stringify(contentBlocks))});
 
 async function* promptStream() {
@@ -77,7 +88,7 @@ async function* promptStream() {
 }`
 		: `const prompt = ${JSON.stringify(opts.fullPrompt)};`;
 
-	const promptArg = hasAttachments ? "promptStream()" : "prompt";
+	const promptArg = hasMediaBlocks ? "promptStream()" : "prompt";
 
 	return `
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -470,6 +481,11 @@ export async function setupDirectStream(
 
 		throwIfAborted();
 
+		const initialContentBlocks = buildContentBlocksIfNeeded(
+			effectivePrompt,
+			options.attachments,
+		);
+
 		await writeSSEServerFiles(sandbox, {
 			streamToken,
 			persistToken,
@@ -477,6 +493,7 @@ export async function setupDirectStream(
 			chatId,
 			port: SANDBOX_SSE_PORT,
 			initialPrompt: effectivePrompt,
+			initialContentBlocks,
 			systemPrompt: getSystemPrompt(timezone, userFirstName, userPreferences),
 			model: AGENT_MODEL,
 			allowedTools: AGENT_ALLOWED_TOOLS,
@@ -529,12 +546,15 @@ export async function sendMessageToSSE(options: {
 	sandboxId: string;
 	streamToken: string;
 	prompt: string;
+	attachments?: Attachment[];
 }): Promise<{ streamUrl: string }> {
-	const { sandboxId, streamToken: token, prompt } = options;
+	const { sandboxId, streamToken: token, prompt, attachments } = options;
 	log.info("Sending message to existing SSE server", { sandboxId });
 
 	const sandbox = await Sandbox.get({ sandboxId });
 	const streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
+
+	const contentBlocks = buildContentBlocksIfNeeded(prompt, attachments);
 
 	const res = await fetch(`${streamUrl}/message`, {
 		method: "POST",
@@ -542,7 +562,10 @@ export async function sendMessageToSSE(options: {
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${token}`,
 		},
-		body: JSON.stringify({ prompt }),
+		body: JSON.stringify({
+			prompt,
+			...(contentBlocks && { contentBlocks }),
+		}),
 		signal: AbortSignal.timeout(5000),
 	});
 
