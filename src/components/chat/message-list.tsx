@@ -32,6 +32,7 @@ export function MessageList({
 	const lastUserMessageRef = useRef<HTMLDivElement>(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
 	const prevMessagesLengthRef = useRef(0);
+	const prevStreamingRef = useRef(false);
 	const seenMessageIds = useRef<Set<string>>(new Set());
 
 	const userScrollingRef = useRef(false);
@@ -81,7 +82,10 @@ export function MessageList({
 	}
 
 	useEffect(() => {
-		if (messages.length > prevMessagesLengthRef.current) {
+		const hasNewMessages = messages.length > prevMessagesLengthRef.current;
+		const wasJustStreaming = prevStreamingRef.current;
+
+		if (hasNewMessages && !wasJustStreaming) {
 			if (lastMessageRole === "assistant" && lastUserMessageRef.current) {
 				lastUserMessageRef.current.scrollIntoView({
 					behavior: "smooth",
@@ -94,8 +98,10 @@ export function MessageList({
 				});
 			}
 		}
+
 		prevMessagesLengthRef.current = messages.length;
-	}, [messages.length, lastMessageRole]);
+		prevStreamingRef.current = streamingMessage?.isStreaming ?? false;
+	}, [messages.length, lastMessageRole, streamingMessage?.isStreaming]);
 
 	useEffect(() => {
 		if (
