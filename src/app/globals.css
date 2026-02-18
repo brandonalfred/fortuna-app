@@ -188,6 +188,19 @@ body {
   animation: subtlePulse 2s ease-in-out infinite;
 }
 
+@keyframes thinkingPulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-thinking-pulse {
+  animation: thinkingPulse 1.5s ease-in-out infinite;
+}
+
 .animate-blink {
   animation: blink 1s step-end infinite;
 }

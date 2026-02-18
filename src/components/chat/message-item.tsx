@@ -438,7 +438,7 @@ const SegmentRenderer = memo(function SegmentRenderer({
 	switch (segment.type) {
 		case "thinking":
 			if (segment.isComplete === false) {
-				return <ThinkingIndicator thinking={segment.thinking} />;
+				return <ThinkingIndicator />;
 			}
 			return <ThinkingBlock thinking={segment.thinking} />;
 		case "text":
@@ -554,18 +554,12 @@ function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 	);
 }
 
-interface ThinkingIndicatorProps {
-	thinking: string;
-}
-
-function ThinkingIndicator({ thinking }: ThinkingIndicatorProps) {
-	const summary = thinking ? generateThinkingSummary(thinking) : "Thinking...";
-
+function ThinkingIndicator() {
 	return (
 		<div className="my-1 flex items-center gap-2 py-1 text-sm">
 			<Loader2 className="h-3.5 w-3.5 animate-spin text-accent-primary shrink-0" />
-			<span className="text-text-muted animate-subtle-pulse truncate">
-				{summary}
+			<span className="text-text-muted animate-thinking-pulse italic">
+				Thinking...
 			</span>
 		</div>
 	);
