@@ -25,7 +25,6 @@ const MAX_RECOVERY_MS = 10 * 60 * 1_000;
 const STALE_POLL_LIMIT = 20;
 const STALE_STREAM_MS = 5_000;
 const GRACE_PERIOD_MS = 3_000;
-
 type ChatWithMessages = Chat & { messages: Message[] };
 
 function hydrateMessages(data: ChatWithMessages): Message[] {
