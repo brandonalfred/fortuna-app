@@ -384,6 +384,7 @@ export interface DirectStreamOptions extends StreamAgentOptions {
 	persistToken: string;
 	initialSequenceNum: number;
 	protectionBypassSecret?: string;
+	setupAbortController?: AbortController;
 }
 
 async function waitForSSEServer(
@@ -421,6 +422,7 @@ export async function setupDirectStream(
 		persistToken,
 		initialSequenceNum,
 		protectionBypassSecret,
+		setupAbortController,
 	} = options;
 
 	log.info("Setting up direct stream", { chatId });
@@ -430,65 +432,97 @@ export async function setupDirectStream(
 		onStatus,
 	);
 
-	await sandbox.runCommand({
-		cmd: "bash",
-		args: ["-c", "pkill -f sandbox-sse-server || true"],
-	});
-	await new Promise((r) => setTimeout(r, 500));
+	const abortSignal = setupAbortController?.signal;
 
-	const effectivePrompt = canResume
-		? prompt
-		: buildFullPrompt(prompt, conversationHistory);
-
-	const envVars = collectEnvVars(AGENT_ENV_KEYS);
-	await writeSandboxEnvFiles(sandbox, envVars);
-
-	await writeSSEServerFiles(sandbox, {
-		streamToken,
-		persistToken,
-		persistUrl,
-		chatId,
-		port: SANDBOX_SSE_PORT,
-		initialPrompt: effectivePrompt,
-		systemPrompt: getSystemPrompt(timezone, userFirstName, userPreferences),
-		model: AGENT_MODEL,
-		allowedTools: AGENT_ALLOWED_TOOLS,
-		agentSessionId: effectiveSessionId ?? null,
-		maxThinkingTokens: 10000,
-		initialSequenceNum,
-		protectionBypassSecret: protectionBypassSecret ?? null,
-	});
-
-	await verifyPythonPackages(sandbox);
-
-	onStatus?.("starting", "Starting analysis...");
-	log.info("Starting SSE server...");
-
-	await sandbox.runCommand({
-		cmd: "node",
-		args: ["sandbox-sse-server.mjs"],
-		env: {
-			CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
-			BASH_ENV: "/vercel/sandbox/.agent-env.sh",
-			...envVars,
-		},
-		detached: true,
-	});
-
-	let streamUrl: string;
-	try {
-		streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
-	} catch {
-		log.warn("sandbox.domain() failed — sandbox may lack port config");
-		throw new Error(
-			"Sandbox does not support port exposure, force-create needed",
-		);
+	function throwIfAborted(): void {
+		if (abortSignal?.aborted) {
+			throw new Error("Setup aborted");
+		}
 	}
 
-	await waitForSSEServer(streamUrl);
-	log.info("SSE server ready", { streamUrl });
+	throwIfAborted();
 
-	return { streamUrl };
+	const cleanupOnAbort = () => {
+		sandbox
+			.stop()
+			.catch((e: unknown) => log.error("Failed to stop sandbox on abort", e));
+		clearSandboxRefs(chatId).catch((e: unknown) =>
+			log.error("Failed to clear refs on abort", e),
+		);
+	};
+	abortSignal?.addEventListener("abort", cleanupOnAbort, { once: true });
+
+	try {
+		await sandbox.runCommand({
+			cmd: "bash",
+			args: ["-c", "pkill -f sandbox-sse-server || true"],
+		});
+		await new Promise((r) => setTimeout(r, 500));
+
+		throwIfAborted();
+
+		const effectivePrompt = canResume
+			? prompt
+			: buildFullPrompt(prompt, conversationHistory);
+
+		const envVars = collectEnvVars(AGENT_ENV_KEYS);
+		await writeSandboxEnvFiles(sandbox, envVars);
+
+		throwIfAborted();
+
+		await writeSSEServerFiles(sandbox, {
+			streamToken,
+			persistToken,
+			persistUrl,
+			chatId,
+			port: SANDBOX_SSE_PORT,
+			initialPrompt: effectivePrompt,
+			systemPrompt: getSystemPrompt(timezone, userFirstName, userPreferences),
+			model: AGENT_MODEL,
+			allowedTools: AGENT_ALLOWED_TOOLS,
+			agentSessionId: effectiveSessionId ?? null,
+			maxThinkingTokens: 10000,
+			initialSequenceNum,
+			protectionBypassSecret: protectionBypassSecret ?? null,
+		});
+
+		throwIfAborted();
+
+		await verifyPythonPackages(sandbox);
+
+		throwIfAborted();
+
+		onStatus?.("starting", "Starting analysis...");
+		log.info("Starting SSE server...");
+
+		await sandbox.runCommand({
+			cmd: "node",
+			args: ["sandbox-sse-server.mjs"],
+			env: {
+				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				BASH_ENV: "/vercel/sandbox/.agent-env.sh",
+				...envVars,
+			},
+			detached: true,
+		});
+
+		let streamUrl: string;
+		try {
+			streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
+		} catch {
+			log.warn("sandbox.domain() failed — sandbox may lack port config");
+			throw new Error(
+				"Sandbox does not support port exposure, force-create needed",
+			);
+		}
+
+		await waitForSSEServer(streamUrl);
+		log.info("SSE server ready", { streamUrl });
+
+		return { streamUrl };
+	} finally {
+		abortSignal?.removeEventListener("abort", cleanupOnAbort);
+	}
 }
 
 export async function sendMessageToSSE(options: {

@@ -274,6 +274,8 @@ export async function POST(req: Request): Promise<Response> {
 			const persistUrl =
 				process.env.BETTER_AUTH_URL || `https://${process.env.VERCEL_URL}`;
 
+			const setupAbortController = new AbortController();
+
 			const setupStream = new ReadableStream({
 				async start(controller) {
 					const sse = createSSEWriter(controller);
@@ -282,37 +284,33 @@ export async function POST(req: Request): Promise<Response> {
 						sse.send("chat_created", { chatId: chat.id, sessionId });
 
 						const SETUP_TIMEOUT_MS = 120_000;
-						let timeoutHandle: ReturnType<typeof setTimeout>;
-						const timeoutPromise = new Promise<never>((_, reject) => {
-							timeoutHandle = setTimeout(
-								() => reject(new Error("Sandbox setup timed out")),
-								SETUP_TIMEOUT_MS,
-							);
+						const timeoutHandle = setTimeout(() => {
+							setupAbortController.abort();
+						}, SETUP_TIMEOUT_MS);
+
+						const result = await setupDirectStream({
+							prompt: agentPrompt,
+							workspacePath,
+							chatId: chat.id,
+							conversationHistory,
+							timezone,
+							userFirstName: user.firstName ?? undefined,
+							userPreferences: user.preferences ?? undefined,
+							agentSessionId: existingChat?.agentSessionId ?? undefined,
+							attachments,
+							persistUrl,
+							streamToken: newStreamToken,
+							persistToken: newPersistToken,
+							initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
+							protectionBypassSecret:
+								process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+							setupAbortController,
+							onStatus: (stage: string, statusMessage: string) => {
+								sse.send("status", { stage, message: statusMessage });
+							},
 						});
 
-						const result = await Promise.race([
-							setupDirectStream({
-								prompt: agentPrompt,
-								workspacePath,
-								chatId: chat.id,
-								conversationHistory,
-								timezone,
-								userFirstName: user.firstName ?? undefined,
-								userPreferences: user.preferences ?? undefined,
-								agentSessionId: existingChat?.agentSessionId ?? undefined,
-								attachments,
-								persistUrl,
-								streamToken: newStreamToken,
-								persistToken: newPersistToken,
-								initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
-								protectionBypassSecret:
-									process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
-								onStatus: (stage: string, statusMessage: string) => {
-									sse.send("status", { stage, message: statusMessage });
-								},
-							}),
-							timeoutPromise,
-						]).finally(() => clearTimeout(timeoutHandle));
+						clearTimeout(timeoutHandle);
 
 						sse.send("ready", {
 							chatId: chat.id,
@@ -345,6 +343,7 @@ export async function POST(req: Request): Promise<Response> {
 					}
 				},
 				cancel() {
+					setupAbortController.abort();
 					console.log(
 						`[Chat API] Client disconnected during setup, chat=${chat.id}`,
 					);
