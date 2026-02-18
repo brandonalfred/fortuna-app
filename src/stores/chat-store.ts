@@ -86,13 +86,15 @@ async function consumeSSEEvents(
 	get: () => ChatStore,
 	abortController: AbortController,
 	queueStore: () => QueueStore,
-): Promise<void> {
+): Promise<{ receivedDone: boolean }> {
+	let receivedDone = false;
 	const dedup = createDeduplicator();
 	for await (const event of parseSSEStream(reader)) {
 		if (dedup.isDuplicate(event.id)) continue;
 		get().handleEvent(event.type, event.data);
 
 		if (event.type === "done") {
+			receivedDone = true;
 			reader.cancel().catch(() => null);
 			break;
 		}
@@ -101,10 +103,12 @@ async function consumeSSEEvents(
 			event.type === "turn_complete" &&
 			queueStore().pendingMessages.length > 0
 		) {
+			receivedDone = true;
 			abortController.abort();
 			break;
 		}
 	}
+	return { receivedDone };
 }
 
 async function connectToSandboxStream(
@@ -115,7 +119,7 @@ async function connectToSandboxStream(
 	set: (partial: Partial<ChatState>) => void,
 	get: () => ChatStore,
 	callbacks: ChatStoreCallbacks,
-): Promise<void> {
+): Promise<{ receivedDone: boolean }> {
 	set({
 		sandboxStreamUrl: info.streamUrl,
 		sandboxStreamToken: info.streamToken,
@@ -142,7 +146,7 @@ async function connectToSandboxStream(
 		throw new Error("No SSE response body");
 	}
 
-	await consumeSSEEvents(
+	return consumeSSEEvents(
 		sseReader,
 		get,
 		abortController,
@@ -453,6 +457,8 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			});
 
 			const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+			let receivedDone = false;
+			let aborted = false;
 
 			try {
 				const currentState = get();
@@ -516,7 +522,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						throw new Error("Setup stream ended without ready event");
 					}
 
-					await connectToSandboxStream(
+					({ receivedDone } = await connectToSandboxStream(
 						streamInfo,
 						abortController,
 						currentState.currentChat,
@@ -524,11 +530,11 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						set,
 						get,
 						callbacks,
-					);
+					));
 				} else if (contentType.includes("application/json")) {
 					const streamInfo = (await response.json()) as SandboxStreamInfo;
 
-					await connectToSandboxStream(
+					({ receivedDone } = await connectToSandboxStream(
 						streamInfo,
 						abortController,
 						currentState.currentChat,
@@ -536,7 +542,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						set,
 						get,
 						callbacks,
-					);
+					));
 				} else {
 					const headerChatId = response.headers.get("X-Chat-Id");
 					if (headerChatId && !currentState.currentChat?.id) {
@@ -552,15 +558,16 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						throw new Error("No response body");
 					}
 
-					await consumeSSEEvents(
+					({ receivedDone } = await consumeSSEEvents(
 						reader,
 						get,
 						abortController,
 						callbacks.getQueueStore,
-					);
+					));
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
+					aborted = true;
 					return;
 				}
 
@@ -582,22 +589,35 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				set({ error: errorMessage });
 				callbacks.getQueueStore().clear();
 			} finally {
-				const recovering = get().isRecovering;
-
-				if (recovering) {
-					set({
-						isLoading: false,
-						statusMessage: null,
-						streamingSegments: [],
-						streamingMessage: null,
-						stopReason: null,
-					});
-				} else {
-					set({ isLoading: false, statusMessage: null });
-					get().finalizeStreamingMessage();
-					const completedChatId = get().currentChat?.id;
-					if (completedChatId) {
-						callbacks.onStreamComplete?.(completedChatId);
+				if (!aborted) {
+					if (get().isRecovering) {
+						set({
+							isLoading: false,
+							statusMessage: null,
+							streamingSegments: [],
+							streamingMessage: null,
+							stopReason: null,
+						});
+					} else if (receivedDone) {
+						set({ isLoading: false, statusMessage: null });
+						get().finalizeStreamingMessage();
+						const completedChatId = get().currentChat?.id;
+						if (completedChatId) {
+							callbacks.onStreamComplete?.(completedChatId);
+						}
+					} else {
+						log.warn("Stream ended without done event, entering recovery", {
+							chatId: get().currentChat?.id,
+						});
+						set({
+							isLoading: false,
+							statusMessage: null,
+							streamingSegments: [],
+							streamingMessage: null,
+							stopReason: null,
+							isRecovering: true,
+							disconnectedChatId: get().currentChat?.id ?? null,
+						});
 					}
 				}
 			}

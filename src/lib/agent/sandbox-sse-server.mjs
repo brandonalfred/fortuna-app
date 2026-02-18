@@ -154,25 +154,32 @@ function batchForPersistence(event) {
 	}
 }
 
+let lastPersistPromise = Promise.resolve();
+
 function flushPersistence(options = {}) {
 	if (persistTimer) {
 		clearTimeout(persistTimer);
 		persistTimer = null;
 	}
 	if (persistBatch.length === 0 && !options.turnComplete && !options.isComplete) {
-		return;
+		return lastPersistPromise;
 	}
 
 	const batch = persistBatch;
 	persistBatch = [];
 
-	postPersist({
-		chatId,
-		events: batch,
-		agentSessionId: translator.sessionId,
-		turnComplete: options.turnComplete ?? false,
-		isComplete: options.isComplete ?? false,
-	});
+	lastPersistPromise = lastPersistPromise
+		.catch(() => {})
+		.then(() =>
+			postPersist({
+				chatId,
+				events: batch,
+				agentSessionId: translator.sessionId,
+				turnComplete: options.turnComplete ?? false,
+				isComplete: options.isComplete ?? false,
+			}),
+		);
+	return lastPersistPromise;
 }
 
 // --- Agent Processing ---
@@ -226,7 +233,7 @@ async function runAgent() {
 					type: "done",
 					data: { chatId, sessionId: translator.sessionId },
 				});
-				flushPersistence({ turnComplete: true });
+				await flushPersistence({ turnComplete: true });
 				isProcessingTurn = false;
 				translator.reset();
 			}
@@ -237,7 +244,7 @@ async function runAgent() {
 			type: "error",
 			data: { message: "The analysis encountered an unexpected error." },
 		});
-		flushPersistence({ isComplete: true });
+		await flushPersistence({ isComplete: true });
 	}
 }
 
