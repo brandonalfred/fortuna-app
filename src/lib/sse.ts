@@ -27,7 +27,7 @@ export async function* parseSSEStream(
 
 		for (const line of lines) {
 			if (line.startsWith(":")) {
-				yield { id: `hb-${++eventCounter}`, type: "__heartbeat__", data: {} };
+				yield { id: "__heartbeat__", type: "__heartbeat__", data: {} };
 				continue;
 			}
 			if (line.startsWith("event: ")) {

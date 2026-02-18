@@ -107,7 +107,6 @@ async function consumeSSEEvents(
 			resetDeadTimer();
 
 			if (event.type === "__heartbeat__") {
-				get().handleEvent("__heartbeat__", {});
 				continue;
 			}
 			if (dedup.isDuplicate(event.id)) continue;
@@ -372,8 +371,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					set({ statusMessage: null, error: errorData.message });
 					break;
 				}
-				case "__heartbeat__":
-					break;
 			}
 		},
 
