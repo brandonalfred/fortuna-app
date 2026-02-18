@@ -73,6 +73,13 @@ export interface ChatStoreCallbacks {
 	getQueueStore: () => QueueStore;
 }
 
+interface SandboxStreamInfo {
+	chatId: string;
+	sessionId: string;
+	streamUrl: string;
+	streamToken: string;
+}
+
 async function consumeSSEEvents(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	get: () => ChatStore,
@@ -96,6 +103,49 @@ async function consumeSSEEvents(
 			break;
 		}
 	}
+}
+
+async function connectToSandboxStream(
+	info: SandboxStreamInfo,
+	abortController: AbortController,
+	currentChat: Chat | null,
+	isNewChat: boolean,
+	set: (partial: Partial<ChatState>) => void,
+	get: () => ChatStore,
+	callbacks: ChatStoreCallbacks,
+): Promise<void> {
+	set({
+		sandboxStreamUrl: info.streamUrl,
+		sandboxStreamToken: info.streamToken,
+		sessionId: info.sessionId,
+		currentChat: buildChatObject(info.chatId, info.sessionId, currentChat),
+	});
+
+	if (isNewChat) {
+		set({ isCreatingChat: true });
+		callbacks.onChatCreated?.(info.chatId);
+	}
+
+	const sseResponse = await fetch(`${info.streamUrl}/stream`, {
+		headers: { Authorization: `Bearer ${info.streamToken}` },
+		signal: abortController.signal,
+	});
+
+	if (!sseResponse.ok) {
+		throw new Error("Failed to connect to analysis engine");
+	}
+
+	const sseReader = sseResponse.body?.getReader();
+	if (!sseReader) {
+		throw new Error("No SSE response body");
+	}
+
+	await consumeSSEEvents(
+		sseReader,
+		get,
+		abortController,
+		callbacks.getQueueStore,
+	);
 }
 
 function buildChatObject(
@@ -436,51 +486,53 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				}
 
 				const contentType = response.headers.get("content-type") || "";
+				const streamMode = response.headers.get("X-Stream-Mode");
+				const isNewChat =
+					!currentState.loadedChatId && !currentState.isCreatingChat;
 
-				if (contentType.includes("application/json")) {
-					const {
-						chatId: respChatId,
-						sessionId: respSessionId,
-						streamUrl,
-						streamToken: respStreamToken,
-					} = await response.json();
-
-					set({
-						statusMessage: "Connecting to analysis engine...",
-						sandboxStreamUrl: streamUrl,
-						sandboxStreamToken: respStreamToken,
-						sessionId: respSessionId,
-						currentChat: buildChatObject(
-							respChatId,
-							respSessionId,
-							currentState.currentChat,
-						),
-					});
-
-					if (!currentState.loadedChatId && !currentState.isCreatingChat) {
-						set({ isCreatingChat: true });
-						callbacks.onChatCreated?.(respChatId);
+				if (streamMode === "setup") {
+					const setupReader = response.body?.getReader();
+					if (!setupReader) {
+						throw new Error("No setup stream body");
 					}
 
-					const sseResponse = await fetch(`${streamUrl}/stream`, {
-						headers: { Authorization: `Bearer ${respStreamToken}` },
-						signal: abortController.signal,
-					});
+					let streamInfo: SandboxStreamInfo | null = null;
 
-					if (!sseResponse.ok) {
-						throw new Error("Failed to connect to analysis engine");
+					for await (const event of parseSSEStream(setupReader)) {
+						if (event.type === "status") {
+							get().handleEvent("status", event.data);
+						} else if (event.type === "ready") {
+							streamInfo = event.data as SandboxStreamInfo;
+						} else if (event.type === "error") {
+							get().handleEvent("error", event.data);
+							return;
+						}
 					}
 
-					const sseReader = sseResponse.body?.getReader();
-					if (!sseReader) {
-						throw new Error("No SSE response body");
+					if (!streamInfo) {
+						throw new Error("Setup stream ended without ready event");
 					}
 
-					await consumeSSEEvents(
-						sseReader,
-						get,
+					await connectToSandboxStream(
+						streamInfo,
 						abortController,
-						callbacks.getQueueStore,
+						currentState.currentChat,
+						isNewChat,
+						set,
+						get,
+						callbacks,
+					);
+				} else if (contentType.includes("application/json")) {
+					const streamInfo = (await response.json()) as SandboxStreamInfo;
+
+					await connectToSandboxStream(
+						streamInfo,
+						abortController,
+						currentState.currentChat,
+						isNewChat,
+						set,
+						get,
+						callbacks,
 					);
 				} else {
 					const headerChatId = response.headers.get("X-Chat-Id");
