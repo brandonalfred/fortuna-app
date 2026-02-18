@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useCallback } from "react";
 import { useActiveChat } from "@/components/chat/chat-context";
 import { useSessionContext } from "@/lib/auth/session-context";
@@ -42,6 +42,7 @@ export function ChatWindow() {
 		messages,
 		streamingMessage,
 		isLoading,
+		isFetchingChat,
 		isRecovering,
 		statusMessage,
 		messageQueue,
@@ -63,6 +64,14 @@ export function ChatWindow() {
 
 	const isBusy = isLoading || isRecovering;
 	const isEmpty = messages.length === 0 && !streamingMessage;
+
+	if (isFetchingChat) {
+		return (
+			<div className="flex h-full items-center justify-center">
+				<Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
+			</div>
+		);
+	}
 
 	if (isEmpty) {
 		return (
