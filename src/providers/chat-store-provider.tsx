@@ -256,6 +256,8 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 				): void {
 					chatStore.setState({
 						messages,
+						streamingMessage: null,
+						streamingSegments: [],
 						currentChat: data,
 						isRecovering: false,
 						disconnectedChatId: null,
@@ -312,7 +314,23 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 							lastSeenSequenceNum = currentSeqNum;
 							stalePollCount = 0;
 						}
-						chatStore.setState({ messages });
+						const lastAssistantIdx = messages.findLastIndex(
+							(m) => m.role === "assistant",
+						);
+						if (lastAssistantIdx !== -1) {
+							const lastAssistant = messages[lastAssistantIdx];
+							const segments = lastAssistant.segments || [];
+							chatStore.setState({
+								messages: messages.slice(0, lastAssistantIdx),
+								streamingMessage: {
+									segments,
+									isStreaming: true,
+								},
+								streamingSegments: segments,
+							});
+						} else {
+							chatStore.setState({ messages });
+						}
 					} catch {
 						log.warn("Recovery poll failed");
 					}
