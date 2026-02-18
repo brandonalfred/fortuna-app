@@ -19,6 +19,19 @@ import { createQueueStore, type QueueStore } from "@/stores/queue-store";
 
 const log = createLogger("ChatStoreProvider");
 
+const POLL_INTERVAL_MS = 3_000;
+const RECOVERY_TIMEOUT_MS = 2 * 60 * 1_000;
+const MAX_RECOVERY_MS = 10 * 60 * 1_000;
+const STALE_POLL_LIMIT = 20;
+const STALE_STREAM_MS = 5_000;
+const GRACE_PERIOD_MS = 3_000;
+
+type ChatWithMessages = Chat & { messages: Message[] };
+
+function hydrateMessages(data: ChatWithMessages): Message[] {
+	return (data.messages || []).map(hydrateMessageSegments);
+}
+
 type ChatStoreApi = ReturnType<typeof createChatStore>;
 type QueueStoreApi = ReturnType<typeof createQueueStore>;
 
@@ -73,7 +86,21 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		if (!chatData) return;
 		if (chatData.isProcessing) return;
 		const state = chatStore.getState();
-		if (state.isLoading || state.streamingMessage || state.isRecovering) return;
+		if (state.isLoading || state.streamingMessage) return;
+
+		if (chatData.isProcessing && !state.isRecovering) {
+			chatStore.setState({
+				currentChat: chatData,
+				messages: chatData.messages || [],
+				sessionId: chatData.sessionId,
+				disconnectedChatId: chatData.id,
+				isRecovering: true,
+				error: null,
+			});
+			return;
+		}
+
+		if (state.isRecovering) return;
 
 		const wasDisconnected = !!state.disconnectedChatId;
 		const shouldSkip =
@@ -145,7 +172,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		let dequeueing = false;
 
 		const unsubChat = chatStore.subscribe((state, prevState) => {
-			if (prevState.isLoading && !state.isLoading) {
+			if (
+				(prevState.isLoading && !state.isLoading) ||
+				(prevState.isRecovering && !state.isRecovering)
+			) {
 				processQueue();
 			}
 		});
@@ -173,13 +203,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			}
 		}
 
-		const chatState = chatStore.getState();
-		if (
-			!chatState.isLoading &&
-			queueStore.getState().pendingMessages.length > 0
-		) {
-			processQueue();
-		}
+		processQueue();
 
 		return () => {
 			unsubChat();
@@ -188,8 +212,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	}, [chatStore, queueStore]);
 
 	useEffect(() => {
-		const STALE_STREAM_MS = 5_000;
-		const GRACE_PERIOD_MS = 3_000;
 		let hiddenAt: number | null = null;
 		let graceTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -257,74 +279,114 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		let interval: ReturnType<typeof setInterval> | null = null;
-		let recoveryStartedAt = 0;
-
-		const POLL_INTERVAL_MS = 3_000;
-		const RECOVERY_TIMEOUT_MS = 2 * 60 * 1_000;
-		const STALE_POLL_LIMIT = 20;
+		let progressDeadline = 0;
+		let absoluteDeadline = 0;
 
 		function stopPolling(): void {
 			if (interval) clearInterval(interval);
 			interval = null;
 		}
 
+		function finishRecovery(
+			targetChatId: string,
+			data: ChatWithMessages,
+			messages: Message[],
+		): void {
+			chatStore.setState({
+				messages,
+				streamingMessage: null,
+				streamingSegments: [],
+				currentChat: data,
+				isRecovering: false,
+				disconnectedChatId: null,
+				error: null,
+				sessionId: data.sessionId,
+			});
+			invalidateChatRef.current(targetChatId);
+			stopPolling();
+		}
+
+		function abortRecovery(error?: string): void {
+			chatStore.setState({
+				isRecovering: false,
+				disconnectedChatId: null,
+				error: error ?? null,
+			});
+			stopPolling();
+		}
+
+		function showStreamingProgress(messages: Message[]): void {
+			const lastAssistantIdx = messages.findLastIndex(
+				(m) => m.role === "assistant",
+			);
+			if (lastAssistantIdx === -1) {
+				chatStore.setState({ messages });
+				return;
+			}
+			const segments = messages[lastAssistantIdx].segments || [];
+			chatStore.setState({
+				messages: messages.slice(0, lastAssistantIdx),
+				streamingMessage: { segments, isStreaming: true },
+				streamingSegments: segments,
+			});
+		}
+
 		const unsub = chatStore.subscribe((state, prev) => {
 			if (state.isRecovering && !prev.isRecovering) {
-				const targetChatId = state.disconnectedChatId || state.currentChat?.id;
-				if (!targetChatId) return;
-				const chatId: string = targetChatId;
+				const maybeChatId = state.disconnectedChatId || state.currentChat?.id;
+				if (!maybeChatId) return;
+				const targetChatId: string = maybeChatId;
 
-				recoveryStartedAt = Date.now();
+				const now = Date.now();
+				absoluteDeadline = now + MAX_RECOVERY_MS;
+				progressDeadline = now + RECOVERY_TIMEOUT_MS;
 				let lastSeenSequenceNum = -1;
 				let stalePollCount = 0;
-				log.info("Recovery polling started", { chatId });
-
-				function finishRecovery(
-					data: Chat & { messages: Message[] },
-					messages: Message[],
-				): void {
-					chatStore.setState({
-						messages,
-						streamingMessage: null,
-						streamingSegments: [],
-						currentChat: data,
-						isRecovering: false,
-						disconnectedChatId: null,
-						error: null,
-						sessionId: data.sessionId,
-					});
-					invalidateChatRef.current(chatId);
-					stopPolling();
-				}
+				log.info("Recovery polling started", { chatId: targetChatId });
 
 				async function poll() {
-					if (Date.now() - recoveryStartedAt > RECOVERY_TIMEOUT_MS) {
-						log.warn("Recovery timed out", { chatId });
-						chatStore.setState({
-							isRecovering: false,
-							disconnectedChatId: null,
-							error: "The response took too long. Please try again.",
+					const now = Date.now();
+
+					if (now > absoluteDeadline) {
+						log.warn("Recovery hit absolute ceiling", {
+							chatId: targetChatId,
 						});
-						stopPolling();
+						try {
+							const res = await fetch(`/api/chats/${targetChatId}`);
+							if (res.ok) {
+								const data = (await res.json()) as ChatWithMessages;
+								finishRecovery(targetChatId, data, hydrateMessages(data));
+							} else {
+								abortRecovery();
+							}
+						} catch {
+							abortRecovery();
+						}
+						return;
+					}
+
+					if (now > progressDeadline) {
+						log.warn("Recovery timed out — no progress", {
+							chatId: targetChatId,
+						});
+						abortRecovery("The response took too long. Please try again.");
 						return;
 					}
 
 					try {
-						const res = await fetch(`/api/chats/${chatId}`);
+						const res = await fetch(`/api/chats/${targetChatId}`);
 						if (res.status === 401) {
 							window.location.href = "/auth/signin";
 							return;
 						}
 						if (!res.ok) return;
 
-						const data = (await res.json()) as Chat & {
-							messages: Message[];
-						};
-						const messages = (data.messages || []).map(hydrateMessageSegments);
+						const data = (await res.json()) as ChatWithMessages;
+						const messages = hydrateMessages(data);
 
 						if (!data.isProcessing) {
-							log.info("Recovery complete", { chatId });
-							finishRecovery(data, messages);
+							log.info("Recovery complete", { chatId: targetChatId });
+							finishRecovery(targetChatId, data, messages);
 							return;
 						}
 
@@ -333,33 +395,19 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 							stalePollCount++;
 							if (stalePollCount >= STALE_POLL_LIMIT) {
 								log.warn("Recovery stale — no new events, forcing exit", {
-									chatId,
+									chatId: targetChatId,
 									stalePollCount,
 								});
-								finishRecovery(data, messages);
+								finishRecovery(targetChatId, data, messages);
 								return;
 							}
 						} else {
 							lastSeenSequenceNum = currentSeqNum;
 							stalePollCount = 0;
+							progressDeadline = Date.now() + RECOVERY_TIMEOUT_MS;
 						}
-						const lastAssistantIdx = messages.findLastIndex(
-							(m) => m.role === "assistant",
-						);
-						if (lastAssistantIdx !== -1) {
-							const lastAssistant = messages[lastAssistantIdx];
-							const segments = lastAssistant.segments || [];
-							chatStore.setState({
-								messages: messages.slice(0, lastAssistantIdx),
-								streamingMessage: {
-									segments,
-									isStreaming: true,
-								},
-								streamingSegments: segments,
-							});
-						} else {
-							chatStore.setState({ messages });
-						}
+
+						showStreamingProgress(messages);
 					} catch {
 						log.warn("Recovery poll failed");
 					}
