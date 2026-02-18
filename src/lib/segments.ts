@@ -1,7 +1,7 @@
 import type { ContentSegment, Message, ToolUse } from "@/lib/types";
 
 export function hydrateMessageSegments(message: Message): Message {
-	if (message.segments?.length || message.role !== "assistant") {
+	if (message.segments || message.role !== "assistant") {
 		return message;
 	}
 
