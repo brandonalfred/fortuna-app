@@ -74,8 +74,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 	} = useChatQuery(chatId, isStreaming);
 
 	useEffect(() => {
-		chatStore.setState({ isFetchingChat: isPending && !!chatId });
-	}, [isPending, chatId, chatStore]);
+		chatStore.setState({
+			isFetchingChat: isPending && !!chatId && !isStreaming,
+		});
+	}, [isPending, chatId, chatStore, isStreaming]);
 
 	useEffect(() => {
 		queueStore.persist.rehydrate();
@@ -87,18 +89,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		if (chatData.isProcessing) return;
 		const state = chatStore.getState();
 		if (state.isLoading || state.streamingMessage) return;
-
-		if (chatData.isProcessing && !state.isRecovering) {
-			chatStore.setState({
-				currentChat: chatData,
-				messages: chatData.messages || [],
-				sessionId: chatData.sessionId,
-				disconnectedChatId: chatData.id,
-				isRecovering: true,
-				error: null,
-			});
-			return;
-		}
 
 		if (state.isRecovering) return;
 

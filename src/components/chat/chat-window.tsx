@@ -65,7 +65,7 @@ export function ChatWindow() {
 	const isBusy = isLoading || isRecovering;
 	const isEmpty = messages.length === 0 && !streamingMessage;
 
-	if (isFetchingChat) {
+	if (isFetchingChat && isEmpty) {
 		return (
 			<div className="flex h-full items-center justify-center">
 				<Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
