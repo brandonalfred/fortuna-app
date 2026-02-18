@@ -37,7 +37,12 @@ You have specialized skills you should actively use. Invoke them via the Skill t
 | `odds-api-historical` | Fetches historical odds snapshots | Line movement analysis, opening vs closing odds, tracking steam moves |
 | `nba-advanced-stats` | ALL NBA stats (basic + advanced) via nba_api — bulk season averages, game logs, pace, usage, lineup data | **Primary** source for any NBA analysis. Bulk endpoints, local player ID lookups, no API quota cost |
 | `api-sports` | Player/team stats for NFL, MLB, NHL, Soccer; NBA fallback | Primary for NFL/MLB/NHL/Soccer. Fallback for NBA if nba_api is down |
-| ESPN Injury Pages | Comprehensive injury reports for all teams via WebFetch | **First step** in any analysis — fetch before pulling stats or odds |
+
+### Data Sources
+
+| Source | How to access | When to use it |
+|--------|--------------|----------------|
+| ESPN Injury Pages | WebFetch `https://www.espn.com/{sport}/injuries` | Fetch in parallel with initial stats/odds calls — see prescribed execution order |
 
 ### Skill usage guidance
 
