@@ -81,6 +81,8 @@ interface SandboxStreamInfo {
 	streamToken: string;
 }
 
+const CONNECTION_DEAD_MS = 45_000;
+
 async function consumeSSEEvents(
 	reader: ReadableStreamDefaultReader<Uint8Array>,
 	get: () => ChatStore,
@@ -89,24 +91,44 @@ async function consumeSSEEvents(
 ): Promise<{ receivedDone: boolean }> {
 	let receivedDone = false;
 	const dedup = createDeduplicator();
-	for await (const event of parseSSEStream(reader)) {
-		if (dedup.isDuplicate(event.id)) continue;
-		get().handleEvent(event.type, event.data);
 
-		if (event.type === "done") {
-			receivedDone = true;
+	let deadTimer: ReturnType<typeof setTimeout> | undefined;
+	const resetDeadTimer = () => {
+		clearTimeout(deadTimer);
+		deadTimer = setTimeout(() => {
+			log.warn("No events for 45s, cancelling reader");
 			reader.cancel().catch(() => null);
-			break;
-		}
+		}, CONNECTION_DEAD_MS);
+	};
+	resetDeadTimer();
 
-		if (
-			event.type === "turn_complete" &&
-			queueStore().pendingMessages.length > 0
-		) {
-			receivedDone = true;
-			abortController.abort();
-			break;
+	try {
+		for await (const event of parseSSEStream(reader)) {
+			resetDeadTimer();
+
+			if (event.type === "__heartbeat__") {
+				continue;
+			}
+			if (dedup.isDuplicate(event.id)) continue;
+			get().handleEvent(event.type, event.data);
+
+			if (event.type === "done" || event.type === "error") {
+				receivedDone = true;
+				reader.cancel().catch(() => null);
+				break;
+			}
+
+			if (
+				event.type === "turn_complete" &&
+				queueStore().pendingMessages.length > 0
+			) {
+				receivedDone = true;
+				abortController.abort();
+				break;
+			}
 		}
+	} finally {
+		clearTimeout(deadTimer);
 	}
 	return { receivedDone };
 }

@@ -266,6 +266,10 @@ async function runAgent() {
 			type: "error",
 			data: { message: "The analysis encountered an unexpected error." },
 		});
+		sendEvent({
+			type: "done",
+			data: { chatId, sessionId: translator.sessionId },
+		});
 		await flushPersistence({ isComplete: true });
 	}
 }
