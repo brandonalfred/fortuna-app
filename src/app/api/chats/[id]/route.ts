@@ -47,7 +47,11 @@ export async function GET(
 	) {
 		await prisma.chat.update({
 			where: { id: chat.id },
-			data: { isProcessing: false },
+			data: {
+				isProcessing: false,
+				streamToken: null,
+				persistToken: null,
+			},
 		});
 		chat.isProcessing = false;
 	}

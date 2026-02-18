@@ -1,5 +1,6 @@
 import { Sandbox } from "@vercel/sandbox";
 import { activeSessions } from "@/lib/agent/active-sessions";
+import { SANDBOX_SSE_PORT } from "@/lib/agent/sandbox";
 import { getAuthenticatedUser, notFound, unauthorized } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
@@ -24,6 +25,42 @@ export async function POST(
 		return notFound("Chat");
 	}
 
+	let sandboxStopSucceeded = false;
+
+	if (chat.sandboxId) {
+		try {
+			const sandbox = await Sandbox.get({ sandboxId: chat.sandboxId });
+			const streamUrl = sandbox.domain(SANDBOX_SSE_PORT);
+
+			const stopRes = await fetch(`${streamUrl}/stop`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${chat.streamToken}`,
+				},
+				signal: AbortSignal.timeout(5000),
+			}).catch(() => null);
+
+			if (stopRes?.ok) {
+				sandboxStopSucceeded = true;
+			} else {
+				console.warn(
+					`[Stop API] SSE server unresponsive, stopping sandbox chat=${id}`,
+				);
+				await sandbox.stop();
+				await prisma.chat.update({
+					where: { id },
+					data: {
+						sandboxId: null,
+						streamToken: null,
+						persistToken: null,
+					},
+				});
+			}
+		} catch (e) {
+			console.warn(`[Stop API] Sandbox stop failed chat=${id}:`, e);
+		}
+	}
+
 	const controller = activeSessions.get(id);
 	if (controller) {
 		controller.abort();
@@ -31,23 +68,22 @@ export async function POST(
 		console.log(`[Stop API] Aborted in-memory session chat=${id}`);
 	}
 
-	if (chat.sandboxId) {
-		try {
-			const sandbox = await Sandbox.get({ sandboxId: chat.sandboxId });
-			await sandbox.stop();
-			await prisma.chat.update({
-				where: { id },
-				data: { sandboxId: null },
-			});
-			console.log(`[Stop API] Stopped sandbox chat=${id}`);
-		} catch (e) {
-			console.warn(`[Stop API] Sandbox stop failed chat=${id}:`, e);
-		}
+	const updateData: {
+		isProcessing: boolean;
+		streamToken?: null;
+		persistToken?: null;
+	} = {
+		isProcessing: false,
+	};
+
+	if (!sandboxStopSucceeded) {
+		updateData.streamToken = null;
+		updateData.persistToken = null;
 	}
 
 	await prisma.chat.update({
 		where: { id },
-		data: { isProcessing: false },
+		data: updateData,
 	});
 
 	return new Response(null, { status: 204 });

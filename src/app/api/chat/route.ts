@@ -11,9 +11,14 @@ import {
 	extractIsError,
 	extractToolResultContent,
 } from "@/lib/agent/message-extraction";
+import {
+	sendMessageToSSE,
+	setupDirectStream,
+} from "@/lib/agent/sandbox-runner";
 import { getOrCreateWorkspace } from "@/lib/agent/workspace";
 import {
 	badRequest,
+	conflict,
 	getAuthenticatedUser,
 	serverError,
 	unauthorized,
@@ -44,6 +49,50 @@ function toUserFriendlyError(error: unknown): string {
 	}
 
 	return "Something went wrong. Please try again.";
+}
+
+interface SSEWriter {
+	send(event: string, data: unknown): void;
+	sendRaw(text: string): void;
+	disconnect(): void;
+	isDisconnected(): boolean;
+}
+
+function createSSEWriter(
+	controller: ReadableStreamDefaultController,
+): SSEWriter {
+	const encoder = new TextEncoder();
+	let eventId = 0;
+	let disconnected = false;
+
+	return {
+		send(event, data) {
+			if (disconnected) return;
+			try {
+				controller.enqueue(
+					encoder.encode(
+						`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+					),
+				);
+			} catch {
+				disconnected = true;
+			}
+		},
+		sendRaw(text) {
+			if (disconnected) return;
+			try {
+				controller.enqueue(encoder.encode(text));
+			} catch {
+				disconnected = true;
+			}
+		},
+		disconnect() {
+			disconnected = true;
+		},
+		isDisconnected() {
+			return disconnected;
+		},
+	};
 }
 
 export const runtime = "nodejs";
@@ -184,39 +233,138 @@ export async function POST(req: Request): Promise<Response> {
 			}
 		}
 
-		const encoder = new TextEncoder();
+		if (process.env.VERCEL) {
+			if (existingChat?.isProcessing) {
+				return conflict("A response is already in progress.");
+			}
+
+			if (existingChat?.streamToken && existingChat?.sandboxId) {
+				try {
+					const result = await sendMessageToSSE({
+						sandboxId: existingChat.sandboxId,
+						streamToken: existingChat.streamToken,
+						prompt: agentPrompt,
+					});
+					return Response.json(
+						{
+							chatId: chat.id,
+							sessionId,
+							streamUrl: result.streamUrl,
+							streamToken: existingChat.streamToken,
+							mode: "direct",
+						},
+						{ headers: { "X-Chat-Id": chat.id } },
+					);
+				} catch {
+					console.log("[Chat API] SSE server not available, full setup needed");
+				}
+			}
+
+			const newStreamToken = randomUUID();
+			const newPersistToken = randomUUID();
+
+			await prisma.chat.update({
+				where: { id: chat.id },
+				data: {
+					streamToken: newStreamToken,
+					persistToken: newPersistToken,
+				},
+			});
+
+			const persistUrl =
+				process.env.BETTER_AUTH_URL || `https://${process.env.VERCEL_URL}`;
+
+			const setupStream = new ReadableStream({
+				async start(controller) {
+					const sse = createSSEWriter(controller);
+
+					try {
+						const result = await setupDirectStream({
+							prompt: agentPrompt,
+							workspacePath,
+							chatId: chat.id,
+							conversationHistory,
+							timezone,
+							userFirstName: user.firstName ?? undefined,
+							userPreferences: user.preferences ?? undefined,
+							agentSessionId: existingChat?.agentSessionId ?? undefined,
+							attachments,
+							persistUrl,
+							streamToken: newStreamToken,
+							persistToken: newPersistToken,
+							initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
+							protectionBypassSecret:
+								process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+							onStatus: (stage: string, statusMessage: string) => {
+								sse.send("status", { stage, message: statusMessage });
+							},
+						});
+
+						sse.send("ready", {
+							chatId: chat.id,
+							sessionId,
+							streamUrl: result.streamUrl,
+							streamToken: newStreamToken,
+							mode: "direct",
+						});
+					} catch (error) {
+						console.error("[Chat API] Direct stream setup failed:", error);
+						await prisma.chat.update({
+							where: { id: chat.id },
+							data: {
+								streamToken: null,
+								persistToken: null,
+								sandboxId: null,
+								isProcessing: false,
+							},
+						});
+						sse.send("error", {
+							message:
+								"Failed to initialize analysis engine. Please try again.",
+						});
+					} finally {
+						try {
+							controller.close();
+						} catch {
+							// stream already closed
+						}
+					}
+				},
+				cancel() {
+					console.log(
+						`[Chat API] Client disconnected during setup, chat=${chat.id}`,
+					);
+				},
+			});
+
+			return new Response(setupStream, {
+				headers: {
+					"Content-Type": "text/event-stream",
+					"Cache-Control": "no-cache, no-transform",
+					Connection: "keep-alive",
+					"X-Accel-Buffering": "no",
+					"X-Stream-Mode": "setup",
+				},
+			});
+		}
+
 		const abortController = new AbortController();
 		activeSessions.set(chat.id, abortController);
 		let agentQuery: Query | null = null;
 		let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-		let clientDisconnected = false;
 
 		const stream = new ReadableStream({
 			async start(controller) {
-				let eventId = 0;
-				const sendEvent = (event: string, data: unknown) => {
-					if (clientDisconnected) return;
-					try {
-						controller.enqueue(
-							encoder.encode(
-								`id: ${++eventId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-							),
-						);
-					} catch {
-						clientDisconnected = true;
-					}
-				};
+				const sse = createSSEWriter(controller);
 
 				const KEEPALIVE_INTERVAL_MS = 10_000;
 				heartbeatInterval = setInterval(() => {
-					if (clientDisconnected) {
+					if (sse.isDisconnected()) {
 						clearInterval(heartbeatInterval!);
 						return;
 					}
-					try {
-						controller.enqueue(encoder.encode(":keepalive\n\n"));
-					} catch {
-						clientDisconnected = true;
+					sse.sendRaw(":keepalive\n\n");
+					if (sse.isDisconnected()) {
 						clearInterval(heartbeatInterval!);
 					}
 				}, KEEPALIVE_INTERVAL_MS);
@@ -233,7 +381,7 @@ export async function POST(req: Request): Promise<Response> {
 					agentSessionId: existingChat?.agentSessionId ?? undefined,
 					attachments,
 					onStatus: (stage: string, statusMessage: string) => {
-						sendEvent("status", { stage, message: statusMessage });
+						sse.send("status", { stage, message: statusMessage });
 					},
 				};
 
@@ -241,7 +389,7 @@ export async function POST(req: Request): Promise<Response> {
 				agentQuery = isLocal ? createLocalAgentQuery(agentOptions) : null;
 				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
-				sendEvent("init", { chatId: chat.id, sessionId });
+				sse.send("init", { chatId: chat.id, sessionId });
 
 				let fullAssistantContent = "";
 				let fullThinkingContent = "";
@@ -249,7 +397,7 @@ export async function POST(req: Request): Promise<Response> {
 				let inThinkingBlock = false;
 
 				function recordThinking(thinking: string): void {
-					sendEvent("thinking", { thinking });
+					sse.send("thinking", { thinking });
 					fullThinkingContent += fullThinkingContent
 						? `\n\n${thinking}`
 						: thinking;
@@ -337,8 +485,8 @@ export async function POST(req: Request): Promise<Response> {
 								(msg.type === "stream_event" &&
 									msg.event.type === "message_start"))
 						) {
-							sendEvent("turn_complete", {});
-							sendEvent("delta", { text: "\n\n" });
+							sse.send("turn_complete", {});
+							sse.send("delta", { text: "\n\n" });
 							fullAssistantContent += "\n\n";
 							lastEventWasToolUse = false;
 							if (eventBuffer) {
@@ -376,7 +524,7 @@ export async function POST(req: Request): Promise<Response> {
 										lastEventWasToolUse = true;
 										const { id: toolUseId, name, input } = block;
 										toolUses.push({ name, input });
-										sendEvent("tool_use", { name, input });
+										sse.send("tool_use", { name, input });
 										if (eventBuffer) {
 											eventBuffer.appendEvent("tool_use", {
 												toolUseId,
@@ -415,7 +563,7 @@ export async function POST(req: Request): Promise<Response> {
 										thinking?: string;
 									};
 									if (delta.type === "text_delta" && delta.text) {
-										sendEvent("delta", { text: delta.text });
+										sse.send("delta", { text: delta.text });
 										if (eventBuffer) {
 											eventBuffer.appendText(delta.text);
 										}
@@ -424,7 +572,7 @@ export async function POST(req: Request): Promise<Response> {
 										delta.thinking
 									) {
 										pendingThinking += delta.thinking;
-										sendEvent("thinking_delta", {
+										sse.send("thinking_delta", {
 											thinking: delta.thinking,
 										});
 									}
@@ -448,7 +596,7 @@ export async function POST(req: Request): Promise<Response> {
 								console.log(
 									`[Chat API] Result subtype=${msg.subtype} stop_reason=${resultStopReason}`,
 								);
-								sendEvent("result", {
+								sse.send("result", {
 									subtype: msg.subtype,
 									stop_reason: resultStopReason,
 									duration_ms: msg.duration_ms,
@@ -515,16 +663,11 @@ export async function POST(req: Request): Promise<Response> {
 					console.log(
 						`[Chat API] Saved message chat=${chat.id} length=${fullAssistantContent.length}`,
 					);
-					sendEvent("done", { chatId: chat.id, sessionId });
+					sse.send("done", { chatId: chat.id, sessionId });
 				} catch (error) {
 					if (!abortController.signal.aborted) {
 						console.error("[Chat API] Stream error:", error);
-						const userMessage = toUserFriendlyError(error);
-						try {
-							sendEvent("error", { message: userMessage });
-						} catch {
-							/* stream closed */
-						}
+						sse.send("error", { message: toUserFriendlyError(error) });
 					}
 				} finally {
 					if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -556,7 +699,6 @@ export async function POST(req: Request): Promise<Response> {
 				}
 			},
 			cancel() {
-				clientDisconnected = true;
 				if (heartbeatInterval) clearInterval(heartbeatInterval);
 				console.log(
 					`[Chat API] Client disconnected, agent continues chat=${chat.id}`,

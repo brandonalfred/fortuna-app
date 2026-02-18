@@ -79,6 +79,8 @@ model Chat {
   isProcessing    Boolean   @default(false) @map("is_processing")
   storageVersion  Int       @default(2) @map("storage_version")
   lastSequenceNum Int       @default(0) @map("last_sequence_num")
+  streamToken     String?   @unique @map("stream_token")
+  persistToken    String?   @unique @map("persist_token")
   userId    String    @map("user_id")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

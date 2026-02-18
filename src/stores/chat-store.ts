@@ -49,6 +49,8 @@ interface ChatState {
 	isCreatingChat: boolean;
 	isRecovering: boolean;
 	lastEventAt: number;
+	sandboxStreamUrl: string | null;
+	sandboxStreamToken: string | null;
 }
 
 interface ChatActions {
@@ -71,6 +73,97 @@ export interface ChatStoreCallbacks {
 	getQueueStore: () => QueueStore;
 }
 
+interface SandboxStreamInfo {
+	chatId: string;
+	sessionId: string;
+	streamUrl: string;
+	streamToken: string;
+}
+
+async function consumeSSEEvents(
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+	get: () => ChatStore,
+	abortController: AbortController,
+	queueStore: () => QueueStore,
+): Promise<void> {
+	const dedup = createDeduplicator();
+	for await (const event of parseSSEStream(reader)) {
+		if (dedup.isDuplicate(event.id)) continue;
+		get().handleEvent(event.type, event.data);
+
+		if (event.type === "done") {
+			reader.cancel().catch(() => null);
+			break;
+		}
+
+		if (
+			event.type === "turn_complete" &&
+			queueStore().pendingMessages.length > 0
+		) {
+			abortController.abort();
+			break;
+		}
+	}
+}
+
+async function connectToSandboxStream(
+	info: SandboxStreamInfo,
+	abortController: AbortController,
+	currentChat: Chat | null,
+	isNewChat: boolean,
+	set: (partial: Partial<ChatState>) => void,
+	get: () => ChatStore,
+	callbacks: ChatStoreCallbacks,
+): Promise<void> {
+	set({
+		sandboxStreamUrl: info.streamUrl,
+		sandboxStreamToken: info.streamToken,
+		sessionId: info.sessionId,
+		currentChat: buildChatObject(info.chatId, info.sessionId, currentChat),
+	});
+
+	if (isNewChat) {
+		set({ isCreatingChat: true });
+		callbacks.onChatCreated?.(info.chatId);
+	}
+
+	const sseResponse = await fetch(`${info.streamUrl}/stream`, {
+		headers: { Authorization: `Bearer ${info.streamToken}` },
+		signal: abortController.signal,
+	});
+
+	if (!sseResponse.ok) {
+		throw new Error("Failed to connect to analysis engine");
+	}
+
+	const sseReader = sseResponse.body?.getReader();
+	if (!sseReader) {
+		throw new Error("No SSE response body");
+	}
+
+	await consumeSSEEvents(
+		sseReader,
+		get,
+		abortController,
+		callbacks.getQueueStore,
+	);
+}
+
+function buildChatObject(
+	chatId: string,
+	sessionId: string,
+	existing: Chat | null,
+): Chat {
+	return {
+		id: chatId,
+		sessionId,
+		title: existing?.title || "",
+		createdAt: existing?.createdAt || new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		messages: existing?.messages || [],
+	};
+}
+
 export function createChatStore(callbacks: ChatStoreCallbacks) {
 	return createStore<ChatStore>()((set, get) => ({
 		messages: [],
@@ -88,6 +181,8 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 		isCreatingChat: false,
 		isRecovering: false,
 		lastEventAt: 0,
+		sandboxStreamUrl: null,
+		sandboxStreamToken: null,
 
 		publishSegments() {
 			set({
@@ -121,15 +216,11 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					const initData = data as ChatInitEvent;
 					set({
 						sessionId: initData.sessionId,
-						currentChat: {
-							id: initData.chatId,
-							sessionId: initData.sessionId,
-							title: state.currentChat?.title || "",
-							createdAt:
-								state.currentChat?.createdAt || new Date().toISOString(),
-							updatedAt: new Date().toISOString(),
-							messages: state.currentChat?.messages || [],
-						},
+						currentChat: buildChatObject(
+							initData.chatId,
+							initData.sessionId,
+							state.currentChat,
+						),
 					});
 					if (!state.loadedChatId && !state.isCreatingChat) {
 						set({ isCreatingChat: true });
@@ -388,42 +479,83 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						window.location.href = "/auth/signin";
 						return;
 					}
+					if (response.status === 409) {
+						set({ error: "A response is already in progress." });
+						return;
+					}
 					throw new Error("Failed to send message");
 				}
 
-				const headerChatId = response.headers.get("X-Chat-Id");
-				if (headerChatId && !currentState.currentChat?.id) {
-					set({
-						isCreatingChat: true,
-						currentChat: {
-							id: headerChatId,
-							sessionId: "",
-							title: "",
-							createdAt: new Date().toISOString(),
-							updatedAt: new Date().toISOString(),
-							messages: [],
-						},
-					});
-					callbacks.onChatCreated?.(headerChatId);
-				}
+				const contentType = response.headers.get("content-type") || "";
+				const streamMode = response.headers.get("X-Stream-Mode");
+				const isNewChat =
+					!currentState.loadedChatId && !currentState.isCreatingChat;
 
-				const reader = response.body?.getReader();
-				if (!reader) {
-					throw new Error("No response body");
-				}
-
-				const dedup = createDeduplicator();
-				for await (const event of parseSSEStream(reader)) {
-					if (dedup.isDuplicate(event.id)) continue;
-					get().handleEvent(event.type, event.data);
-
-					if (
-						event.type === "turn_complete" &&
-						callbacks.getQueueStore().pendingMessages.length > 0
-					) {
-						get().abortController?.abort();
-						break;
+				if (streamMode === "setup") {
+					const setupReader = response.body?.getReader();
+					if (!setupReader) {
+						throw new Error("No setup stream body");
 					}
+
+					let streamInfo: SandboxStreamInfo | null = null;
+
+					for await (const event of parseSSEStream(setupReader)) {
+						if (event.type === "status") {
+							get().handleEvent("status", event.data);
+						} else if (event.type === "ready") {
+							streamInfo = event.data as SandboxStreamInfo;
+						} else if (event.type === "error") {
+							get().handleEvent("error", event.data);
+							return;
+						}
+					}
+
+					if (!streamInfo) {
+						throw new Error("Setup stream ended without ready event");
+					}
+
+					await connectToSandboxStream(
+						streamInfo,
+						abortController,
+						currentState.currentChat,
+						isNewChat,
+						set,
+						get,
+						callbacks,
+					);
+				} else if (contentType.includes("application/json")) {
+					const streamInfo = (await response.json()) as SandboxStreamInfo;
+
+					await connectToSandboxStream(
+						streamInfo,
+						abortController,
+						currentState.currentChat,
+						isNewChat,
+						set,
+						get,
+						callbacks,
+					);
+				} else {
+					const headerChatId = response.headers.get("X-Chat-Id");
+					if (headerChatId && !currentState.currentChat?.id) {
+						set({
+							isCreatingChat: true,
+							currentChat: buildChatObject(headerChatId, "", null),
+						});
+						callbacks.onChatCreated?.(headerChatId);
+					}
+
+					const reader = response.body?.getReader();
+					if (!reader) {
+						throw new Error("No response body");
+					}
+
+					await consumeSSEEvents(
+						reader,
+						get,
+						abortController,
+						callbacks.getQueueStore,
+					);
 				}
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
@@ -478,7 +610,12 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				});
 			}
 			get().abortController?.abort();
-			set({ isLoading: false, isRecovering: false });
+			set({
+				isLoading: false,
+				isRecovering: false,
+				sandboxStreamUrl: null,
+				sandboxStreamToken: null,
+			});
 			callbacks.getQueueStore().clear();
 			get().finalizeStreamingMessage();
 		},
