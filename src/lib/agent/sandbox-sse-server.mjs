@@ -26,6 +26,7 @@ const {
 	chatId,
 	port,
 	initialPrompt,
+	initialContentBlocks,
 	systemPrompt,
 	model,
 	allowedTools,
@@ -34,6 +35,10 @@ const {
 	initialSequenceNum,
 	protectionBypassSecret,
 } = config;
+
+function resolveContent(contentBlocks, textPrompt) {
+	return contentBlocks?.length > 0 ? contentBlocks : textPrompt;
+}
 
 // --- Message Queue (infinite generator pattern) ---
 
@@ -50,11 +55,14 @@ function enqueueMessage(msg) {
 }
 
 async function* generateMessages() {
-	if (initialPrompt) {
+	if (initialPrompt || initialContentBlocks) {
 		yield {
 			type: "user",
 			session_id: "",
-			message: { role: "user", content: initialPrompt },
+			message: {
+				role: "user",
+				content: resolveContent(initialContentBlocks, initialPrompt),
+			},
 			parent_tool_use_id: null,
 		};
 	}
@@ -347,13 +355,14 @@ const server = createServer(async (req, res) => {
 
 		try {
 			const body = await readBody(req);
+			const content = resolveContent(body.contentBlocks, body.prompt);
 
 			isProcessingTurn = true;
 			translator.reset();
 			enqueueMessage({
 				type: "user",
 				session_id: "",
-				message: { role: "user", content: body.prompt },
+				message: { role: "user", content },
 				parent_tool_use_id: null,
 			});
 

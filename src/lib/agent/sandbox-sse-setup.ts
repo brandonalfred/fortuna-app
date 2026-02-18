@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Sandbox } from "@vercel/sandbox";
+import type { MessageContentBlock } from "./content-blocks";
 
 interface SSEConfig {
 	streamToken: string;
@@ -9,6 +10,7 @@ interface SSEConfig {
 	chatId: string;
 	port: number;
 	initialPrompt: string;
+	initialContentBlocks: MessageContentBlock[] | null;
 	systemPrompt: string;
 	model: string;
 	allowedTools: string[];
