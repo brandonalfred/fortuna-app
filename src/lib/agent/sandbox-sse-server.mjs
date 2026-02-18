@@ -81,12 +81,26 @@ async function* generateMessages() {
 
 let sseResponse = null;
 let eventId = initialSequenceNum || 0;
+let turnEventBuffer = [];
+const MAX_BUFFER_SIZE = 500;
+
+function formatSSE(id, type, data) {
+	return `id: ${id}\nevent: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+}
 
 function broadcastSSE(event) {
+	eventId++;
+
+	if (event.type !== "init") {
+		turnEventBuffer.push({ id: eventId, type: event.type, data: event.data });
+		if (turnEventBuffer.length > MAX_BUFFER_SIZE) {
+			turnEventBuffer = turnEventBuffer.slice(-MAX_BUFFER_SIZE);
+		}
+	}
+
 	if (!sseResponse) return;
 	try {
-		const line = `id: ${++eventId}\nevent: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
-		sseResponse.write(line);
+		sseResponse.write(formatSSE(eventId, event.type, event.data));
 	} catch {
 		sseResponse = null;
 	}
@@ -333,6 +347,15 @@ const server = createServer(async (req, res) => {
 		sseResponse = res;
 		broadcastSSE({ type: "init", data: { chatId, sessionId: agentSessionId || "" } });
 
+		for (const buffered of turnEventBuffer) {
+			try {
+				sseResponse.write(formatSSE(buffered.id, buffered.type, buffered.data));
+			} catch {
+				sseResponse = null;
+				break;
+			}
+		}
+
 		if (keepaliveInterval) clearInterval(keepaliveInterval);
 		keepaliveInterval = setInterval(() => {
 			sendSSEComment("keepalive");
@@ -358,6 +381,7 @@ const server = createServer(async (req, res) => {
 			const content = resolveContent(body.contentBlocks, body.prompt);
 
 			isProcessingTurn = true;
+			turnEventBuffer = [];
 			translator.reset();
 			enqueueMessage({
 				type: "user",

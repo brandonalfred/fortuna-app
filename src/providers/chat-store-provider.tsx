@@ -52,8 +52,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			onChatCreated: (newChatId) => {
 				router.replace(`/chat/${newChatId}`);
 			},
-			onStreamComplete: (completedChatId) => {
-				skipNextMessageReplaceRef.current = completedChatId;
+			onStreamComplete: (completedChatId, hasContent) => {
+				if (hasContent) {
+					skipNextMessageReplaceRef.current = completedChatId;
+				}
 				invalidateChatRef.current(completedChatId);
 				fetch(`/api/chats/${completedChatId}/complete`, {
 					method: "POST",
@@ -95,6 +97,10 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		const wasDisconnected = !!state.disconnectedChatId;
 		const shouldSkip =
 			!wasDisconnected && skipNextMessageReplaceRef.current === chatData.id;
+
+		if (shouldSkip) {
+			skipNextMessageReplaceRef.current = null;
+		}
 
 		chatStore.setState({
 			currentChat: chatData,
