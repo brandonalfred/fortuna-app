@@ -61,6 +61,7 @@ export function ChatWindow() {
 		[sendMessage, clearError],
 	);
 
+	const isBusy = isLoading || isRecovering;
 	const isEmpty = messages.length === 0 && !streamingMessage;
 
 	if (isEmpty) {
@@ -90,7 +91,7 @@ export function ChatWindow() {
 					onSend={handleSend}
 					onStop={stopGeneration}
 					onQueue={queueMessage}
-					isLoading={isLoading}
+					isLoading={isBusy}
 					variant="centered"
 				/>
 			</div>
@@ -108,7 +109,7 @@ export function ChatWindow() {
 					onRemoveQueued={removeQueuedMessage}
 				/>
 			</div>
-			{error && !isRecovering && (
+			{error && !isBusy && (
 				<ErrorBanner
 					message={error}
 					onDismiss={clearError}
@@ -119,7 +120,7 @@ export function ChatWindow() {
 				onSend={handleSend}
 				onStop={stopGeneration}
 				onQueue={queueMessage}
-				isLoading={isLoading || isRecovering}
+				isLoading={isBusy}
 				placeholder="Reply..."
 			/>
 		</div>
