@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback } from "react";
 import { useActiveChat } from "@/components/chat/chat-context";
 import { useSessionContext } from "@/lib/auth/session-context";
@@ -36,20 +36,6 @@ function ErrorBanner({ message, onDismiss, className }: ErrorBannerProps) {
 	);
 }
 
-function RecoveryBanner({ className }: { className?: string }) {
-	return (
-		<div
-			className={cn(
-				"flex items-center gap-2 rounded-md bg-accent/10 border border-accent/30 p-3 text-sm text-accent",
-				className,
-			)}
-		>
-			<Loader2 className="h-4 w-4 animate-spin shrink-0" />
-			<span>Fortuna is still working on your response...</span>
-		</div>
-	);
-}
-
 export function ChatWindow() {
 	const { session, isPending } = useSessionContext();
 	const {
@@ -75,6 +61,7 @@ export function ChatWindow() {
 		[sendMessage, clearError],
 	);
 
+	const isBusy = isLoading || isRecovering;
 	const isEmpty = messages.length === 0 && !streamingMessage;
 
 	if (isEmpty) {
@@ -104,7 +91,7 @@ export function ChatWindow() {
 					onSend={handleSend}
 					onStop={stopGeneration}
 					onQueue={queueMessage}
-					isLoading={isLoading}
+					isLoading={isBusy}
 					variant="centered"
 				/>
 			</div>
@@ -122,8 +109,7 @@ export function ChatWindow() {
 					onRemoveQueued={removeQueuedMessage}
 				/>
 			</div>
-			{isRecovering && !isLoading && <RecoveryBanner className="mx-4 mb-2" />}
-			{error && !isRecovering && (
+			{error && !isBusy && (
 				<ErrorBanner
 					message={error}
 					onDismiss={clearError}
@@ -134,7 +120,7 @@ export function ChatWindow() {
 				onSend={handleSend}
 				onStop={stopGeneration}
 				onQueue={queueMessage}
-				isLoading={isLoading}
+				isLoading={isBusy}
 				placeholder="Reply..."
 			/>
 		</div>
