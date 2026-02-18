@@ -25,6 +25,8 @@ export async function POST(
 		return notFound("Chat");
 	}
 
+	let sandboxStopSucceeded = false;
+
 	if (chat.sandboxId) {
 		try {
 			const sandbox = await Sandbox.get({ sandboxId: chat.sandboxId });
@@ -38,7 +40,9 @@ export async function POST(
 				signal: AbortSignal.timeout(5000),
 			}).catch(() => null);
 
-			if (!stopRes || !stopRes.ok) {
+			if (stopRes?.ok) {
+				sandboxStopSucceeded = true;
+			} else {
 				console.warn(
 					`[Stop API] SSE server unresponsive, stopping sandbox chat=${id}`,
 				);
@@ -64,9 +68,22 @@ export async function POST(
 		console.log(`[Stop API] Aborted in-memory session chat=${id}`);
 	}
 
+	const updateData: {
+		isProcessing: boolean;
+		streamToken?: null;
+		persistToken?: null;
+	} = {
+		isProcessing: false,
+	};
+
+	if (!sandboxStopSucceeded) {
+		updateData.streamToken = null;
+		updateData.persistToken = null;
+	}
+
 	await prisma.chat.update({
 		where: { id },
-		data: { isProcessing: false, streamToken: null, persistToken: null },
+		data: updateData,
 	});
 
 	return new Response(null, { status: 204 });

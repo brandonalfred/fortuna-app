@@ -92,6 +92,7 @@ async function consumeSSEEvents(
 		get().handleEvent(event.type, event.data);
 
 		if (event.type === "done") {
+			reader.cancel().catch(() => null);
 			break;
 		}
 

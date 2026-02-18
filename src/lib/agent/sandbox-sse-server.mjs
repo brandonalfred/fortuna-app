@@ -159,8 +159,9 @@ function flushPersistence(options = {}) {
 		clearTimeout(persistTimer);
 		persistTimer = null;
 	}
-	if (persistBatch.length === 0 && !options.turnComplete && !options.isComplete)
+	if (persistBatch.length === 0 && !options.turnComplete && !options.isComplete) {
 		return;
+	}
 
 	const batch = persistBatch;
 	persistBatch = [];
@@ -169,8 +170,8 @@ function flushPersistence(options = {}) {
 		chatId,
 		events: batch,
 		agentSessionId: translator.sessionId,
-		turnComplete: options.turnComplete || false,
-		isComplete: options.isComplete || false,
+		turnComplete: options.turnComplete ?? false,
+		isComplete: options.isComplete ?? false,
 	});
 }
 
@@ -367,7 +368,7 @@ const server = createServer(async (req, res) => {
 
 		if (activeQuery && typeof activeQuery.interrupt === "function") {
 			activeQuery.interrupt();
-			flushPersistence({ turnComplete: true });
+			flushPersistence({ turnComplete: true, isComplete: true });
 			isProcessingTurn = false;
 			translator.reset();
 			console.log("[SSE Server] Query interrupted");
