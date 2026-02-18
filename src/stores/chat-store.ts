@@ -58,7 +58,7 @@ interface ChatActions {
 	handleEvent(type: string, data: unknown): void;
 	publishSegments(): void;
 	markToolsComplete(): void;
-	finalizeStreamingMessage(): void;
+	finalizeStreamingMessage(): boolean;
 	sendMessage(content: string, attachments?: Attachment[]): Promise<void>;
 	stopGeneration(): void;
 	startNewChat(): void;
@@ -70,7 +70,7 @@ export type ChatStore = ChatState & ChatActions;
 
 export interface ChatStoreCallbacks {
 	onChatCreated?: (chatId: string) => void;
-	onStreamComplete?: (chatId: string) => void;
+	onStreamComplete?: (chatId: string, hasContent: boolean) => void;
 	getQueueStore: () => QueueStore;
 }
 
@@ -362,7 +362,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				stopReason: null,
 			});
 
-			if (segments.length === 0) return;
+			if (segments.length === 0) return false;
 
 			const finalizedSegments = segments.map((seg) => {
 				if (seg.type === "thinking" && seg.isComplete === false)
@@ -413,6 +413,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					},
 				],
 			});
+			return true;
 		},
 
 		startNewChat() {
@@ -617,10 +618,10 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						});
 					} else if (receivedDone) {
 						set({ isLoading: false, statusMessage: null });
-						get().finalizeStreamingMessage();
+						const hasContent = get().finalizeStreamingMessage();
 						const completedChatId = get().currentChat?.id;
 						if (completedChatId) {
-							callbacks.onStreamComplete?.(completedChatId);
+							callbacks.onStreamComplete?.(completedChatId, hasContent);
 						}
 					} else {
 						log.warn("Stream ended without done event, entering recovery", {
