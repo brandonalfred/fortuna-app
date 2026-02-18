@@ -134,11 +134,17 @@ async function postPersist(payload) {
 }
 
 function batchForPersistence(event) {
-	persistBatch.push({ type: event.type, data: event.data, seq: eventId });
+	if (event.type === "thinking_delta" || event.type === "init" || event.type === "done") {
+		return;
+	}
+
+	const normalized = event.type === "delta"
+		? { type: "text", data: { content: event.data.text }, seq: eventId }
+		: { type: event.type, data: event.data, seq: eventId };
+	persistBatch.push(normalized);
 
 	const isCritical =
 		event.type === "result" ||
-		event.type === "done" ||
 		event.type === "error";
 
 	if (isCritical || persistBatch.length >= PERSIST_BATCH_SIZE) {

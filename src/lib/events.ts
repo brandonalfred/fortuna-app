@@ -91,9 +91,11 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 				});
 				break;
 			}
-			case "text": {
+			case "text":
+			case "delta": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				const text = data.content ?? "";
+				const text =
+					(data as EventData & { text?: string }).text ?? data.content ?? "";
 				currentContent += text;
 				const lastSegment = currentSegments.at(-1);
 				if (lastSegment?.type === "text") {
@@ -181,8 +183,10 @@ export function rebuildConversationHistory(
 				);
 				break;
 			}
-			case "text": {
-				assistantContent += data.content ?? "";
+			case "text":
+			case "delta": {
+				assistantContent +=
+					(data as EventData & { text?: string }).text ?? data.content ?? "";
 				break;
 			}
 			case "tool_use": {
