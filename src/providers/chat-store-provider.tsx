@@ -71,6 +71,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		if (!chatData) return;
+		if (chatData.isProcessing) return;
 		const state = chatStore.getState();
 		if (state.isLoading || state.streamingMessage || state.isRecovering) return;
 
@@ -101,6 +102,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			currentChat: chatData,
 			messages: chatData.messages || [],
 			sessionId: chatData.sessionId,
+			isFetchingChat: false,
 			isRecovering: true,
 			disconnectedChatId: chatData.id,
 		});
