@@ -54,7 +54,15 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 	const isStreaming = useStore(chatStore, (s) => s.isLoading);
 
-	const { data: chatData, isError } = useChatQuery(chatId, isStreaming);
+	const {
+		data: chatData,
+		isPending,
+		isError,
+	} = useChatQuery(chatId, isStreaming);
+
+	useEffect(() => {
+		chatStore.setState({ isFetchingChat: isPending && !!chatId });
+	}, [isPending, chatId, chatStore]);
 
 	useEffect(() => {
 		queueStore.persist.rehydrate();
@@ -75,10 +83,28 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			messages: shouldSkip ? state.messages : chatData.messages || [],
 			sessionId: chatData.sessionId,
 			disconnectedChatId: null,
+			isFetchingChat: false,
 			error: wasDisconnected ? null : state.error,
 		});
 		queueStore.getState().clear();
 	}, [chatData, chatStore, queueStore]);
+
+	useEffect(() => {
+		if (!chatData?.isProcessing) return;
+		const state = chatStore.getState();
+		if (state.isLoading || state.isRecovering) return;
+
+		log.info("Chat still processing on load, entering recovery", {
+			chatId: chatData.id,
+		});
+		chatStore.setState({
+			currentChat: chatData,
+			messages: chatData.messages || [],
+			sessionId: chatData.sessionId,
+			isRecovering: true,
+			disconnectedChatId: chatData.id,
+		});
+	}, [chatData, chatStore]);
 
 	useEffect(() => {
 		if (isError && chatId) {

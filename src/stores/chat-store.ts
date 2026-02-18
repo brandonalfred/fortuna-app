@@ -47,6 +47,7 @@ interface ChatState {
 	disconnectedChatId: string | null;
 	loadedChatId: string | undefined;
 	isCreatingChat: boolean;
+	isFetchingChat: boolean;
 	isRecovering: boolean;
 	lastEventAt: number;
 	sandboxStreamUrl: string | null;
@@ -179,6 +180,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 		disconnectedChatId: null,
 		loadedChatId: undefined,
 		isCreatingChat: false,
+		isFetchingChat: false,
 		isRecovering: false,
 		lastEventAt: 0,
 		sandboxStreamUrl: null,
