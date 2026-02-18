@@ -274,11 +274,20 @@ export async function POST(req: Request): Promise<Response> {
 			const persistUrl =
 				process.env.BETTER_AUTH_URL || `https://${process.env.VERCEL_URL}`;
 
+			const setupAbortController = new AbortController();
+
 			const setupStream = new ReadableStream({
 				async start(controller) {
 					const sse = createSSEWriter(controller);
 
 					try {
+						sse.send("chat_created", { chatId: chat.id, sessionId });
+
+						const SETUP_TIMEOUT_MS = 120_000;
+						const timeoutHandle = setTimeout(() => {
+							setupAbortController.abort();
+						}, SETUP_TIMEOUT_MS);
+
 						const result = await setupDirectStream({
 							prompt: agentPrompt,
 							workspacePath,
@@ -295,10 +304,13 @@ export async function POST(req: Request): Promise<Response> {
 							initialSequenceNum: existingChat?.lastSequenceNum ?? 0,
 							protectionBypassSecret:
 								process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+							setupAbortController,
 							onStatus: (stage: string, statusMessage: string) => {
 								sse.send("status", { stage, message: statusMessage });
 							},
 						});
+
+						clearTimeout(timeoutHandle);
 
 						sse.send("ready", {
 							chatId: chat.id,
@@ -331,6 +343,7 @@ export async function POST(req: Request): Promise<Response> {
 					}
 				},
 				cancel() {
+					setupAbortController.abort();
 					console.log(
 						`[Chat API] Client disconnected during setup, chat=${chat.id}`,
 					);

@@ -47,7 +47,8 @@ export interface StreamEvent {
 		| "thinking"
 		| "thinking_delta"
 		| "turn_complete"
-		| "status";
+		| "status"
+		| "chat_created";
 	data: unknown;
 }
 

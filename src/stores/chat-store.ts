@@ -506,9 +506,26 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					}
 
 					let streamInfo: SandboxStreamInfo | null = null;
+					let chatAlreadyRouted = false;
 
 					for await (const event of parseSSEStream(setupReader)) {
-						if (event.type === "status") {
+						if (event.type === "chat_created") {
+							const { chatId: newChatId, sessionId: newSessionId } =
+								event.data as ChatInitEvent;
+							set({
+								sessionId: newSessionId,
+								currentChat: buildChatObject(
+									newChatId,
+									newSessionId,
+									currentState.currentChat,
+								),
+								...(isNewChat && { isCreatingChat: true }),
+							});
+							if (isNewChat) {
+								chatAlreadyRouted = true;
+								callbacks.onChatCreated?.(newChatId);
+							}
+						} else if (event.type === "status") {
 							get().handleEvent("status", event.data);
 						} else if (event.type === "ready") {
 							streamInfo = event.data as SandboxStreamInfo;
@@ -526,7 +543,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						streamInfo,
 						abortController,
 						currentState.currentChat,
-						isNewChat,
+						isNewChat && !chatAlreadyRouted,
 						set,
 						get,
 						callbacks,
