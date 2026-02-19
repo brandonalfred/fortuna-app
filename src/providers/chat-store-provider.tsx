@@ -287,6 +287,17 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			data: ChatWithMessages,
 			messages: Message[],
 		): void {
+			const currentError = chatStore.getState().error;
+			if (currentError) {
+				log.warn("Recovery clearing existing error", {
+					chatId: targetChatId,
+					error: currentError,
+				});
+			}
+			log.info("Recovery complete", {
+				chatId: targetChatId,
+				messageCount: messages.length,
+			});
 			chatStore.setState({
 				messages,
 				streamingMessage: null,
@@ -380,7 +391,6 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 						const messages = hydrateMessages(data);
 
 						if (!data.isProcessing) {
-							log.info("Recovery complete", { chatId: targetChatId });
 							finishRecovery(targetChatId, data, messages);
 							return;
 						}

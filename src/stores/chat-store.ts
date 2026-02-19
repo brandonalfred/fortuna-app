@@ -553,7 +553,12 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						} else if (event.type === "ready") {
 							streamInfo = event.data as SandboxStreamInfo;
 						} else if (event.type === "error") {
+							log.error("Setup stream error", {
+								chatId: get().currentChat?.id,
+								error: (event.data as { message?: string })?.message,
+							});
 							get().handleEvent("error", event.data);
+							receivedDone = true;
 							return;
 						}
 					}
@@ -631,6 +636,9 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			} finally {
 				if (!aborted) {
 					if (get().isRecovering) {
+						log.info("Stream cleanup: already recovering", {
+							chatId: get().currentChat?.id,
+						});
 						set({
 							isLoading: false,
 							statusMessage: null,
@@ -639,6 +647,9 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							stopReason: null,
 						});
 					} else if (receivedDone) {
+						log.info("Stream cleanup: normal completion", {
+							chatId: get().currentChat?.id,
+						});
 						set({ isLoading: false, statusMessage: null });
 						const hasContent = get().finalizeStreamingMessage();
 						const completedChatId = get().currentChat?.id;
@@ -646,7 +657,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							callbacks.onStreamComplete?.(completedChatId, hasContent);
 						}
 					} else {
-						log.warn("Stream ended without done event, entering recovery", {
+						log.warn("Stream cleanup: no done event, entering recovery", {
 							chatId: get().currentChat?.id,
 						});
 						set({

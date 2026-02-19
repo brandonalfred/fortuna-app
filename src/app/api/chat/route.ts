@@ -256,8 +256,19 @@ export async function POST(req: Request): Promise<Response> {
 						},
 						{ headers: { "X-Chat-Id": chat.id } },
 					);
-				} catch {
-					console.log("[Chat API] SSE server not available, full setup needed");
+				} catch (error) {
+					console.log(
+						"[Chat API] SSE server not available, full setup needed",
+						{
+							chatId: chat.id,
+							sandboxId: existingChat.sandboxId,
+							error: error instanceof Error ? error.message : String(error),
+						},
+					);
+					await prisma.chat.update({
+						where: { id: chat.id },
+						data: { sandboxId: null, streamToken: null, agentSessionId: null },
+					});
 				}
 			}
 
