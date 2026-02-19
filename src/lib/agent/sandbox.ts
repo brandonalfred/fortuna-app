@@ -134,6 +134,7 @@ export async function getOrCreateSandbox(
 	if (chat?.sandboxId) {
 		try {
 			const existing = await Sandbox.get({ sandboxId: chat.sandboxId });
+			await existing.runCommand({ cmd: "echo", args: ["ok"] });
 			log.info("Reusing existing sandbox", { sandboxId: chat.sandboxId });
 			return {
 				sandbox: existing,
@@ -142,7 +143,8 @@ export async function getOrCreateSandbox(
 			};
 		} catch (error) {
 			log.info("Existing sandbox expired or unavailable", {
-				error: error instanceof Error ? error.message : String(error),
+				sandboxId: chat.sandboxId,
+				reason: error instanceof Error ? error.message : String(error),
 			});
 		}
 	}

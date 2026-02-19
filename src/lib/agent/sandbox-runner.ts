@@ -464,6 +464,9 @@ export async function setupDirectStream(
 	abortSignal?.addEventListener("abort", cleanupOnAbort, { once: true });
 
 	try {
+		log.info("Cleaning up previous SSE server", {
+			sandboxId: sandbox.sandboxId,
+		});
 		await sandbox.runCommand({
 			cmd: "bash",
 			args: ["-c", "pkill -f sandbox-sse-server || true"],
