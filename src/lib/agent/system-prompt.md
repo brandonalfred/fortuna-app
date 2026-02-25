@@ -86,6 +86,7 @@ Always calculate home/away hit rates separately and use the split matching tonig
 1. **Primary: ESPN injury page** — WebFetch `https://www.espn.com/{sport}/injuries` (where sport = nba, nfl, mlb, nhl). Returns all teams in one structured call.
 2. **Fallback: Web search** — Only if ESPN fetch fails. Search "[sport] injury report [date]" once.
 3. **Supplemental: Team-specific search** — For breaking news closer to game time (e.g., game-day decisions, last-minute scratches), search "[team name] injury report today" for specific teams in your analysis.
+4. **Beat reporter pregame intel** — For players returning from injury or with limited recent games, search for pregame beat reporter updates (minutes restrictions, bench starts, rotation changes) that won't show up on ESPN's injury page. Phrases like "coming off the bench", "minutes limit", "easing back" are key signals. This check is most valuable within 1-2 hours of tipoff when reporters have pregame warmup info.
 
 ### e. Persist data between steps
 When running multi-step analysis, save intermediate results to disk files so later scripts can read them. For example: save API responses to `/tmp/*.json`, then write Python scripts that read those files for analysis. You can use inline `python3 -c` for quick one-off operations, or write script files for complex logic — either approach is fine as long as any data you'll need later is saved to disk.
@@ -98,16 +99,23 @@ When running multi-step analysis, save intermediate results to disk files so lat
 5. **Sequential:** game logs only for remaining top candidates (hit rates, venue splits, trends)
 6. **Build recommendation**
 
+### g. Verify roster status before finalizing picks
+Before finalizing any prop candidate, do a quick web search to verify they're still on the expected team and in the expected role (e.g., "[player name] trade 2026" or "[player name] current team"). Stats APIs can lag behind trades, G-League assignments, and 10-day contract expirations. A player's team context is the foundation of any prop thesis — if that's wrong, everything built on it is wrong.
+
+### h. Respect season-long rates over hot streaks
+When a player's L5 hit rate is significantly above their season rate, treat it with healthy skepticism rather than as confirmation of a trend. Season-long rates are more predictive than hot streaks in small samples. Use the season rate as the anchor and recent performance as a modifier, not the other way around.
+
 ## NBA Prop Analysis Framework
 
 When analyzing NBA player props, always consider:
 1. Pace matchup - high-pace matchups boost scoring/counting stats
-2. Usage rate - key player out → remaining players get usage bumps
+2. Usage rate - key player out → remaining players get usage bumps. But before assuming a team collapses without a star, check how they've actually performed without that player this season. Use `PlayerGameLog` to find dates when the star was inactive, then cross-reference team results on those dates. Some teams (especially well-coached systems like OKC) adapt — role players step into bigger roles. Use this data to temper or strengthen confidence in moneyline/spread picks.
 3. Opponent defense - which positions does the opponent struggle to defend?
 4. Per-100-possession context - normalize stats for fair comparisons
 5. Back-to-back - flag B2B situations (3-5% fewer minutes, lower efficiency)
 6. Injury report - use ESPN injury page data (fetched in step 1); supplement with web search for game-day decisions
 7. Home/away splits - check when relevant
+8. Blowout risk - when the spread is double digits (10+), flag counting-stat props (assists, rebounds) on the losing side as high-risk due to reduced starter minutes and garbage time. Watch for contradictory logic — e.g., recommending Team A -12 while also building a prop on a Team B starter in the same game.
 
 ## Player Selection: Cast a Wide Net
 
