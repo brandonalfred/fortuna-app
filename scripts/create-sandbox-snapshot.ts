@@ -26,7 +26,7 @@ async function createSnapshot(): Promise<void> {
 	console.log("Creating sandbox...");
 	const sandbox = await Sandbox.create({
 		runtime: "node22",
-		resources: { vcpus: 4 },
+		resources: { vcpus: 2 },
 		timeout: ms("45m"),
 		...(token && teamId && projectId ? { token, teamId, projectId } : {}),
 	});
@@ -43,18 +43,14 @@ async function createSnapshot(): Promise<void> {
 		args: ["install", "@anthropic-ai/claude-agent-sdk", "@anthropic-ai/sdk"],
 	});
 
-	await runStep(
-		sandbox,
-		"Installing Python 3, pip, and system tools",
-		{
-			cmd: "bash",
-			args: [
-				"-c",
-				"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
-			],
-			sudo: true,
-		},
-	);
+	await runStep(sandbox, "Installing Python 3, pip, and system tools", {
+		cmd: "bash",
+		args: [
+			"-c",
+			"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
+		],
+		sudo: true,
+	});
 
 	await runStep(sandbox, "Installing Python packages", {
 		cmd: "bash",
