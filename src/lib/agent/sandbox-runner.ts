@@ -21,6 +21,10 @@ import {
 
 const log = createLogger("SandboxRunner");
 
+function formatError(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
 function buildContentBlocksIfNeeded(
 	prompt: string,
 	attachments?: Attachment[],
@@ -63,11 +67,10 @@ function generateAgentScript(opts: AgentScriptOptions): string {
 		? `        resume: ${JSON.stringify(opts.agentSessionId)},`
 		: "";
 
-	const envKeys = Object.keys(opts.envVars ?? {});
-	const envSetup =
-		envKeys.length > 0
-			? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
-			: "";
+	const hasEnvVars = opts.envVars && Object.keys(opts.envVars).length > 0;
+	const envSetup = hasEnvVars
+		? `\nObject.assign(process.env, ${JSON.stringify(opts.envVars)});\n`
+		: "";
 
 	const contentBlocks = buildContentBlocksIfNeeded(
 		opts.fullPrompt,
@@ -241,6 +244,7 @@ const AGENT_ENV_KEYS = ["ODDS_API_KEY", "API_SPORTS_KEY", "WEBSHARE_PROXY_URL"];
 
 interface ResolvedSandbox {
 	sandbox: Sandbox;
+	sandboxReused: boolean;
 	canResume: boolean;
 	effectiveSessionId: string | undefined;
 }
@@ -262,6 +266,7 @@ async function resolveSandbox(
 
 	return {
 		sandbox,
+		sandboxReused,
 		canResume,
 		effectiveSessionId: canResume ? previousAgentSessionId! : undefined,
 	};
@@ -363,9 +368,7 @@ export async function* streamViaSandbox({
 		sandbox.extendTimeout(SANDBOX_TIMEOUT).catch((err: unknown) => {
 			log.warn(
 				"Failed to extend timeout, will create fresh sandbox next request",
-				{
-					error: err instanceof Error ? err.message : String(err),
-				},
+				{ error: formatError(err) },
 			);
 			clearSandboxRefs(chatId).catch((dbErr) =>
 				log.error(
@@ -438,10 +441,16 @@ export async function setupDirectStream(
 
 	log.info("Setting up direct stream", { chatId });
 
-	const { sandbox, canResume, effectiveSessionId } = await resolveSandbox(
-		chatId,
-		onStatus,
-	);
+	const { sandbox, sandboxReused, canResume, effectiveSessionId } =
+		await resolveSandbox(chatId, onStatus);
+
+	if (sandboxReused) {
+		sandbox.extendTimeout(SANDBOX_TIMEOUT).catch((err: unknown) => {
+			log.warn("Failed to extend sandbox timeout on reuse", {
+				error: formatError(err),
+			});
+		});
+	}
 
 	const abortSignal = setupAbortController?.signal;
 
@@ -575,6 +584,12 @@ export async function sendMessageToSSE(options: {
 	if (!res.ok) {
 		throw new Error(`SSE server /message failed: ${res.status}`);
 	}
+
+	sandbox.extendTimeout(SANDBOX_TIMEOUT).catch((err: unknown) => {
+		log.warn("Failed to extend sandbox timeout", {
+			error: formatError(err),
+		});
+	});
 
 	return { streamUrl };
 }
