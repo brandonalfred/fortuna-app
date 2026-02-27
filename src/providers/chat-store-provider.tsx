@@ -303,6 +303,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 				streamingMessage: null,
 				streamingSegments: [],
 				currentChat: data,
+				isLoading: false,
 				isRecovering: false,
 				disconnectedChatId: null,
 				error: null,
@@ -314,6 +315,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 		function abortRecovery(error?: string): void {
 			chatStore.setState({
+				isLoading: false,
 				isRecovering: false,
 				disconnectedChatId: null,
 				error: error ?? null,
