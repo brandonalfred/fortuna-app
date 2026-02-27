@@ -152,7 +152,25 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 			return;
 		}
 
-		state.abortController?.abort();
+		// If navigating away from an active stream, clean up properly.
+		// Preserve partial content by finalizing before clearing state.
+		if (state.abortController) {
+			const wasStreaming = state.isLoading || state.isRecovering;
+			state.abortController.abort();
+
+			if (wasStreaming) {
+				state.finalizeStreamingMessage();
+				chatStore.setState({
+					isLoading: false,
+					isRecovering: false,
+					statusMessage: null,
+					streamingSegments: [],
+					streamingMessage: null,
+					abortController: null,
+					disconnectedChatId: null,
+				});
+			}
+		}
 
 		if (chatId) {
 			if (state.loadedChatId === chatId) return;
@@ -165,22 +183,34 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		let dequeueing = false;
+		let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 		const unsubChat = chatStore.subscribe((state, prevState) => {
 			if (
 				(prevState.isLoading && !state.isLoading) ||
 				(prevState.isRecovering && !state.isRecovering)
 			) {
-				processQueue();
+				// Small delay after stream completion to let the server clean up
+				// before sending the next queued message. Prevents 409 conflicts.
+				scheduleProcessQueue(1_000);
 			}
 		});
 
 		const unsubQueue = queueStore.subscribe(() => {
 			const chatState = chatStore.getState();
 			if (!chatState.isLoading) {
-				processQueue();
+				scheduleProcessQueue(0);
 			}
 		});
+
+		function scheduleProcessQueue(delayMs: number) {
+			if (retryTimer) clearTimeout(retryTimer);
+			if (delayMs === 0) {
+				processQueue();
+			} else {
+				retryTimer = setTimeout(processQueue, delayMs);
+			}
+		}
 
 		async function processQueue() {
 			if (dequeueing) return;
@@ -203,6 +233,7 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		return () => {
 			unsubChat();
 			unsubQueue();
+			if (retryTimer) clearTimeout(retryTimer);
 		};
 	}, [chatStore, queueStore]);
 

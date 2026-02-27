@@ -511,7 +511,20 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						return;
 					}
 					if (response.status === 409) {
-						set({ error: "A response is already in progress." });
+						// Server is still processing the previous turn. Re-enqueue
+						// the message so the queue processor retries after a delay.
+						// Remove the optimistic user message we already added so it
+						// doesn't appear twice when the retry succeeds.
+						log.warn("409 conflict — re-enqueuing message", {
+							chatId: get().currentChat?.id,
+						});
+						set({
+							messages: get().messages.filter((m) => m.id !== userMessage.id),
+							streamingMessage: null,
+							streamingSegments: [],
+						});
+						callbacks.getQueueStore().enqueue(content, attachments);
+						receivedDone = true; // Prevent finally from entering recovery
 						return;
 					}
 					throw new Error("Failed to send message");
@@ -697,6 +710,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				isRecovering: false,
 				sandboxStreamUrl: null,
 				sandboxStreamToken: null,
+				stopReason: { stopReason: "user_stopped", subtype: "user_stopped" },
 			});
 			callbacks.getQueueStore().clear();
 			get().finalizeStreamingMessage();

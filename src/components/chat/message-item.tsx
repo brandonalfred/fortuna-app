@@ -400,6 +400,11 @@ const STOP_NOTICE_CONFIG: Record<
 		message: "An error occurred during analysis.",
 		variant: "error",
 	},
+	user_stopped: {
+		icon: Ban,
+		message: "You stopped the response.",
+		variant: "info",
+	},
 };
 
 const VARIANT_CLASSES = {
