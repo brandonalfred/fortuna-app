@@ -73,6 +73,20 @@ interface SystemAgentMessage {
 	};
 }
 
+function logCacheMetrics(msg: Record<string, unknown>): void {
+	const usage = "usage" in msg ? (msg.usage as Record<string, number>) : null;
+	const cacheRead = usage?.cache_read_input_tokens ?? 0;
+	const cacheCreation = usage?.cache_creation_input_tokens ?? 0;
+	const inputTokens = usage?.input_tokens ?? 0;
+	const totalInput = cacheRead + cacheCreation + inputTokens;
+	const cacheHitRate =
+		totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : "0.0";
+
+	console.log(
+		`[Chat API] Cache metrics: read=${cacheRead} creation=${cacheCreation} input=${inputTokens} hit_rate=${cacheHitRate}%`,
+	);
+}
+
 function createSSEWriter(
 	controller: ReadableStreamDefaultController,
 ): SSEWriter {
@@ -635,9 +649,11 @@ export async function POST(req: Request): Promise<Response> {
 								if (msg.session_id) {
 									capturedSessionId = msg.session_id;
 								}
+
 								console.log(
 									`[Chat API] Result subtype=${msg.subtype} stop_reason=${resultStopReason}`,
 								);
+								logCacheMetrics(msg as unknown as Record<string, unknown>);
 								sse.send("result", {
 									subtype: msg.subtype,
 									stop_reason: resultStopReason,

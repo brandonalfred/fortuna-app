@@ -11,10 +11,10 @@
     "lint:check": "biome check src/",
     "lint:prisma": "bunx prisma-lint",
     "type-check": "tsc --noEmit",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && node scripts/patch-agent-sdk.js"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.50",
+    "@anthropic-ai/claude-agent-sdk": "0.2.62",
     "@aws-sdk/client-s3": "3.998.0",
     "@aws-sdk/s3-request-presigner": "3.998.0",
     "@neondatabase/serverless": "^1.0.2",
