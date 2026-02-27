@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins";
 import { prisma } from "@/lib/prisma";
 import {
 	PASSWORD_MAX_LENGTH,
@@ -50,7 +51,13 @@ export const auth = betterAuth({
 			}
 		}),
 	},
-	plugins: [nextCookies()],
+	plugins: [
+		nextCookies(),
+		admin({
+			defaultRole: "user",
+			adminRoles: ["admin"],
+		}),
+	],
 });
 
 export type Session = typeof auth.$Infer.Session;

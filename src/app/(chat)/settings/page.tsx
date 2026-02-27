@@ -1,6 +1,12 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, LogOut, User } from "lucide-react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	LayoutDashboard,
+	LogOut,
+	User,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/client";
@@ -79,6 +85,27 @@ export default function SettingsPage() {
 						</div>
 						<ChevronRight className="h-4 w-4 text-text-tertiary" />
 					</button>
+
+					{user.role === "admin" && (
+						<button
+							type="button"
+							onClick={() => router.push("/admin")}
+							className="flex w-full items-center gap-3 rounded-lg bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
+						>
+							<div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-muted">
+								<LayoutDashboard className="h-4 w-4 text-accent-primary" />
+							</div>
+							<div className="flex-1 text-left">
+								<p className="text-sm font-medium text-text-primary">
+									Internal Tools
+								</p>
+								<p className="text-xs text-text-tertiary">
+									User management & admin
+								</p>
+							</div>
+							<ChevronRight className="h-4 w-4 text-text-tertiary" />
+						</button>
+					)}
 
 					<button
 						type="button"
