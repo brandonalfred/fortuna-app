@@ -10,6 +10,7 @@ import {
 	Sheet,
 	SheetClose,
 	SheetContent,
+	SheetDescription,
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { SessionProvider } from "@/lib/auth/session-context";
@@ -46,6 +47,9 @@ export default function ChatLayout({ children }: ChatLayoutProps) {
 							<Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
 								<SheetContent side="left" className="w-60 p-0 lg:hidden">
 									<SheetTitle className="sr-only">Chat history</SheetTitle>
+									<SheetDescription className="sr-only">
+										Browse and switch between your conversations
+									</SheetDescription>
 									<div className="flex h-14 items-center justify-between border-b border-border-subtle px-3">
 										<BrandLogo className="text-lg" />
 										<SheetClose className="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary">
