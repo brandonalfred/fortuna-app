@@ -634,42 +634,51 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				set({ error: errorMessage });
 				callbacks.getQueueStore().clear();
 			} finally {
-				if (!aborted) {
+				if (aborted) {
+					// The abort may have come from the visibility-change recovery
+					// handler rather than the user clicking stop. In that case
+					// stopGeneration() won't run, so clear isLoading here to
+					// prevent the submit button from getting stuck.
 					if (get().isRecovering) {
-						log.info("Stream cleanup: already recovering", {
-							chatId: get().currentChat?.id,
-						});
-						set({
-							isLoading: false,
-							statusMessage: null,
-							streamingSegments: [],
-							streamingMessage: null,
-							stopReason: null,
-						});
-					} else if (receivedDone) {
-						log.info("Stream cleanup: normal completion", {
+						log.info("Stream cleanup: aborted into recovery", {
 							chatId: get().currentChat?.id,
 						});
 						set({ isLoading: false, statusMessage: null });
-						const hasContent = get().finalizeStreamingMessage();
-						const completedChatId = get().currentChat?.id;
-						if (completedChatId) {
-							callbacks.onStreamComplete?.(completedChatId, hasContent);
-						}
-					} else {
-						log.warn("Stream cleanup: no done event, entering recovery", {
-							chatId: get().currentChat?.id,
-						});
-						set({
-							isLoading: false,
-							statusMessage: null,
-							streamingSegments: [],
-							streamingMessage: null,
-							stopReason: null,
-							isRecovering: true,
-							disconnectedChatId: get().currentChat?.id ?? null,
-						});
 					}
+				} else if (get().isRecovering) {
+					log.info("Stream cleanup: already recovering", {
+						chatId: get().currentChat?.id,
+					});
+					set({
+						isLoading: false,
+						statusMessage: null,
+						streamingSegments: [],
+						streamingMessage: null,
+						stopReason: null,
+					});
+				} else if (receivedDone) {
+					log.info("Stream cleanup: normal completion", {
+						chatId: get().currentChat?.id,
+					});
+					set({ isLoading: false, statusMessage: null });
+					const hasContent = get().finalizeStreamingMessage();
+					const completedChatId = get().currentChat?.id;
+					if (completedChatId) {
+						callbacks.onStreamComplete?.(completedChatId, hasContent);
+					}
+				} else {
+					log.warn("Stream cleanup: no done event, entering recovery", {
+						chatId: get().currentChat?.id,
+					});
+					set({
+						isLoading: false,
+						statusMessage: null,
+						streamingSegments: [],
+						streamingMessage: null,
+						stopReason: null,
+						isRecovering: true,
+						disconnectedChatId: get().currentChat?.id ?? null,
+					});
 				}
 			}
 		},
