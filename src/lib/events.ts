@@ -7,6 +7,7 @@ import type {
 	ConversationToolUse,
 	Message,
 	SubAgent,
+	SubAgentUsage,
 	ToolUse,
 } from "@/lib/types";
 
@@ -20,6 +21,12 @@ interface EventData {
 	stopReason?: string;
 	subtype?: string;
 	attachments?: Attachment[];
+	text?: string;
+	taskId?: string;
+	description?: string;
+	status?: string;
+	summary?: string;
+	usage?: SubAgentUsage;
 }
 
 function appendWithSeparator(existing: string, addition: string): string {
@@ -95,8 +102,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			case "text":
 			case "delta": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				const text =
-					(data as EventData & { text?: string }).text ?? data.content ?? "";
+				const text = data.text ?? data.content ?? "";
 				currentContent += text;
 				const lastSegment = currentSegments.at(-1);
 				if (lastSegment?.type === "text") {
@@ -108,7 +114,6 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "tool_use": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				// Skip Task tool from UI — SubAgentCard handles its display
 				if (data.name === "Task") break;
 				const tool: ToolUse = {
 					name: data.name ?? "",
@@ -133,9 +138,8 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			case "subagent_start": {
 				lastAssistantCreatedAt ??= event.createdAt;
 				const agent: SubAgent = {
-					taskId: (data as EventData & { taskId?: string }).taskId ?? "",
-					description:
-						(data as EventData & { description?: string }).description ?? "",
+					taskId: data.taskId ?? "",
+					description: data.description ?? "",
 					status: "running",
 				};
 				const lastSeg = currentSegments.at(-1);
@@ -151,31 +155,13 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "subagent_complete": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				const {
-					taskId: completeTaskId,
-					status: completeStatus,
-					summary: completeSummary,
-					usage: completeUsage,
-				} = data as EventData & {
-					taskId?: string;
-					status?: string;
-					summary?: string;
-					usage?: {
-						total_tokens: number;
-						tool_uses: number;
-						duration_ms: number;
-					};
-				};
 				for (const seg of currentSegments) {
 					if (seg.type !== "subagent_group") continue;
-					const agent = seg.agents.find(
-						(a: SubAgent) => a.taskId === completeTaskId,
-					);
+					const agent = seg.agents.find((a) => a.taskId === data.taskId);
 					if (agent) {
-						agent.status =
-							completeStatus === "completed" ? "complete" : "stopped";
-						agent.summary = completeSummary;
-						agent.usage = completeUsage;
+						agent.status = data.status === "completed" ? "complete" : "stopped";
+						agent.summary = data.summary;
+						agent.usage = data.usage;
 						break;
 					}
 				}
@@ -239,8 +225,7 @@ export function rebuildConversationHistory(
 			}
 			case "text":
 			case "delta": {
-				assistantContent +=
-					(data as EventData & { text?: string }).text ?? data.content ?? "";
+				assistantContent += data.text ?? data.content ?? "";
 				break;
 			}
 			case "tool_use": {

@@ -143,7 +143,6 @@ export class SDKEventTranslator {
 						this._lastEventWasToolUse = true;
 						const { id: toolUseId, name, input } = block;
 						this._toolUses.push({ toolUseId, name, input });
-						// Suppress Task tool from SSE — SubAgentCard handles UI via subagent_start
 						if (name !== "Task") {
 							events.push({
 								type: "tool_use",

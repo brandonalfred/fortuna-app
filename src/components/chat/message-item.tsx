@@ -435,6 +435,18 @@ function StopNoticeBanner({ stopReason, subtype }: StopNoticeBannerProps) {
 	);
 }
 
+function SubAgentStatusIcon({ status }: { status: SubAgent["status"] }) {
+	if (status === "running") {
+		return (
+			<span className="h-1.5 w-1.5 rounded-full bg-accent-primary animate-pulse shrink-0" />
+		);
+	}
+	if (status === "complete") {
+		return <Check className="h-3 w-3 text-accent-primary shrink-0" />;
+	}
+	return <AlertTriangle className="h-3 w-3 text-warning shrink-0" />;
+}
+
 function SubAgentCard({ agent }: { agent: SubAgent }) {
 	const [showSummary, setShowSummary] = useState(false);
 	const isRunning = agent.status === "running";
@@ -452,13 +464,7 @@ function SubAgentCard({ agent }: { agent: SubAgent }) {
 						: "cursor-pointer hover:text-text-secondary",
 				)}
 			>
-				{isRunning ? (
-					<span className="h-1.5 w-1.5 rounded-full bg-accent-primary animate-pulse shrink-0" />
-				) : agent.status === "complete" ? (
-					<Check className="h-3 w-3 text-accent-primary shrink-0" />
-				) : (
-					<AlertTriangle className="h-3 w-3 text-warning shrink-0" />
-				)}
+				<SubAgentStatusIcon status={agent.status} />
 				<span className="text-text-muted">{agent.description}</span>
 				{!isRunning && agent.summary && (
 					<Chevron className="h-3 w-3 text-text-muted shrink-0" />
@@ -547,11 +553,7 @@ const SegmentRenderer = memo(function SegmentRenderer({
 				/>
 			);
 		case "subagent_group":
-			return (
-				<div className="my-2">
-					<SubAgentGroup agents={segment.agents} />
-				</div>
-			);
+			return <SubAgentGroup agents={segment.agents} />;
 		default:
 			return null;
 	}

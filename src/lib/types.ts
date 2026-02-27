@@ -30,12 +30,18 @@ export interface ToolUse {
 	status?: "pending" | "running" | "complete" | "interrupted";
 }
 
+export interface SubAgentUsage {
+	total_tokens: number;
+	tool_uses: number;
+	duration_ms: number;
+}
+
 export interface SubAgent {
 	taskId: string;
 	description: string;
 	status: "running" | "complete" | "failed" | "stopped";
 	summary?: string;
-	usage?: { total_tokens: number; tool_uses: number; duration_ms: number };
+	usage?: SubAgentUsage;
 }
 
 export type ContentSegment =
@@ -117,7 +123,7 @@ export interface SubAgentCompleteEvent {
 	taskId: string;
 	status: "completed" | "failed" | "stopped";
 	summary: string;
-	usage?: { total_tokens: number; tool_uses: number; duration_ms: number };
+	usage?: SubAgentUsage;
 }
 
 export interface StreamingMessage {
