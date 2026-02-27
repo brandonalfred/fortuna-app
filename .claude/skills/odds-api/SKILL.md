@@ -27,7 +27,7 @@ The API rate limit is 30 requests per second. To avoid 429 errors:
 
 - **Combine markets in a single request** — use `markets=h2h,spreads,totals` instead of separate requests per market. Same applies to regions.
 - **Cache `/sports` and `/events` responses** — these don't change often. Reuse results within a session instead of re-fetching.
-- **Space sequential requests** — when looping through multiple events, add a brief pause between calls rather than firing them all at once.
+- **Parallelize per-event calls** — use background processes (`&` and `wait`) to fetch multiple events concurrently. The 30 req/sec limit easily handles a full night's slate. Only add pauses if fetching 30+ events.
 - **Reduce frequency for empty results** — if a sport is off-season or no events are listed, don't keep polling.
 - **Retry on 429** — if you get a 429 status code, wait 2-3 seconds and retry. Do not retry immediately.
 
@@ -106,6 +106,59 @@ The API rate limit is 30 requests per second. To avoid 429 errors:
 ### Player Props
 
 > **Player prop markets must be queried via the per-event endpoint (`/events/{id}/odds`), not the sport-level endpoint (`/odds`).** The sport-level endpoint returns `INVALID_MARKET` for player props. Always fetch the events list first, then loop through event IDs to get props.
+
+#### ⚡ Bulk Player Props — Recommended Pattern
+
+**Batch multiple prop markets in a single call per event.** Instead of separate requests for each market, combine them:
+
+```bash
+# ❌ SLOW: 4 separate calls per event (4 HTTP round-trips)
+curl -s "...events/${EID}/odds?markets=player_points&..."
+curl -s "...events/${EID}/odds?markets=player_rebounds&..."
+curl -s "...events/${EID}/odds?markets=player_assists&..."
+curl -s "...events/${EID}/odds?markets=player_threes&..."
+
+# ✅ FAST: 1 call per event, all markets combined (same quota cost)
+curl -s "...events/${EID}/odds?markets=player_points,player_rebounds,player_assists,player_threes&..."
+```
+
+The quota cost is identical (1 credit per market per region either way), but you make 1 HTTP call instead of 4.
+
+**Fetch all events in parallel.** Use background processes to fetch every game's props concurrently:
+
+```bash
+ODDS_API_KEY=$(grep '^ODDS_API_KEY=' /vercel/sandbox/.agent-env | cut -d'=' -f2-)
+SPORT="basketball_nba"
+MARKETS="player_points,player_rebounds,player_assists,player_threes"
+BOOKS="fanduel,draftkings"
+
+# Step 1: Get event IDs (free — 0 quota)
+EVENTS=$(curl -s "https://api.the-odds-api.com/v4/sports/${SPORT}/events/?apiKey=${ODDS_API_KEY}&commenceTimeFrom=${FROM}&commenceTimeTo=${TO}" | jq -r '.[].id')
+
+# Step 2: Fetch all events' props in parallel
+for eid in $EVENTS; do
+  curl -s "https://api.the-odds-api.com/v4/sports/${SPORT}/events/${eid}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=${MARKETS}&oddsFormat=american&bookmakers=${BOOKS}" \
+    -o "/tmp/props_${eid}.json" &
+done
+wait
+
+# Step 3: Read all results
+for eid in $EVENTS; do
+  cat "/tmp/props_${eid}.json"
+done
+```
+
+**Performance:** This fetches a full NBA slate (5 games × 4 prop markets × 2 books) in ~300ms total instead of making 20+ sequential calls over several minutes.
+
+**Also fetch game odds (spreads/totals) in the same parallel burst** for blowout risk analysis:
+
+```bash
+# Add this alongside the props fetch (runs concurrently)
+curl -s "https://api.the-odds-api.com/v4/sports/${SPORT}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=${BOOKS}" \
+  -o "/tmp/game_odds.json" &
+```
+
+This pattern should be the **default approach** whenever fetching player props for analysis. Always batch markets and parallelize event calls.
 
 | Market | Description |
 |--------|-------------|
