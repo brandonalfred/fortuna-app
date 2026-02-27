@@ -3,6 +3,7 @@
 import {
 	AlertTriangle,
 	Ban,
+	Check,
 	ChevronDown,
 	ChevronRight,
 	Clock,
@@ -11,12 +12,18 @@ import {
 	X,
 } from "lucide-react";
 import Image from "next/image";
-import { memo, type ReactNode, useMemo, useState } from "react";
+import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageLightbox } from "@/components/chat/image-lightbox";
 import { getFileIcon } from "@/components/chat/upload-preview";
-import type { Attachment, ContentSegment, Message, ToolUse } from "@/lib/types";
+import type {
+	Attachment,
+	ContentSegment,
+	Message,
+	SubAgent,
+	ToolUse,
+} from "@/lib/types";
 import { cn, formatFileSize } from "@/lib/utils";
 import { IMAGE_MIME_TYPES } from "@/lib/validations/chat";
 
@@ -433,6 +440,95 @@ function StopNoticeBanner({ stopReason, subtype }: StopNoticeBannerProps) {
 	);
 }
 
+function SubAgentStatusIcon({ status }: { status: SubAgent["status"] }) {
+	if (status === "running") {
+		return (
+			<span className="h-1.5 w-1.5 rounded-full bg-accent-primary animate-pulse shrink-0" />
+		);
+	}
+	if (status === "complete") {
+		return <Check className="h-3 w-3 text-accent-primary shrink-0" />;
+	}
+	return <AlertTriangle className="h-3 w-3 text-warning shrink-0" />;
+}
+
+function SubAgentCard({ agent }: { agent: SubAgent }) {
+	const [showSummary, setShowSummary] = useState(false);
+	const isRunning = agent.status === "running";
+	const Chevron = showSummary ? ChevronDown : ChevronRight;
+
+	return (
+		<div className="ml-3 my-1 border-l-2 border-border-subtle pl-3">
+			<button
+				type="button"
+				onClick={() => !isRunning && setShowSummary(!showSummary)}
+				className={cn(
+					"flex items-center gap-2 text-xs font-mono transition-colors",
+					isRunning
+						? "cursor-default"
+						: "cursor-pointer hover:text-text-secondary",
+				)}
+			>
+				<SubAgentStatusIcon status={agent.status} />
+				<span className="text-text-muted">{agent.description}</span>
+				{!isRunning && agent.summary && (
+					<Chevron className="h-3 w-3 text-text-muted shrink-0" />
+				)}
+			</button>
+			{showSummary && agent.summary && (
+				<p className="mt-1 ml-5 text-xs text-text-secondary whitespace-pre-wrap break-words">
+					{truncate(agent.summary, 300)}
+				</p>
+			)}
+		</div>
+	);
+}
+
+function SubAgentGroup({ agents }: { agents: SubAgent[] }) {
+	const allDone = agents.every((a) => a.status !== "running");
+	const [expanded, setExpanded] = useState(true);
+	const [userToggled, setUserToggled] = useState(false);
+
+	useEffect(() => {
+		if (allDone && !userToggled) setExpanded(false);
+	}, [allDone, userToggled]);
+
+	const toggle = () => {
+		setUserToggled(true);
+		setExpanded((e) => !e);
+	};
+
+	const Chevron = expanded ? ChevronDown : ChevronRight;
+	const runningCount = agents.filter((a) => a.status === "running").length;
+
+	return (
+		<div className="my-2">
+			<button
+				type="button"
+				onClick={toggle}
+				className="flex items-center gap-1.5 text-xs font-mono text-text-muted transition-colors hover:text-text-secondary cursor-pointer"
+			>
+				<Chevron className="h-3.5 w-3.5 shrink-0" />
+				<span>
+					{allDone
+						? `Ran ${agents.length} agent${agents.length > 1 ? "s" : ""}`
+						: `Running ${runningCount} agent${runningCount > 1 ? "s" : ""}...`}
+				</span>
+				{!allDone && (
+					<Loader2 className="h-3 w-3 animate-spin text-accent-primary" />
+				)}
+			</button>
+			{expanded && (
+				<div className="mt-1">
+					{agents.map((agent) => (
+						<SubAgentCard key={agent.taskId} agent={agent} />
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
 interface SegmentRendererProps {
 	segment: ContentSegment;
 }
@@ -461,6 +557,8 @@ const SegmentRenderer = memo(function SegmentRenderer({
 					subtype={segment.subtype}
 				/>
 			);
+		case "subagent_group":
+			return <SubAgentGroup agents={segment.agents} />;
 		default:
 			return null;
 	}

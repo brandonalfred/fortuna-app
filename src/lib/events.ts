@@ -6,6 +6,8 @@ import type {
 	ConversationToolResult,
 	ConversationToolUse,
 	Message,
+	SubAgent,
+	SubAgentUsage,
 	ToolUse,
 } from "@/lib/types";
 
@@ -19,6 +21,12 @@ interface EventData {
 	stopReason?: string;
 	subtype?: string;
 	attachments?: Attachment[];
+	text?: string;
+	taskId?: string;
+	description?: string;
+	status?: string;
+	summary?: string;
+	usage?: SubAgentUsage;
 }
 
 function appendWithSeparator(existing: string, addition: string): string {
@@ -94,8 +102,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			case "text":
 			case "delta": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				const text =
-					(data as EventData & { text?: string }).text ?? data.content ?? "";
+				const text = data.text ?? data.content ?? "";
 				currentContent += text;
 				const lastSegment = currentSegments.at(-1);
 				if (lastSegment?.type === "text") {
@@ -107,6 +114,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "tool_use": {
 				lastAssistantCreatedAt ??= event.createdAt;
+				if (data.name === "Task") break;
 				const tool: ToolUse = {
 					name: data.name ?? "",
 					input: data.input,
@@ -124,6 +132,38 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 						stopReason: data.stopReason,
 						subtype: data.subtype,
 					});
+				}
+				break;
+			}
+			case "subagent_start": {
+				lastAssistantCreatedAt ??= event.createdAt;
+				const agent: SubAgent = {
+					taskId: data.taskId ?? "",
+					description: data.description ?? "",
+					status: "running",
+				};
+				const lastSeg = currentSegments.at(-1);
+				if (lastSeg?.type === "subagent_group") {
+					lastSeg.agents.push(agent);
+				} else {
+					currentSegments.push({
+						type: "subagent_group",
+						agents: [agent],
+					});
+				}
+				break;
+			}
+			case "subagent_complete": {
+				lastAssistantCreatedAt ??= event.createdAt;
+				for (const seg of currentSegments) {
+					if (seg.type !== "subagent_group") continue;
+					const agent = seg.agents.find((a) => a.taskId === data.taskId);
+					if (agent) {
+						agent.status = data.status === "completed" ? "complete" : "stopped";
+						agent.summary = data.summary;
+						agent.usage = data.usage;
+						break;
+					}
 				}
 				break;
 			}
@@ -185,8 +225,7 @@ export function rebuildConversationHistory(
 			}
 			case "text":
 			case "delta": {
-				assistantContent +=
-					(data as EventData & { text?: string }).text ?? data.content ?? "";
+				assistantContent += data.text ?? data.content ?? "";
 				break;
 			}
 			case "tool_use": {
@@ -209,6 +248,8 @@ export function rebuildConversationHistory(
 			}
 			case "turn_complete":
 			case "result":
+			case "subagent_start":
+			case "subagent_complete":
 				break;
 		}
 	}

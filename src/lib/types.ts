@@ -30,11 +30,26 @@ export interface ToolUse {
 	status?: "pending" | "running" | "complete" | "interrupted";
 }
 
+export interface SubAgentUsage {
+	total_tokens: number;
+	tool_uses: number;
+	duration_ms: number;
+}
+
+export interface SubAgent {
+	taskId: string;
+	description: string;
+	status: "running" | "complete" | "failed" | "stopped";
+	summary?: string;
+	usage?: SubAgentUsage;
+}
+
 export type ContentSegment =
 	| { type: "text"; text: string }
 	| { type: "tool_use"; tool: ToolUse }
 	| { type: "thinking"; thinking: string; isComplete?: boolean }
-	| { type: "stop_notice"; stopReason: string; subtype?: string };
+	| { type: "stop_notice"; stopReason: string; subtype?: string }
+	| { type: "subagent_group"; agents: SubAgent[] };
 
 export interface StreamEvent {
 	type:
@@ -48,7 +63,9 @@ export interface StreamEvent {
 		| "thinking_delta"
 		| "turn_complete"
 		| "status"
-		| "chat_created";
+		| "chat_created"
+		| "subagent_start"
+		| "subagent_complete";
 	data: unknown;
 }
 
@@ -94,6 +111,19 @@ export interface DoneEvent {
 
 export interface ErrorEvent {
 	message: string;
+}
+
+export interface SubAgentStartEvent {
+	taskId: string;
+	description: string;
+	taskType?: string;
+}
+
+export interface SubAgentCompleteEvent {
+	taskId: string;
+	status: "completed" | "failed" | "stopped";
+	summary: string;
+	usage?: SubAgentUsage;
 }
 
 export interface StreamingMessage {

@@ -15,6 +15,7 @@ export const AGENT_ALLOWED_TOOLS = [
 	"WebSearch",
 	"WebFetch",
 	"Skill",
+	"Task",
 ];
 
 function formatCurrentDate(timezone: string): string {

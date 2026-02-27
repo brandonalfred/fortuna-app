@@ -58,6 +58,21 @@ interface SSEWriter {
 	isDisconnected(): boolean;
 }
 
+interface SystemAgentMessage {
+	type: "system";
+	subtype?: string;
+	task_id?: string;
+	description?: string;
+	task_type?: string;
+	status?: string;
+	summary?: string;
+	usage?: {
+		total_tokens: number;
+		tool_uses: number;
+		duration_ms: number;
+	};
+}
+
 function createSSEWriter(
 	controller: ReadableStreamDefaultController,
 ): SSEWriter {
@@ -549,13 +564,15 @@ export async function POST(req: Request): Promise<Response> {
 										lastEventWasToolUse = true;
 										const { id: toolUseId, name, input } = block;
 										toolUses.push({ name, input });
-										sse.send("tool_use", { name, input });
 										if (eventBuffer) {
 											eventBuffer.appendEvent("tool_use", {
 												toolUseId,
 												name,
 												input,
 											} as Prisma.InputJsonValue);
+										}
+										if (name !== "Task") {
+											sse.send("tool_use", { name, input });
 										}
 									}
 								}
@@ -651,6 +668,39 @@ export async function POST(req: Request): Promise<Response> {
 									content: text,
 									isError: extractIsError(msg.message.content),
 								} as Prisma.InputJsonValue);
+								break;
+							}
+							case "system": {
+								const sysMsg = msg as SystemAgentMessage;
+								let eventName: string | null = null;
+								let payload: Record<string, unknown> | null = null;
+
+								if (sysMsg.subtype === "task_started") {
+									eventName = "subagent_start";
+									payload = {
+										taskId: sysMsg.task_id,
+										description: sysMsg.description,
+										taskType: sysMsg.task_type,
+									};
+								} else if (sysMsg.subtype === "task_notification") {
+									eventName = "subagent_complete";
+									payload = {
+										taskId: sysMsg.task_id,
+										status: sysMsg.status,
+										summary: sysMsg.summary,
+										usage: sysMsg.usage,
+									};
+								}
+
+								if (eventName && payload) {
+									sse.send(eventName, payload);
+									if (eventBuffer) {
+										eventBuffer.appendEvent(
+											eventName,
+											payload as Prisma.InputJsonValue,
+										);
+									}
+								}
 								break;
 							}
 						}
