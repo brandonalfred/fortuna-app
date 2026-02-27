@@ -6,6 +6,7 @@ import type {
 	ConversationToolResult,
 	ConversationToolUse,
 	Message,
+	SubAgent,
 	ToolUse,
 } from "@/lib/types";
 
@@ -107,6 +108,8 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "tool_use": {
 				lastAssistantCreatedAt ??= event.createdAt;
+				// Skip Task tool from UI — SubAgentCard handles its display
+				if (data.name === "Task") break;
 				const tool: ToolUse = {
 					name: data.name ?? "",
 					input: data.input,
@@ -124,6 +127,57 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 						stopReason: data.stopReason,
 						subtype: data.subtype,
 					});
+				}
+				break;
+			}
+			case "subagent_start": {
+				lastAssistantCreatedAt ??= event.createdAt;
+				const agent: SubAgent = {
+					taskId: (data as EventData & { taskId?: string }).taskId ?? "",
+					description:
+						(data as EventData & { description?: string }).description ?? "",
+					status: "running",
+				};
+				const lastSeg = currentSegments.at(-1);
+				if (lastSeg?.type === "subagent_group") {
+					lastSeg.agents.push(agent);
+				} else {
+					currentSegments.push({
+						type: "subagent_group",
+						agents: [agent],
+					});
+				}
+				break;
+			}
+			case "subagent_complete": {
+				lastAssistantCreatedAt ??= event.createdAt;
+				const {
+					taskId: completeTaskId,
+					status: completeStatus,
+					summary: completeSummary,
+					usage: completeUsage,
+				} = data as EventData & {
+					taskId?: string;
+					status?: string;
+					summary?: string;
+					usage?: {
+						total_tokens: number;
+						tool_uses: number;
+						duration_ms: number;
+					};
+				};
+				for (const seg of currentSegments) {
+					if (seg.type !== "subagent_group") continue;
+					const agent = seg.agents.find(
+						(a: SubAgent) => a.taskId === completeTaskId,
+					);
+					if (agent) {
+						agent.status =
+							completeStatus === "completed" ? "complete" : "stopped";
+						agent.summary = completeSummary;
+						agent.usage = completeUsage;
+						break;
+					}
 				}
 				break;
 			}
@@ -209,6 +263,8 @@ export function rebuildConversationHistory(
 			}
 			case "turn_complete":
 			case "result":
+			case "subagent_start":
+			case "subagent_complete":
 				break;
 		}
 	}

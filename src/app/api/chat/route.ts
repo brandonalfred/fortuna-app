@@ -549,13 +549,17 @@ export async function POST(req: Request): Promise<Response> {
 										lastEventWasToolUse = true;
 										const { id: toolUseId, name, input } = block;
 										toolUses.push({ name, input });
-										sse.send("tool_use", { name, input });
+										// Persist all tool_use events (including Task) for conversation history integrity
 										if (eventBuffer) {
 											eventBuffer.appendEvent("tool_use", {
 												toolUseId,
 												name,
 												input,
 											} as Prisma.InputJsonValue);
+										}
+										// Suppress Task tool from SSE — SubAgentCard handles UI via subagent_start
+										if (name !== "Task") {
+											sse.send("tool_use", { name, input });
 										}
 									}
 								}
@@ -651,6 +655,52 @@ export async function POST(req: Request): Promise<Response> {
 									content: text,
 									isError: extractIsError(msg.message.content),
 								} as Prisma.InputJsonValue);
+								break;
+							}
+							case "system": {
+								const sysMsg = msg as {
+									type: "system";
+									subtype?: string;
+									task_id?: string;
+									description?: string;
+									task_type?: string;
+									status?: string;
+									summary?: string;
+									usage?: {
+										total_tokens: number;
+										tool_uses: number;
+										duration_ms: number;
+									};
+								};
+								if (sysMsg.subtype === "task_started") {
+									sse.send("subagent_start", {
+										taskId: sysMsg.task_id,
+										description: sysMsg.description,
+										taskType: sysMsg.task_type,
+									});
+									if (eventBuffer) {
+										eventBuffer.appendEvent("subagent_start", {
+											taskId: sysMsg.task_id,
+											description: sysMsg.description,
+											taskType: sysMsg.task_type,
+										} as Prisma.InputJsonValue);
+									}
+								} else if (sysMsg.subtype === "task_notification") {
+									sse.send("subagent_complete", {
+										taskId: sysMsg.task_id,
+										status: sysMsg.status,
+										summary: sysMsg.summary,
+										usage: sysMsg.usage,
+									});
+									if (eventBuffer) {
+										eventBuffer.appendEvent("subagent_complete", {
+											taskId: sysMsg.task_id,
+											status: sysMsg.status,
+											summary: sysMsg.summary,
+											usage: sysMsg.usage,
+										} as Prisma.InputJsonValue);
+									}
+								}
 								break;
 							}
 						}

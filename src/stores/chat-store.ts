@@ -13,6 +13,9 @@ import type {
 	ResultEvent,
 	StatusEvent,
 	StreamingMessage,
+	SubAgent,
+	SubAgentCompleteEvent,
+	SubAgentStartEvent,
 	ThinkingDeltaEvent,
 	ThinkingEvent,
 	ToolUseEvent,
@@ -371,6 +374,59 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					set({ statusMessage: null, error: errorData.message });
 					break;
 				}
+				case "subagent_start": {
+					const { taskId, description } = data as SubAgentStartEvent;
+					const segments = [...state.streamingSegments];
+					const lastSeg = segments[segments.length - 1];
+
+					const newAgent: SubAgent = {
+						taskId,
+						description,
+						status: "running",
+					};
+
+					if (lastSeg?.type === "subagent_group") {
+						segments[segments.length - 1] = {
+							...lastSeg,
+							agents: [...lastSeg.agents, newAgent],
+						};
+					} else {
+						segments.push({
+							type: "subagent_group",
+							agents: [newAgent],
+						});
+					}
+					set({ streamingSegments: segments });
+					get().publishSegments();
+					break;
+				}
+				case "subagent_complete": {
+					const {
+						taskId,
+						status: agentStatus,
+						summary,
+						usage,
+					} = data as SubAgentCompleteEvent;
+					const mappedStatus =
+						agentStatus === "completed" ? "complete" : agentStatus;
+					const segments = state.streamingSegments.map((seg) => {
+						if (seg.type !== "subagent_group") return seg;
+						const agents = seg.agents.map((a) =>
+							a.taskId === taskId
+								? {
+										...a,
+										status: mappedStatus as SubAgent["status"],
+										summary,
+										usage,
+									}
+								: a,
+						);
+						return { ...seg, agents };
+					});
+					set({ streamingSegments: segments });
+					get().publishSegments();
+					break;
+				}
 			}
 		},
 
@@ -394,6 +450,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						...seg,
 						tool: { ...seg.tool, status: "interrupted" as const },
 					};
+				if (seg.type === "subagent_group") {
+					return {
+						...seg,
+						agents: seg.agents.map((a) =>
+							a.status === "running" ? { ...a, status: "stopped" as const } : a,
+						),
+					};
+				}
 				return seg;
 			});
 

@@ -143,11 +143,37 @@ export class SDKEventTranslator {
 						this._lastEventWasToolUse = true;
 						const { id: toolUseId, name, input } = block;
 						this._toolUses.push({ toolUseId, name, input });
-						events.push({
-							type: "tool_use",
-							data: { toolUseId, name, input },
-						});
+						// Suppress Task tool from SSE — SubAgentCard handles UI via subagent_start
+						if (name !== "Task") {
+							events.push({
+								type: "tool_use",
+								data: { toolUseId, name, input },
+							});
+						}
 					}
+				}
+				break;
+			}
+			case "system": {
+				if (msg.subtype === "task_started") {
+					events.push({
+						type: "subagent_start",
+						data: {
+							taskId: msg.task_id,
+							description: msg.description,
+							taskType: msg.task_type,
+						},
+					});
+				} else if (msg.subtype === "task_notification") {
+					events.push({
+						type: "subagent_complete",
+						data: {
+							taskId: msg.task_id,
+							status: msg.status,
+							summary: msg.summary,
+							usage: msg.usage,
+						},
+					});
 				}
 				break;
 			}
