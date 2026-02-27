@@ -81,6 +81,21 @@ export async function POST(
 		updateData.persistToken = null;
 	}
 
+	// Mark the last assistant message with a user_stopped reason so the
+	// stop notice persists across page reloads.
+	const lastAssistantMessage = await prisma.message.findFirst({
+		where: { chatId: id, role: "assistant" },
+		orderBy: { createdAt: "desc" },
+		select: { id: true, stopReason: true },
+	});
+
+	if (lastAssistantMessage && !lastAssistantMessage.stopReason) {
+		await prisma.message.update({
+			where: { id: lastAssistantMessage.id },
+			data: { stopReason: "user_stopped" },
+		});
+	}
+
 	await prisma.chat.update({
 		where: { id },
 		data: updateData,
