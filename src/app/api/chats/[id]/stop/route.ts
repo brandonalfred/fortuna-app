@@ -81,19 +81,42 @@ export async function POST(
 		updateData.persistToken = null;
 	}
 
-	// Mark the last assistant message with a user_stopped reason so the
-	// stop notice persists across page reloads.
-	const lastAssistantMessage = await prisma.message.findFirst({
-		where: { chatId: id, role: "assistant" },
-		orderBy: { createdAt: "desc" },
-		select: { id: true, stopReason: true },
-	});
-
-	if (lastAssistantMessage && !lastAssistantMessage.stopReason) {
-		await prisma.message.update({
-			where: { id: lastAssistantMessage.id },
-			data: { stopReason: "user_stopped" },
+	// Append a result event with user_stopped so the stop notice renders
+	// when the chat is loaded from persisted events.
+	if (chat.storageVersion === 2) {
+		const lastEvent = await prisma.chatEvent.findFirst({
+			where: { chatId: id },
+			orderBy: { sequenceNum: "desc" },
+			select: { sequenceNum: true },
 		});
+
+		const nextSeq = (lastEvent?.sequenceNum ?? 0) + 1;
+		await prisma.chatEvent.create({
+			data: {
+				chatId: id,
+				type: "result",
+				data: { stopReason: "user_stopped", subtype: "user_stopped" },
+				sequenceNum: nextSeq,
+			},
+		});
+		await prisma.chat.update({
+			where: { id },
+			data: { lastSequenceNum: nextSeq },
+		});
+	} else {
+		// Legacy v1: update the message directly
+		const lastAssistantMessage = await prisma.message.findFirst({
+			where: { chatId: id, role: "assistant" },
+			orderBy: { createdAt: "desc" },
+			select: { id: true, stopReason: true },
+		});
+
+		if (lastAssistantMessage && !lastAssistantMessage.stopReason) {
+			await prisma.message.update({
+				where: { id: lastAssistantMessage.id },
+				data: { stopReason: "user_stopped" },
+			});
+		}
 	}
 
 	await prisma.chat.update({
