@@ -85,8 +85,25 @@ export function MessageList({
 		const hasNewMessages = messages.length > prevMessagesLengthRef.current;
 		const wasJustStreaming = prevStreamingRef.current;
 
-		if (hasNewMessages && !wasJustStreaming) {
-			if (lastMessageRole === "assistant" && lastUserMessageRef.current) {
+		if (hasNewMessages) {
+			if (wasJustStreaming) {
+				// Stream just ended (normal completion or recovery). In the normal
+				// case the user is already at the bottom and this is a no-op. After
+				// a tab switch the user may have fallen behind — catch up instantly.
+				const container = scrollContainerRef.current;
+				if (container) {
+					const distanceFromBottom =
+						container.scrollHeight -
+						container.scrollTop -
+						container.clientHeight;
+					if (distanceFromBottom >= SCROLL_THRESHOLD) {
+						bottomRef.current?.scrollIntoView({ behavior: "instant" });
+					}
+				}
+			} else if (
+				lastMessageRole === "assistant" &&
+				lastUserMessageRef.current
+			) {
 				lastUserMessageRef.current.scrollIntoView({
 					behavior: "smooth",
 					block: "start",
@@ -117,6 +134,28 @@ export function MessageList({
 		streamingMessage?.isStreaming,
 		isNearBottom,
 	]);
+
+	// Re-sync scroll position when the tab returns to the foreground.
+	// While the tab is hidden, content grows but scroll position is frozen,
+	// causing isNearBottom to drift to false and disabling auto-scroll.
+	useEffect(() => {
+		function handleVisibilityChange() {
+			if (document.visibilityState !== "visible") return;
+			if (!streamingMessage?.isStreaming) return;
+			if (streamingMessage.segments.length === 0) return;
+
+			// Reset tracking state so auto-scroll resumes naturally
+			setIsNearBottom(true);
+			userScrollingRef.current = false;
+			requestAnimationFrame(() => {
+				bottomRef.current?.scrollIntoView({ behavior: "instant" });
+			});
+		}
+
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () =>
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+	}, [streamingMessage?.isStreaming, streamingMessage?.segments.length]);
 
 	return (
 		<div
