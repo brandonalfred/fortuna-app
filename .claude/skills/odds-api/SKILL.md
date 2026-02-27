@@ -132,7 +132,10 @@ SPORT="basketball_nba"
 MARKETS="player_points,player_rebounds,player_assists,player_threes"
 BOOKS="fanduel,draftkings"
 
-# Step 1: Get event IDs (free — 0 quota)
+# Step 1: Get event IDs for target date range (free — 0 quota)
+# Set FROM/TO to the date range you want, e.g. tomorrow's games:
+FROM=$(date -u -d '+1 day' '+%Y-%m-%dT00:00:00Z')
+TO=$(date -u -d '+1 day' '+%Y-%m-%dT23:59:59Z')
 EVENTS=$(curl -s "https://api.the-odds-api.com/v4/sports/${SPORT}/events/?apiKey=${ODDS_API_KEY}&commenceTimeFrom=${FROM}&commenceTimeTo=${TO}" | jq -r '.[].id')
 
 # Step 2: Fetch all events' props in parallel
