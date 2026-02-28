@@ -179,7 +179,7 @@ When analyzing NBA player props, always consider:
    print(f"Normal games ({len(normal_games)} gm): {normal_games['MIN'].mean():.1f} min, {normal_games[STAT].mean():.1f} {STAT}")
    ```
 
-   - If the player's stat average in blowout wins/losses is significantly below their overall average and tonight's spread projects a blowout, apply a **minutes-reduction multiplier of 15-25%** to projected stats. If the adjusted projection no longer clears the line comfortably (by 1+ unit), downgrade confidence or remove the pick.
+   - If the player's stat average in blowout wins/losses is significantly below their overall average and tonight's spread projects a blowout, **reduce projected minutes by 15-25%** (i.e., calculate at 75-85% of normal) and recalculate stats. If the adjusted projection no longer clears the line comfortably (by 1+ unit), downgrade confidence or remove the pick.
    - **Blowouts that start early (Q1/Q2) are worse than late blowouts.** A 20-point halftime lead means reduced intensity across Q2-Q4, not just Q4. Factor in the opponent's quality — a decimated roster (3+ starters out) dramatically increases the probability of an early blowout.
 
 9. **Rebound pool compression** — Rebounds are blowout-**resistant**, NOT blowout-**proof**. When a team is projected for high shooting efficiency (strong favorite at home, weak opponent defense), the total available rebounds shrink because fewer shots are missed. This affects ALL rebounders on the efficient team, even those playing full minutes.
