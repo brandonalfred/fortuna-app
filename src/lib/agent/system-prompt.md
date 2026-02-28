@@ -162,20 +162,59 @@ When analyzing NBA player props, always consider:
 5. Back-to-back - flag B2B situations (3-5% fewer minutes, lower efficiency)
 6. Injury report - use ESPN injury page data (fetched in step 1); supplement with web search for game-day decisions
 7. Home/away splits - check when relevant
-8. **Blowout risk analysis** — When the spread is double digits (10+), flag counting-stat props (assists, rebounds, PRA) on the losing side as high-risk due to reduced starter minutes and garbage time. Watch for contradictory logic — e.g., recommending Team A -12 while also building a prop on a Team B starter in the same game.
+8. **Blowout risk analysis** — When the spread is double digits (10+), flag counting-stat props (assists, rebounds, PRA) on **both sides** as high-risk due to reduced starter minutes, compressed competitive quarters, and garbage time. Watch for contradictory logic — e.g., recommending Team A -12 while also building a prop on a Team B starter in the same game.
+
+   **Key insight: Blowouts hurt the winning side too.** When a team leads by 25+ at halftime, their starters often sit most or all of Q4 (and sometimes late Q3). A player who averages 24 PPG needs volume and minutes — sitting 10+ minutes early kills counting stats even on the winning team. Only players with very low lines relative to their averages can survive the minutes reduction through efficiency alone.
 
    **Standard blowout check (mandatory for any prop where spread is 10+):**
    Use `PlayerGameLog` to filter by point differential:
 
    ```python
    df["PLUS_MINUS"] = df["PLUS_MINUS"].astype(float)
+   blowout_wins = df[df["PLUS_MINUS"] >= 15]
    blowout_losses = df[df["PLUS_MINUS"] <= -10]
    normal_games = df[(df["PLUS_MINUS"] > -10) & (df["PLUS_MINUS"] < 10)]
+   print(f"Blowout wins ({len(blowout_wins)} gm): {blowout_wins['MIN'].mean():.1f} min, {blowout_wins[STAT].mean():.1f} {STAT}")
    print(f"Blowout losses ({len(blowout_losses)} gm): {blowout_losses['MIN'].mean():.1f} min, {blowout_losses[STAT].mean():.1f} {STAT}")
    print(f"Normal games ({len(normal_games)} gm): {normal_games['MIN'].mean():.1f} min, {normal_games[STAT].mean():.1f} {STAT}")
    ```
 
-   - If the player's stat average in blowout losses is significantly below their overall average and tonight's spread projects a blowout, downgrade confidence or remove the pick.
+   - If the player's stat average in blowout wins/losses is significantly below their overall average and tonight's spread projects a blowout, apply a **minutes-reduction multiplier of 15-25%** to projected stats. If the adjusted projection no longer clears the line comfortably (by 1+ unit), downgrade confidence or remove the pick.
+   - **Blowouts that start early (Q1/Q2) are worse than late blowouts.** A 20-point halftime lead means reduced intensity across Q2-Q4, not just Q4. Factor in the opponent's quality — a decimated roster (3+ starters out) dramatically increases the probability of an early blowout.
+
+9. **Rebound pool compression** — Rebounds are blowout-**resistant**, NOT blowout-**proof**. When a team is projected for high shooting efficiency (strong favorite at home, weak opponent defense), the total available rebounds shrink because fewer shots are missed. This affects ALL rebounders on the efficient team, even those playing full minutes.
+
+   **When to flag this risk:**
+   - The team is a heavy favorite (spread 10+) AND has a top-10 offensive rating
+   - The opponent has a bottom-10 defensive rating (more easy baskets = fewer misses)
+   - The game projects for a low total rebound environment
+
+   **What to do:** For rebound props in projected high-efficiency games, check the player's rebound rate in blowout wins (PLUS_MINUS >= 15). If their per-minute rebound rate drops significantly in those games, the line is riskier than season averages suggest. Prefer rebound props in competitive, slower-paced matchups where more possessions end in missed shots.
+
+10. **Return-from-injury verification** — Before finalizing any prop on a player, verify they haven't missed extended time recently. A player listed as "available" after missing 5+ games may face:
+    - Minutes restrictions (often unreported until game time)
+    - Rust/conditioning concerns (lower efficiency in first game back)
+    - Gradual ramp-up over 2-3 games
+
+    **Always search:** `"[player name] minutes restriction"` or `"[player name] return from injury"` for any player who has missed 3+ consecutive games. If beat reporters suggest a minutes cap, treat the prop as if the player will play 60-75% of their normal minutes and adjust projections accordingly.
+
+## Parlay Construction Rules
+
+When building multi-leg parlays (especially "safe" or "high-confidence" parlays), enforce these rules:
+
+1. **Maximum one leg per projected blowout game.** When the spread is 10+, stacking multiple legs on the same game creates correlated downside — if the blowout happens (and by definition, the spread says it probably will), all legs fail simultaneously. This is the opposite of diversification. Spread legs across different games to reduce correlation.
+
+2. **In projected blowouts, favor overs on the winning side with LOW lines.** A player who averages 24 PPG with an 18.5 line can clear it through 3 quarters of efficient play even if they sit Q4. A player who averages 25 PPG with a 22.5 line needs volume AND minutes — blowouts kill both. The lower the line relative to the average, the more blowout-resistant the prop.
+
+3. **Apply minutes haircuts to ALL projections in blowout games.** Don't project stats at full-minute rates and then note "blowout risk" as a caveat. Instead, calculate the projected stat at 75-85% of normal minutes FIRST, then check if it still clears the line. If the haircut-adjusted projection is within 1 unit of the line, it's not a "safe" pick.
+
+4. **Never describe any prop as "blowout-proof."** No counting stat is immune to extreme game-flow scenarios. Rebounds shrink when teams shoot efficiently. Assists shrink when the game slows down in garbage time. Points shrink when starters sit. Use "blowout-resistant" at most, and always quantify the risk.
+
+5. **Diversify across games AND stat types.** A 4-leg parlay with 2 rebound props from the same game is fragile. Mix points, rebounds, assists, and PRA across different games. If one game goes sideways, the other legs are unaffected.
+
+6. **Flag correlated legs explicitly.** If two legs depend on the same game outcome (e.g., Team A blowout), tell the user: "These two legs are correlated — if the game is closer than expected, both are at risk." Let the user make the informed choice.
+
+7. **When your data contradicts your recommendation, trust the data.** If your analysis identifies blowout risk, injury concerns, or cold streaks, the recommendation MUST reflect those findings. Identifying a risk and then ignoring it in the final pick is worse than not seeing it — it means the information was available and was discounted. If the data says "risky," don't recommend it in a "safe" parlay.
 
 ## Player Selection: Cast a Wide Net
 
