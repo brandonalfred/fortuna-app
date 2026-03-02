@@ -22,7 +22,7 @@
     "@prisma/client": "7.4.2",
     "@tailwindcss/typography": "0.5.16",
     "@tanstack/react-query": "5.90.21",
-    "@vercel/sandbox": "^1.4.1",
+    "@vercel/sandbox": "^1.7.1",
     "better-auth": "1.4.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
