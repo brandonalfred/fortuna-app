@@ -12,86 +12,28 @@ import {
 	X,
 } from "lucide-react";
 import Image from "next/image";
-import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
+import { memo, type ReactNode, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageLightbox } from "@/components/chat/image-lightbox";
 import { getFileIcon } from "@/components/chat/upload-preview";
+import {
+	formatToolLabel,
+	getToolLabel,
+	getToolSummary,
+	isInternalTool,
+	truncate,
+} from "@/lib/tool-labels";
 import type {
 	Attachment,
 	ContentSegment,
 	Message,
 	SubAgent,
+	SubAgentToolCall,
 	ToolUse,
 } from "@/lib/types";
 import { cn, formatFileSize } from "@/lib/utils";
 import { IMAGE_MIME_TYPES } from "@/lib/validations/chat";
-
-const TOOL_LABEL_MAP: Record<string, string> = {
-	Skill: "Analyzing",
-	WebSearch: "Researching",
-	WebFetch: "Reading source",
-	Bash: "Running script",
-	Read: "Reading file",
-	Write: "Writing file",
-	Edit: "Editing file",
-	Glob: "Searching files",
-	Grep: "Searching",
-	TodoWrite: "Updating TODOs",
-	TodoRead: "Checking TODOs",
-};
-
-function getToolLabel(name: string): string {
-	return TOOL_LABEL_MAP[name] ?? name;
-}
-
-function truncate(text: string, maxLength = 60): string {
-	if (text.length <= maxLength) return text;
-	return `${text.slice(0, maxLength - 3)}...`;
-}
-
-function getToolSummary(name: string, input: unknown): string | null {
-	if (!input || typeof input !== "object") return null;
-	const obj = input as Record<string, unknown>;
-
-	switch (name) {
-		case "Skill": {
-			const skill = obj.skill as string | undefined;
-			if (skill?.includes("odds")) return "Checking odds data";
-			if (skill?.includes("sport")) return "Pulling player & team stats";
-			return "Running analysis";
-		}
-		case "WebSearch": {
-			const query = obj.query as string | undefined;
-			return query ? truncate(query) : null;
-		}
-		case "WebFetch": {
-			const url = obj.url as string | undefined;
-			if (!url) return null;
-			try {
-				return new URL(url).hostname;
-			} catch {
-				return null;
-			}
-		}
-		case "Bash":
-			return null;
-		case "Read":
-		case "Write":
-		case "Edit": {
-			const filePath = obj.file_path as string | undefined;
-			if (!filePath) return null;
-			return filePath.split("/").pop() ?? null;
-		}
-		case "Grep":
-		case "Glob": {
-			const pattern = obj.pattern as string | undefined;
-			return pattern ?? null;
-		}
-		default:
-			return null;
-	}
-}
 
 interface CollapsibleToolUse extends ToolUse {
 	_groupCount?: number;
@@ -452,21 +394,41 @@ function SubAgentStatusIcon({ status }: { status: SubAgent["status"] }) {
 	return <AlertTriangle className="h-3 w-3 text-warning shrink-0" />;
 }
 
+const MAX_VISIBLE_TOOLS = 8;
+
+function SubAgentToolLine({ tool }: { tool: SubAgentToolCall }) {
+	return (
+		<div className="flex items-center gap-1.5 text-[11px] font-mono text-text-tertiary py-0.5">
+			{tool.status === "complete" ? (
+				<Check className="h-2.5 w-2.5 text-text-tertiary shrink-0" />
+			) : (
+				<span className="h-2 w-2 rounded-full bg-accent-primary animate-pulse shrink-0" />
+			)}
+			<span>{formatToolLabel(tool.name, tool.summary)}</span>
+		</div>
+	);
+}
+
 function SubAgentCard({ agent }: { agent: SubAgent }) {
 	const [showSummary, setShowSummary] = useState(false);
 	const isRunning = agent.status === "running";
+	const hasTools = agent.tools.length > 0;
+	const visibleTools = agent.tools.slice(0, MAX_VISIBLE_TOOLS);
+	const overflowCount = agent.tools.length - MAX_VISIBLE_TOOLS;
 	const Chevron = showSummary ? ChevronDown : ChevronRight;
 
 	return (
 		<div className="ml-3 my-1 border-l-2 border-border-subtle pl-3">
 			<button
 				type="button"
-				onClick={() => !isRunning && setShowSummary(!showSummary)}
+				onClick={() =>
+					!isRunning && agent.summary && setShowSummary(!showSummary)
+				}
 				className={cn(
 					"flex items-center gap-2 text-xs font-mono transition-colors",
-					isRunning
-						? "cursor-default"
-						: "cursor-pointer hover:text-text-secondary",
+					!isRunning && agent.summary
+						? "cursor-pointer hover:text-text-secondary"
+						: "cursor-default",
 				)}
 			>
 				<SubAgentStatusIcon status={agent.status} />
@@ -475,6 +437,23 @@ function SubAgentCard({ agent }: { agent: SubAgent }) {
 					<Chevron className="h-3 w-3 text-text-muted shrink-0" />
 				)}
 			</button>
+			{isRunning && agent.currentToolLabel && (
+				<p className="mt-0.5 ml-5 text-[11px] text-accent-primary font-mono animate-subtle-pulse truncate">
+					{agent.currentToolLabel}
+				</p>
+			)}
+			{hasTools && (
+				<div className="mt-0.5 ml-5">
+					{visibleTools.map((tool, i) => (
+						<SubAgentToolLine key={`${tool.name}-${i}`} tool={tool} />
+					))}
+					{overflowCount > 0 && (
+						<span className="text-[11px] text-text-tertiary font-mono py-0.5">
+							+{overflowCount} more
+						</span>
+					)}
+				</div>
+			)}
 			{showSummary && agent.summary && (
 				<p className="mt-1 ml-5 text-xs text-text-secondary whitespace-pre-wrap break-words">
 					{truncate(agent.summary, 300)}
@@ -486,29 +465,11 @@ function SubAgentCard({ agent }: { agent: SubAgent }) {
 
 function SubAgentGroup({ agents }: { agents: SubAgent[] }) {
 	const allDone = agents.every((a) => a.status !== "running");
-	const [expanded, setExpanded] = useState(true);
-	const [userToggled, setUserToggled] = useState(false);
-
-	useEffect(() => {
-		if (allDone && !userToggled) setExpanded(false);
-	}, [allDone, userToggled]);
-
-	const toggle = () => {
-		setUserToggled(true);
-		setExpanded((e) => !e);
-	};
-
-	const Chevron = expanded ? ChevronDown : ChevronRight;
 	const runningCount = agents.filter((a) => a.status === "running").length;
 
 	return (
 		<div className="my-2">
-			<button
-				type="button"
-				onClick={toggle}
-				className="flex items-center gap-1.5 text-xs font-mono text-text-muted transition-colors hover:text-text-secondary cursor-pointer"
-			>
-				<Chevron className="h-3.5 w-3.5 shrink-0" />
+			<div className="flex items-center gap-1.5 text-xs font-mono text-text-muted">
 				<span>
 					{allDone
 						? `Ran ${agents.length} agent${agents.length > 1 ? "s" : ""}`
@@ -517,14 +478,12 @@ function SubAgentGroup({ agents }: { agents: SubAgent[] }) {
 				{!allDone && (
 					<Loader2 className="h-3 w-3 animate-spin text-accent-primary" />
 				)}
-			</button>
-			{expanded && (
-				<div className="mt-1">
-					{agents.map((agent) => (
-						<SubAgentCard key={agent.taskId} agent={agent} />
-					))}
-				</div>
-			)}
+			</div>
+			<div className="mt-1">
+				{agents.map((agent) => (
+					<SubAgentCard key={agent.taskId} agent={agent} />
+				))}
+			</div>
 		</div>
 	);
 }
@@ -545,6 +504,7 @@ const SegmentRenderer = memo(function SegmentRenderer({
 		case "text":
 			return <Markdown remarkPlugins={REMARK_PLUGINS}>{segment.text}</Markdown>;
 		case "tool_use":
+			if (isInternalTool(segment.tool.name)) return null;
 			return (
 				<div className="my-2">
 					<ToolUsePill tool={segment.tool} />

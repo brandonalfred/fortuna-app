@@ -1,6 +1,11 @@
 import { createStore } from "zustand/vanilla";
 import { createLogger } from "@/lib/logger";
 import { createDeduplicator, parseSSEStream } from "@/lib/sse";
+import {
+	formatToolLabel,
+	getToolSummary,
+	mapAgentStatus,
+} from "@/lib/tool-labels";
 import type {
 	Attachment,
 	Chat,
@@ -16,6 +21,7 @@ import type {
 	SubAgent,
 	SubAgentCompleteEvent,
 	SubAgentStartEvent,
+	SubAgentToolCall,
 	ThinkingDeltaEvent,
 	ThinkingEvent,
 	ToolUse,
@@ -54,6 +60,7 @@ interface ChatState {
 	isFetchingChat: boolean;
 	isRecovering: boolean;
 	lastEventAt: number;
+	activeSubAgentStack: string[];
 }
 
 interface ChatActions {
@@ -191,6 +198,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				streamingSegments: [],
 				streamingMessage: null,
 				stopReason: null,
+				activeSubAgentStack: [],
 			};
 		}
 
@@ -249,19 +257,34 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			isFetchingChat: false,
 			isRecovering: false,
 			lastEventAt: 0,
+			activeSubAgentStack: [],
 
 			markToolsComplete() {
-				const updated = get().streamingSegments.map((segment) =>
-					segment.type === "tool_use"
-						? {
-								...segment,
-								tool: {
-									...segment.tool,
+				const updated = get().streamingSegments.map((segment) => {
+					if (segment.type === "tool_use") {
+						return {
+							...segment,
+							tool: {
+								...segment.tool,
+								status: "complete" as const,
+							},
+						};
+					}
+					if (segment.type === "subagent_group") {
+						return {
+							...segment,
+							agents: segment.agents.map((a) => ({
+								...a,
+								currentToolLabel: undefined,
+								tools: a.tools.map((t) => ({
+									...t,
 									status: "complete" as const,
-								},
-							}
-						: segment,
-				);
+								})),
+							})),
+						};
+					}
+					return segment;
+				});
 				set({ lastEventAt: Date.now(), ...withStreaming(updated) });
 			},
 
@@ -354,22 +377,54 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					}
 					case "tool_use": {
 						const toolData = data as ToolUseEvent;
-						const updated = [
-							...state.streamingSegments,
-							{
-								type: "tool_use" as const,
-								tool: {
-									name: toolData.name,
-									input: toolData.input,
-									status: "running" as const,
+						const stack = state.activeSubAgentStack;
+
+						if (stack.length > 0) {
+							const topId = stack[stack.length - 1];
+							const updated = state.streamingSegments.map((seg) => {
+								if (seg.type !== "subagent_group") return seg;
+								const agents = seg.agents.map((a) => {
+									if (a.taskId !== topId) return a;
+									const toolCall: SubAgentToolCall = {
+										name: toolData.name,
+										summary: getToolSummary(toolData.name, toolData.input),
+										status: "running",
+									};
+									const label = formatToolLabel(
+										toolData.name,
+										toolCall.summary,
+									);
+									return {
+										...a,
+										tools: [...a.tools, toolCall],
+										currentToolLabel: label,
+									};
+								});
+								return { ...seg, agents };
+							});
+							set({
+								lastEventAt: now,
+								statusMessage: null,
+								...withStreaming(updated),
+							});
+						} else {
+							const updated = [
+								...state.streamingSegments,
+								{
+									type: "tool_use" as const,
+									tool: {
+										name: toolData.name,
+										input: toolData.input,
+										status: "running" as const,
+									},
 								},
-							},
-						];
-						set({
-							lastEventAt: now,
-							statusMessage: null,
-							...withStreaming(updated),
-						});
+							];
+							set({
+								lastEventAt: now,
+								statusMessage: null,
+								...withStreaming(updated),
+							});
+						}
 						break;
 					}
 					case "turn_complete": {
@@ -419,6 +474,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							taskId,
 							description,
 							status: "running",
+							tools: [],
 						};
 
 						if (lastSeg?.type === "subagent_group") {
@@ -435,6 +491,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						set({
 							lastEventAt: now,
 							statusMessage: null,
+							activeSubAgentStack: [...state.activeSubAgentStack, taskId],
 							...withStreaming(segments),
 						});
 						break;
@@ -446,8 +503,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							summary,
 							usage,
 						} = data as SubAgentCompleteEvent;
-						const mappedStatus =
-							agentStatus === "completed" ? "complete" : agentStatus;
 
 						const targetIdx = state.streamingSegments.findIndex(
 							(s) =>
@@ -463,9 +518,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							a.taskId === taskId
 								? {
 										...a,
-										status: mappedStatus as SubAgent["status"],
+										status: mapAgentStatus(agentStatus),
 										summary,
 										usage,
+										currentToolLabel: undefined,
+										tools: a.tools.map((t) => ({
+											...t,
+											status: "complete" as const,
+										})),
 									}
 								: a,
 						);
@@ -474,6 +534,9 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 						set({
 							lastEventAt: now,
+							activeSubAgentStack: state.activeSubAgentStack.filter(
+								(id) => id !== taskId,
+							),
 							...withStreaming(segments),
 						});
 						break;
@@ -489,6 +552,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					streamingSegments: [],
 					streamingMessage: null,
 					stopReason: null,
+					activeSubAgentStack: [],
 				});
 
 				if (segments.length === 0) return false;
@@ -556,6 +620,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					messages: [],
 					sessionId: null,
 					streamingMessage: null,
+					activeSubAgentStack: [],
 					isRecovering: false,
 				});
 				callbacks.getQueueStore().clear();
@@ -679,7 +744,11 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							} else if (event.type === "error") {
 								log.error("Setup stream error", {
 									chatId: get().currentChat?.id,
-									error: (event.data as { message?: string })?.message,
+									error: (
+										event.data as {
+											message?: string;
+										}
+									)?.message,
 								});
 								get().handleEvent("error", event.data);
 								receivedDone = true;

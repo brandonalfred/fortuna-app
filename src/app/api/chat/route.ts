@@ -35,6 +35,7 @@ import {
 	isTextMimeType,
 	regenerateAttachmentUrls,
 } from "@/lib/r2";
+import { isInternalTool } from "@/lib/tool-labels";
 import type { Attachment, ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
 
@@ -585,7 +586,7 @@ export async function POST(req: Request): Promise<Response> {
 												input,
 											} as Prisma.InputJsonValue);
 										}
-										if (name !== "Task") {
+										if (!isInternalTool(name)) {
 											sse.send("tool_use", { name, input });
 										}
 									}

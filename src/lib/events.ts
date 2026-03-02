@@ -1,4 +1,10 @@
 import type { ChatEvent } from "@prisma/client";
+import {
+	formatToolLabel,
+	getToolSummary,
+	isInternalTool,
+	mapAgentStatus,
+} from "@/lib/tool-labels";
 import type {
 	Attachment,
 	ContentSegment,
@@ -7,6 +13,7 @@ import type {
 	ConversationToolUse,
 	Message,
 	SubAgent,
+	SubAgentToolCall,
 	SubAgentUsage,
 	ToolUse,
 } from "@/lib/types";
@@ -43,6 +50,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 	let currentTools: ToolUse[] = [];
 	let currentStopReason: string | null = null;
 	let lastAssistantCreatedAt: Date | null = null;
+	const activeSubAgentStack: string[] = [];
 
 	function flushAssistantMessage(chatId: string) {
 		if (
@@ -70,6 +78,18 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 		currentTools = [];
 		currentStopReason = null;
 		lastAssistantCreatedAt = null;
+		activeSubAgentStack.length = 0;
+	}
+
+	function findActiveSubAgent(): SubAgent | undefined {
+		if (activeSubAgentStack.length === 0) return undefined;
+		const topId = activeSubAgentStack[activeSubAgentStack.length - 1];
+		for (const seg of currentSegments) {
+			if (seg.type !== "subagent_group") continue;
+			const agent = seg.agents.find((a) => a.taskId === topId);
+			if (agent) return agent;
+		}
+		return undefined;
 	}
 
 	for (const event of events) {
@@ -114,14 +134,29 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "tool_use": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				if (data.name === "Task") break;
-				const tool: ToolUse = {
-					name: data.name ?? "",
-					input: data.input,
-					status: "complete",
-				};
-				currentTools.push(tool);
-				currentSegments.push({ type: "tool_use", tool });
+				if (data.name && isInternalTool(data.name)) break;
+
+				const activeAgent = findActiveSubAgent();
+				if (activeAgent) {
+					const toolCall: SubAgentToolCall = {
+						name: data.name ?? "",
+						summary: getToolSummary(data.name ?? "", data.input),
+						status: "complete",
+					};
+					activeAgent.tools.push(toolCall);
+					activeAgent.currentToolLabel = formatToolLabel(
+						data.name ?? "",
+						toolCall.summary,
+					);
+				} else {
+					const tool: ToolUse = {
+						name: data.name ?? "",
+						input: data.input,
+						status: "complete",
+					};
+					currentTools.push(tool);
+					currentSegments.push({ type: "tool_use", tool });
+				}
 				break;
 			}
 			case "result": {
@@ -137,10 +172,12 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "subagent_start": {
 				lastAssistantCreatedAt ??= event.createdAt;
+				const taskId = data.taskId ?? "";
 				const agent: SubAgent = {
-					taskId: data.taskId ?? "",
+					taskId,
 					description: data.description ?? "",
 					status: "running",
+					tools: [],
 				};
 				const lastSeg = currentSegments.at(-1);
 				if (lastSeg?.type === "subagent_group") {
@@ -151,20 +188,28 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 						agents: [agent],
 					});
 				}
+				activeSubAgentStack.push(taskId);
 				break;
 			}
 			case "subagent_complete": {
 				lastAssistantCreatedAt ??= event.createdAt;
+				const completedTaskId = data.taskId ?? "";
 				for (const seg of currentSegments) {
 					if (seg.type !== "subagent_group") continue;
-					const agent = seg.agents.find((a) => a.taskId === data.taskId);
+					const agent = seg.agents.find((a) => a.taskId === completedTaskId);
 					if (agent) {
-						agent.status = data.status === "completed" ? "complete" : "stopped";
+						agent.status = mapAgentStatus(data.status ?? "");
 						agent.summary = data.summary;
 						agent.usage = data.usage;
+						agent.currentToolLabel = undefined;
+						for (const t of agent.tools) {
+							t.status = "complete";
+						}
 						break;
 					}
 				}
+				const idx = activeSubAgentStack.indexOf(completedTaskId);
+				if (idx !== -1) activeSubAgentStack.splice(idx, 1);
 				break;
 			}
 			case "tool_result":
