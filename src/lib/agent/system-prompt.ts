@@ -19,14 +19,19 @@ export const AGENT_ALLOWED_TOOLS = [
 ];
 
 function formatCurrentDate(timezone: string): string {
-	const formatter = new Intl.DateTimeFormat("en-US", {
+	const now = new Date();
+	const dateFormatter = new Intl.DateTimeFormat("en-US", {
 		timeZone: timezone,
 		weekday: "long",
 		year: "numeric",
 		month: "long",
 		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+		timeZoneName: "shortGeneric",
 	});
-	return formatter.format(new Date());
+	const ianaLabel = `(${timezone})`;
+	return `${dateFormatter.format(now)} ${ianaLabel}`;
 }
 
 export function collectEnvVars(keys: string[]): Record<string, string> {
@@ -53,7 +58,11 @@ export function getSystemPrompt(
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
 
 	const currentDate = formatCurrentDate(timezone || DEFAULT_TIMEZONE);
-	const dateContext = `\n\nIMPORTANT: Today's date is ${currentDate}. Use this as the reference for "today", "yesterday", "tomorrow", etc.\n`;
+	const dateContext = `\n\nIMPORTANT: The current date and time is ${currentDate}.
+- Use this as the reference for "today", "tonight", "yesterday", "tomorrow", etc.
+- Be aware of whether games have already started or ended based on this time.
+- Derive the current sports season from this date (e.g., NBA 2025-26 regular season).
+`;
 
 	const safeName = userFirstName ? sanitizeName(userFirstName) : "";
 	const userContext = safeName
