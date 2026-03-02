@@ -29,9 +29,9 @@ export const TodoWidget = memo(function TodoWidget({ todos }: TodoWidgetProps) {
 				<span className="text-xs font-mono text-text-secondary">Tasks</span>
 			</div>
 			<ul className="max-h-64 overflow-y-auto p-2 space-y-1">
-				{todos.map((todo, i) => (
+				{todos.map((todo) => (
 					<li
-						key={i}
+						key={todo.content}
 						className="flex items-start gap-2 rounded px-2 py-1.5 text-xs"
 					>
 						<StatusIcon status={todo.status} />
