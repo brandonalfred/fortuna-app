@@ -10,6 +10,7 @@ import { buildFullPrompt } from "./prompt-builder";
 import {
 	clearSandboxRefs,
 	getOrCreateSandbox,
+	logSandboxUsage,
 	SANDBOX_SSE_PORT,
 	SANDBOX_TIMEOUT,
 	type StatusCallback,
@@ -392,6 +393,7 @@ export async function* streamViaSandbox({
 		try {
 			log.info("Stopping sandbox due to error...");
 			await sandbox.stop();
+			logSandboxUsage(sandbox.sandboxId, chatId, "error");
 			await clearSandboxRefs(chatId);
 		} catch (stopError) {
 			log.error("Failed to stop sandbox", stopError);
@@ -475,6 +477,7 @@ export async function setupDirectStream(
 	const cleanupOnAbort = () => {
 		sandbox
 			.stop()
+			.then(() => logSandboxUsage(sandbox.sandboxId, chatId, "abort"))
 			.catch((e: unknown) => log.error("Failed to stop sandbox on abort", e));
 		clearSandboxRefs(chatId).catch((e: unknown) =>
 			log.error("Failed to clear refs on abort", e),
