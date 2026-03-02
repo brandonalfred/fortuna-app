@@ -34,6 +34,7 @@ const {
 	maxThinkingTokens,
 	initialSequenceNum,
 	protectionBypassSecret,
+	agents,
 } = config;
 
 function resolveContent(contentBlocks, textPrompt) {
@@ -238,6 +239,7 @@ async function runAgent() {
 		includePartialMessages: true,
 		maxThinkingTokens: maxThinkingTokens || 10000,
 		...(agentSessionId && { resume: agentSessionId }),
+		...(agents && { agents }),
 	};
 
 	activeQuery = query({

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import type { Sandbox } from "@vercel/sandbox";
 import type { MessageContentBlock } from "./content-blocks";
 
@@ -18,6 +19,7 @@ interface SSEConfig {
 	maxThinkingTokens: number;
 	initialSequenceNum: number;
 	protectionBypassSecret: string | null;
+	agents: Record<string, AgentDefinition> | null;
 }
 
 export async function writeSSEServerFiles(

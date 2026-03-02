@@ -1,4 +1,7 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+	AgentDefinition,
+	SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { Sandbox } from "@vercel/sandbox";
 import { createLogger } from "@/lib/logger";
 import type { Attachment, ConversationMessage } from "@/lib/types";
@@ -16,6 +19,7 @@ import {
 	AGENT_ALLOWED_TOOLS,
 	AGENT_MODEL,
 	collectEnvVars,
+	getAgentDefinitions,
 	getSystemPrompt,
 } from "./system-prompt";
 
@@ -55,6 +59,7 @@ interface AgentScriptOptions {
 	agentSessionId?: string;
 	envVars?: Record<string, string>;
 	attachments?: Attachment[];
+	agents?: Record<string, AgentDefinition>;
 }
 
 function generateAgentScript(opts: AgentScriptOptions): string {
@@ -65,6 +70,9 @@ function generateAgentScript(opts: AgentScriptOptions): string {
 	const toolsLiteral = JSON.stringify(AGENT_ALLOWED_TOOLS);
 	const resumeLine = opts.agentSessionId
 		? `        resume: ${JSON.stringify(opts.agentSessionId)},`
+		: "";
+	const agentsLine = opts.agents
+		? `        agents: ${JSON.stringify(opts.agents)},`
 		: "";
 
 	const hasEnvVars = opts.envVars && Object.keys(opts.envVars).length > 0;
@@ -119,6 +127,7 @@ async function main() {
         includePartialMessages: true,
         maxThinkingTokens: 10000,
 ${resumeLine}
+${agentsLine}
       },
     });
 
@@ -303,6 +312,7 @@ export async function* streamViaSandbox({
 			agentSessionId: effectiveSessionId,
 			envVars,
 			attachments,
+			agents: getAgentDefinitions(timezone, userFirstName),
 		});
 
 		await writeSandboxEnvFiles(sandbox, envVars);
@@ -513,6 +523,7 @@ export async function setupDirectStream(
 			maxThinkingTokens: 10000,
 			initialSequenceNum,
 			protectionBypassSecret: protectionBypassSecret ?? null,
+			agents: getAgentDefinitions(timezone, userFirstName),
 		});
 
 		throwIfAborted();

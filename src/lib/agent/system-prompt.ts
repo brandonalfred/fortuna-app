@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
@@ -49,36 +50,86 @@ function sanitizeName(name: string): string {
 		.slice(0, 50);
 }
 
-export function getSystemPrompt(
-	timezone?: string,
-	userFirstName?: string,
-	userPreferences?: string,
-): string {
-	const promptPath = path.join(process.cwd(), "src/lib/agent/system-prompt.md");
+interface PromptBuildOptions {
+	promptFile: string;
+	timezone?: string;
+	userFirstName?: string;
+	nameGuidance?: string;
+	extraSections?: string[];
+}
+
+function buildPromptFromFile(opts: PromptBuildOptions): string {
+	const promptPath = path.join(process.cwd(), opts.promptFile);
 	const basePrompt = fs.readFileSync(promptPath, "utf-8");
 
-	const currentDate = formatCurrentDate(timezone || DEFAULT_TIMEZONE);
+	const currentDate = formatCurrentDate(opts.timezone || DEFAULT_TIMEZONE);
 	const dateContext = `\n\nIMPORTANT: The current date and time is ${currentDate}.
 - Use this as the reference for "today", "tonight", "yesterday", "tomorrow", etc.
 - Be aware of whether games have already started or ended based on this time.
 - Derive the current sports season from this date (e.g., NBA 2025-26 regular season).
 `;
 
-	const safeName = userFirstName ? sanitizeName(userFirstName) : "";
+	const safeName = opts.userFirstName ? sanitizeName(opts.userFirstName) : "";
 	const userContext = safeName
-		? `\n\nThe user's name is ${safeName}. Use their name naturally and sparingly — in greetings and occasionally when it feels conversational. Don't use it in every message.\n`
+		? `\n\nThe user's name is ${safeName}.${opts.nameGuidance ? ` ${opts.nameGuidance}` : ""}\n`
 		: "";
 
-	const preferencesContext = userPreferences
+	return [basePrompt, dateContext, userContext, ...(opts.extraSections ?? [])]
+		.filter(Boolean)
+		.join("");
+}
+
+export function getSystemPrompt(
+	timezone?: string,
+	userFirstName?: string,
+	userPreferences?: string,
+): string {
+	const preferencesSection = userPreferences
 		? `\n\nUSER PREFERENCES:\nThe user has set the following personal preferences. Respect these throughout every interaction:\n${userPreferences}\n`
 		: "";
 
-	return basePrompt + dateContext + userContext + preferencesContext;
+	return buildPromptFromFile({
+		promptFile: "src/lib/agent/system-prompt.md",
+		timezone,
+		userFirstName,
+		nameGuidance:
+			"Use their name naturally and sparingly — in greetings and occasionally when it feels conversational. Don't use it in every message.",
+		extraSections: preferencesSection ? [preferencesSection] : [],
+	});
 }
 
 export interface SkillFile {
 	name: string;
 	content: string;
+}
+
+function getSubAgentPrompt(timezone?: string, userFirstName?: string): string {
+	return buildPromptFromFile({
+		promptFile: "src/lib/agent/system-prompt-subagent.md",
+		timezone,
+		userFirstName,
+	});
+}
+
+export function getAgentDefinitions(
+	timezone?: string,
+	userFirstName?: string,
+): Record<string, AgentDefinition> {
+	return {
+		"general-purpose": {
+			description:
+				"General-purpose Fortuna sub-agent for parallel research, data fetching, and analysis tasks.",
+			prompt: getSubAgentPrompt(timezone, userFirstName),
+			model: "inherit",
+			disallowedTools: ["Task"],
+			skills: [
+				"odds-api",
+				"odds-api-historical",
+				"nba-advanced-stats",
+				"api-sports",
+			],
+		},
+	};
 }
 
 export function getSkillFiles(): SkillFile[] {
