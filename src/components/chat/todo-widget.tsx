@@ -31,7 +31,7 @@ export const TodoWidget = memo(function TodoWidget({ todos }: TodoWidgetProps) {
 			<ul className="max-h-64 overflow-y-auto p-2 space-y-1">
 				{todos.map((todo, i) => (
 					<li
-						key={`${todo.content}-${i}`}
+						key={i}
 						className="flex items-start gap-2 rounded px-2 py-1.5 text-xs"
 					>
 						<StatusIcon status={todo.status} />
