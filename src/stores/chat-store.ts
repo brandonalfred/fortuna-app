@@ -24,6 +24,7 @@ import type {
 	SubAgentToolCall,
 	ThinkingDeltaEvent,
 	ThinkingEvent,
+	TodoItem,
 	ToolUse,
 	ToolUseEvent,
 } from "@/lib/types";
@@ -54,6 +55,7 @@ interface ChatState {
 	error: string | null;
 	abortController: AbortController | null;
 	stopReason: { stopReason: string; subtype: string } | null;
+	todos: TodoItem[];
 	disconnectedChatId: string | null;
 	loadedChatId: string | undefined;
 	isCreatingChat: boolean;
@@ -198,6 +200,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				streamingSegments: [],
 				streamingMessage: null,
 				stopReason: null,
+				todos: [],
 				activeSubAgentStack: [],
 			};
 		}
@@ -257,6 +260,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			isFetchingChat: false,
 			isRecovering: false,
 			lastEventAt: 0,
+			todos: [],
 			activeSubAgentStack: [],
 
 			markToolsComplete() {
@@ -377,6 +381,19 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					}
 					case "tool_use": {
 						const toolData = data as ToolUseEvent;
+						let todoPatch: Partial<ChatState> = {};
+						if (toolData.name === "TodoWrite") {
+							const input = toolData.input as {
+								todos?: TodoItem[];
+							} | null;
+							if (
+								input?.todos &&
+								Array.isArray(input.todos) &&
+								input.todos.length > 0
+							) {
+								todoPatch = { todos: input.todos };
+							}
+						}
 						const stack = state.activeSubAgentStack;
 
 						if (stack.length > 0) {
@@ -403,6 +420,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 								return { ...seg, agents };
 							});
 							set({
+								...todoPatch,
 								lastEventAt: now,
 								statusMessage: null,
 								...withStreaming(updated),
@@ -420,6 +438,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 								},
 							];
 							set({
+								...todoPatch,
 								lastEventAt: now,
 								statusMessage: null,
 								...withStreaming(updated),
@@ -552,6 +571,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					streamingSegments: [],
 					streamingMessage: null,
 					stopReason: null,
+					todos: [],
 					activeSubAgentStack: [],
 				});
 
@@ -622,6 +642,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					streamingMessage: null,
 					activeSubAgentStack: [],
 					isRecovering: false,
+					todos: [],
 				});
 				callbacks.getQueueStore().clear();
 			},
@@ -827,7 +848,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						log.info("Stream cleanup: aborted into recovery", {
 							chatId: get().currentChat?.id,
 						});
-						set({ isLoading: false, statusMessage: null });
+						set({ isLoading: false, statusMessage: null, todos: [] });
 					} else if (aborted) {
 						// stopGeneration() already handled cleanup
 					} else if (get().isRecovering) {

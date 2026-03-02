@@ -8,6 +8,7 @@ import type { Attachment } from "@/lib/types";
 import { capitalize, cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
+import { TodoWidget } from "./todo-widget";
 
 interface ErrorBannerProps {
 	message: string;
@@ -46,6 +47,7 @@ export function ChatWindow() {
 		isRecovering,
 		statusMessage,
 		messageQueue,
+		todos,
 		error,
 		sendMessage,
 		stopGeneration,
@@ -109,7 +111,7 @@ export function ChatWindow() {
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="flex-1 overflow-hidden">
+			<div className="relative flex-1 overflow-hidden">
 				<MessageList
 					messages={messages}
 					streamingMessage={streamingMessage}
@@ -117,6 +119,7 @@ export function ChatWindow() {
 					messageQueue={messageQueue}
 					onRemoveQueued={removeQueuedMessage}
 				/>
+				{todos.length > 0 && <TodoWidget todos={todos} />}
 			</div>
 			{error && !isBusy && (
 				<ErrorBanner
