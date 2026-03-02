@@ -585,7 +585,7 @@ export async function POST(req: Request): Promise<Response> {
 												input,
 											} as Prisma.InputJsonValue);
 										}
-										if (name !== "Task") {
+										if (name !== "Task" && name !== "Agent") {
 											sse.send("tool_use", { name, input });
 										}
 									}

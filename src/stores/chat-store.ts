@@ -1,6 +1,11 @@
 import { createStore } from "zustand/vanilla";
 import { createLogger } from "@/lib/logger";
 import { createDeduplicator, parseSSEStream } from "@/lib/sse";
+import {
+	formatToolLabel,
+	getToolSummary,
+	mapAgentStatus,
+} from "@/lib/tool-labels";
 import type {
 	Attachment,
 	Chat,
@@ -16,6 +21,7 @@ import type {
 	SubAgent,
 	SubAgentCompleteEvent,
 	SubAgentStartEvent,
+	SubAgentToolCall,
 	ThinkingDeltaEvent,
 	ThinkingEvent,
 	ToolUseEvent,
@@ -55,6 +61,7 @@ interface ChatState {
 	lastEventAt: number;
 	sandboxStreamUrl: string | null;
 	sandboxStreamToken: string | null;
+	activeSubAgentStack: string[];
 }
 
 interface ChatActions {
@@ -214,6 +221,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 		lastEventAt: 0,
 		sandboxStreamUrl: null,
 		sandboxStreamToken: null,
+		activeSubAgentStack: [],
 
 		publishSegments() {
 			set({
@@ -226,14 +234,28 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 		markToolsComplete() {
 			set({
-				streamingSegments: get().streamingSegments.map((segment) =>
-					segment.type === "tool_use"
-						? {
-								...segment,
-								tool: { ...segment.tool, status: "complete" as const },
-							}
-						: segment,
-				),
+				streamingSegments: get().streamingSegments.map((segment) => {
+					if (segment.type === "tool_use") {
+						return {
+							...segment,
+							tool: { ...segment.tool, status: "complete" as const },
+						};
+					}
+					if (segment.type === "subagent_group") {
+						return {
+							...segment,
+							agents: segment.agents.map((a) => ({
+								...a,
+								currentToolLabel: undefined,
+								tools: a.tools.map((t) => ({
+									...t,
+									status: "complete" as const,
+								})),
+							})),
+						};
+					}
+					return segment;
+				}),
 			});
 			get().publishSegments();
 		},
@@ -328,19 +350,44 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				}
 				case "tool_use": {
 					const toolData = data as ToolUseEvent;
-					set({
-						streamingSegments: [
-							...state.streamingSegments,
-							{
-								type: "tool_use" as const,
-								tool: {
+					const stack = state.activeSubAgentStack;
+
+					if (stack.length > 0) {
+						const topId = stack[stack.length - 1];
+						const segments = state.streamingSegments.map((seg) => {
+							if (seg.type !== "subagent_group") return seg;
+							const agents = seg.agents.map((a) => {
+								if (a.taskId !== topId) return a;
+								const toolCall: SubAgentToolCall = {
 									name: toolData.name,
-									input: toolData.input,
+									summary: getToolSummary(toolData.name, toolData.input),
 									status: "running",
+								};
+								const label = formatToolLabel(toolData.name, toolCall.summary);
+								return {
+									...a,
+									tools: [...a.tools, toolCall],
+									currentToolLabel: label,
+								};
+							});
+							return { ...seg, agents };
+						});
+						set({ streamingSegments: segments });
+					} else {
+						set({
+							streamingSegments: [
+								...state.streamingSegments,
+								{
+									type: "tool_use" as const,
+									tool: {
+										name: toolData.name,
+										input: toolData.input,
+										status: "running",
+									},
 								},
-							},
-						],
-					});
+							],
+						});
+					}
 					get().publishSegments();
 					break;
 				}
@@ -383,6 +430,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						taskId,
 						description,
 						status: "running",
+						tools: [],
 					};
 
 					if (lastSeg?.type === "subagent_group") {
@@ -396,7 +444,10 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							agents: [newAgent],
 						});
 					}
-					set({ streamingSegments: segments });
+					set({
+						streamingSegments: segments,
+						activeSubAgentStack: [...state.activeSubAgentStack, taskId],
+					});
 					get().publishSegments();
 					break;
 				}
@@ -407,23 +458,31 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						summary,
 						usage,
 					} = data as SubAgentCompleteEvent;
-					const mappedStatus =
-						agentStatus === "completed" ? "complete" : agentStatus;
 					const segments = state.streamingSegments.map((seg) => {
 						if (seg.type !== "subagent_group") return seg;
 						const agents = seg.agents.map((a) =>
 							a.taskId === taskId
 								? {
 										...a,
-										status: mappedStatus as SubAgent["status"],
+										status: mapAgentStatus(agentStatus),
 										summary,
 										usage,
+										currentToolLabel: undefined,
+										tools: a.tools.map((t) => ({
+											...t,
+											status: "complete" as const,
+										})),
 									}
 								: a,
 						);
 						return { ...seg, agents };
 					});
-					set({ streamingSegments: segments });
+					set({
+						streamingSegments: segments,
+						activeSubAgentStack: state.activeSubAgentStack.filter(
+							(id) => id !== taskId,
+						),
+					});
 					get().publishSegments();
 					break;
 				}
@@ -436,6 +495,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			const stopInfo = state.stopReason;
 			set({
 				streamingSegments: [],
+				activeSubAgentStack: [],
 				streamingMessage: null,
 				stopReason: null,
 			});
@@ -508,6 +568,8 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				messages: [],
 				sessionId: null,
 				streamingMessage: null,
+				streamingSegments: [],
+				activeSubAgentStack: [],
 				isRecovering: false,
 			});
 			callbacks.getQueueStore().clear();
@@ -720,7 +782,11 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						log.info("Stream cleanup: aborted into recovery", {
 							chatId: get().currentChat?.id,
 						});
-						set({ isLoading: false, statusMessage: null });
+						set({
+							isLoading: false,
+							statusMessage: null,
+							activeSubAgentStack: [],
+						});
 					}
 				} else if (get().isRecovering) {
 					log.info("Stream cleanup: already recovering", {
@@ -732,6 +798,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						streamingSegments: [],
 						streamingMessage: null,
 						stopReason: null,
+						activeSubAgentStack: [],
 					});
 				} else if (receivedDone) {
 					log.info("Stream cleanup: normal completion", {
@@ -753,6 +820,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						streamingSegments: [],
 						streamingMessage: null,
 						stopReason: null,
+						activeSubAgentStack: [],
 						isRecovering: true,
 						disconnectedChatId: get().currentChat?.id ?? null,
 					});
