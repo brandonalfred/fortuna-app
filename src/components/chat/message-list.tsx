@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Message, QueuedMessage, StreamingMessage } from "@/lib/types";
+import type {
+	Message,
+	QueuedMessage,
+	StreamingMessage,
+	TodoItem,
+} from "@/lib/types";
 import {
 	MessageItem,
 	QueuedMessageItem,
 	StreamingMessageItem,
 } from "./message-item";
+import { TodoWidget } from "./todo-widget";
 
 interface MessageListProps {
 	messages: Message[];
@@ -14,6 +20,7 @@ interface MessageListProps {
 	statusMessage?: string | null;
 	messageQueue: QueuedMessage[];
 	onRemoveQueued: (id: string) => void;
+	todos: TodoItem[];
 }
 
 const SCROLL_THRESHOLD = 100;
@@ -25,6 +32,7 @@ export function MessageList({
 	statusMessage,
 	messageQueue,
 	onRemoveQueued,
+	todos,
 }: MessageListProps) {
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -190,6 +198,11 @@ export function MessageList({
 					onCancel={() => onRemoveQueued(msg.id)}
 				/>
 			))}
+			{todos.length > 0 && (
+				<div className="flex w-full justify-start">
+					<TodoWidget todos={todos} />
+				</div>
+			)}
 			<div ref={bottomRef} />
 		</div>
 	);

@@ -8,7 +8,6 @@ import type { Attachment } from "@/lib/types";
 import { capitalize, cn } from "@/lib/utils";
 import { ChatInput } from "./chat-input";
 import { MessageList } from "./message-list";
-import { TodoWidget } from "./todo-widget";
 
 interface ErrorBannerProps {
 	message: string;
@@ -118,8 +117,8 @@ export function ChatWindow() {
 					statusMessage={statusMessage}
 					messageQueue={messageQueue}
 					onRemoveQueued={removeQueuedMessage}
+					todos={todos}
 				/>
-				{todos.length > 0 && <TodoWidget todos={todos} />}
 			</div>
 			{error && !isBusy && (
 				<ErrorBanner

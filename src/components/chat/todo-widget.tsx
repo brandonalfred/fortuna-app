@@ -24,7 +24,7 @@ function StatusIcon({ status }: { status: TodoItem["status"] }) {
 
 export const TodoWidget = memo(function TodoWidget({ todos }: TodoWidgetProps) {
 	return (
-		<div className="animate-todo-in absolute bottom-4 left-4 z-10 w-72 rounded-lg border border-border-subtle bg-bg-secondary shadow-lg">
+		<div className="animate-todo-in max-w-sm w-full rounded-lg border border-border-subtle bg-bg-secondary shadow-lg">
 			<div className="px-3 py-2 border-b border-border-subtle">
 				<span className="text-xs font-mono text-text-secondary">Tasks</span>
 			</div>
