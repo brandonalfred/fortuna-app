@@ -1,3 +1,9 @@
+const INTERNAL_TOOLS = new Set(["Task", "Agent"]);
+
+export function isInternalTool(name: string): boolean {
+	return INTERNAL_TOOLS.has(name);
+}
+
 const TOOL_LABEL_MAP: Record<string, string> = {
 	Skill: "Analyzing",
 	WebSearch: "Researching",

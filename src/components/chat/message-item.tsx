@@ -21,6 +21,7 @@ import {
 	formatToolLabel,
 	getToolLabel,
 	getToolSummary,
+	isInternalTool,
 	truncate,
 } from "@/lib/tool-labels";
 import type {
@@ -503,7 +504,7 @@ const SegmentRenderer = memo(function SegmentRenderer({
 		case "text":
 			return <Markdown remarkPlugins={REMARK_PLUGINS}>{segment.text}</Markdown>;
 		case "tool_use":
-			if (segment.tool.name === "Agent") return null;
+			if (isInternalTool(segment.tool.name)) return null;
 			return (
 				<div className="my-2">
 					<ToolUsePill tool={segment.tool} />

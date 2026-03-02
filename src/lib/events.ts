@@ -2,6 +2,7 @@ import type { ChatEvent } from "@prisma/client";
 import {
 	formatToolLabel,
 	getToolSummary,
+	isInternalTool,
 	mapAgentStatus,
 } from "@/lib/tool-labels";
 import type {
@@ -133,7 +134,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 			}
 			case "tool_use": {
 				lastAssistantCreatedAt ??= event.createdAt;
-				if (data.name === "Task" || data.name === "Agent") break;
+				if (data.name && isInternalTool(data.name)) break;
 
 				const activeAgent = findActiveSubAgent();
 				if (activeAgent) {
