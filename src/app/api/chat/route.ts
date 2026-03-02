@@ -679,10 +679,17 @@ export async function POST(req: Request): Promise<Response> {
 								const text = extractToolResultContent(msg);
 								if (!text) break;
 
+								const isError = extractIsError(msg.message.content);
+								if (isError) {
+									console.warn(
+										`[Chat API] Tool error chat=${chat.id} toolUseId=${msg.parent_tool_use_id}: ${text.slice(0, 500)}`,
+									);
+								}
+
 								eventBuffer.appendEvent("tool_result", {
 									toolUseId: msg.parent_tool_use_id,
 									content: text,
-									isError: extractIsError(msg.message.content),
+									isError,
 								} as Prisma.InputJsonValue);
 								break;
 							}
