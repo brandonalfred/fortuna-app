@@ -1,8 +1,11 @@
 import { Sandbox } from "@vercel/sandbox";
 import { activeSessions } from "@/lib/agent/active-sessions";
-import { SANDBOX_SSE_PORT } from "@/lib/agent/sandbox";
+import { logSandboxUsage, SANDBOX_SSE_PORT } from "@/lib/agent/sandbox";
 import { getAuthenticatedUser, notFound, unauthorized } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+
+const log = createLogger("StopAPI");
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -43,10 +46,9 @@ export async function POST(
 			if (stopRes?.ok) {
 				sandboxStopSucceeded = true;
 			} else {
-				console.warn(
-					`[Stop API] SSE server unresponsive, stopping sandbox chat=${id}`,
-				);
+				log.warn("SSE server unresponsive, stopping sandbox", { chatId: id });
 				await sandbox.stop();
+				logSandboxUsage(chat.sandboxId, id, "user_stop");
 				await prisma.chat.update({
 					where: { id },
 					data: {
@@ -57,7 +59,7 @@ export async function POST(
 				});
 			}
 		} catch (e) {
-			console.warn(`[Stop API] Sandbox stop failed chat=${id}:`, e);
+			log.error("Sandbox stop failed", e);
 		}
 	}
 
@@ -65,7 +67,7 @@ export async function POST(
 	if (controller) {
 		controller.abort();
 		activeSessions.delete(id);
-		console.log(`[Stop API] Aborted in-memory session chat=${id}`);
+		log.info("Aborted in-memory session", { chatId: id });
 	}
 
 	const updateData: {
