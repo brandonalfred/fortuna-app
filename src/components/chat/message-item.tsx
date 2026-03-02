@@ -214,7 +214,7 @@ export function MessageItem({ message, animate = true }: MessageItemProps) {
 		>
 			<div
 				className={cn(
-					"max-w-[85%] min-w-0 rounded-lg px-4 py-3 overflow-hidden",
+					"max-w-[85%] min-w-0 rounded-lg px-4 py-3",
 					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
 				)}
 			>
@@ -251,7 +251,7 @@ export function StreamingMessageItem({
 
 	return (
 		<div className="animate-message-in flex w-full justify-start">
-			<div className="max-w-[85%] min-w-0 rounded-lg px-4 py-3 text-text-primary overflow-hidden">
+			<div className="max-w-[85%] min-w-0 rounded-lg px-4 py-3 text-text-primary">
 				<div className={PROSE_CLASSES}>
 					{collapsed.map((segment, idx) => (
 						<SegmentRenderer
