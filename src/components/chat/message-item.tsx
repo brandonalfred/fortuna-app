@@ -37,8 +37,6 @@ const TOOL_LABEL_MAP: Record<string, string> = {
 	Edit: "Editing file",
 	Glob: "Searching files",
 	Grep: "Searching",
-	TodoWrite: "Updating TODOs",
-	TodoRead: "Checking TODOs",
 };
 
 function getToolLabel(name: string): string {
@@ -108,11 +106,13 @@ function findLastNonWhitespaceSegment(
 }
 
 const REMARK_PLUGINS = [remarkGfm];
-const COLLAPSIBLE_TOOLS = new Set(["Bash", "TodoWrite"]);
+const HIDDEN_TOOLS = new Set(["TodoWrite", "TodoRead"]);
+const COLLAPSIBLE_TOOLS = new Set(["Bash"]);
 
 function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 	const result: ContentSegment[] = [];
 	for (const seg of segments) {
+		if (seg.type === "tool_use" && HIDDEN_TOOLS.has(seg.tool.name)) continue;
 		if (seg.type === "tool_use" && COLLAPSIBLE_TOOLS.has(seg.tool.name)) {
 			const prev = findLastNonWhitespaceSegment(result);
 			if (prev?.type === "tool_use" && prev.tool.name === seg.tool.name) {
@@ -545,6 +545,7 @@ const SegmentRenderer = memo(function SegmentRenderer({
 		case "text":
 			return <Markdown remarkPlugins={REMARK_PLUGINS}>{segment.text}</Markdown>;
 		case "tool_use":
+			if (HIDDEN_TOOLS.has(segment.tool.name)) return null;
 			return (
 				<div className="my-2">
 					<ToolUsePill tool={segment.tool} />

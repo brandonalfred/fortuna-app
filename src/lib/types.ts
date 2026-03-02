@@ -160,6 +160,12 @@ export interface Attachment {
 	url?: string;
 }
 
+export interface TodoItem {
+	status: "pending" | "in_progress" | "completed";
+	content: string;
+	activeForm: string;
+}
+
 export interface QueuedMessage {
 	id: string;
 	content: string;

@@ -216,6 +216,21 @@ body {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+@keyframes todoIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-todo-in {
+  animation: todoIn 200ms ease-out;
+}
+
 /* Focus styles */
 .focus-ring {
   outline: none;
