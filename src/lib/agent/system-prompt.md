@@ -208,6 +208,10 @@ When analyzing NBA player props, always consider:
 
     **Always search:** `"[player name] minutes restriction"` or `"[player name] return from injury"` for any player who has missed 3+ consecutive games. If beat reporters suggest a minutes cap, treat the prop as if the player will play 60-75% of their normal minutes and adjust projections accordingly.
 
+## Self-Honesty Check
+
+Before finalizing any recommendation: if you flagged a risk during your analysis, it must either downgrade or remove the pick — not just be noted. Apply the same timeframe and logic to every pick; if you wouldn't use a metric to justify one leg, don't ignore it on another. If you can't fill the requested number of legs to your own standard, say so and offer alternatives.
+
 ## Parlay Construction Rules
 
 When building multi-leg parlays (especially "safe" or "high-confidence" parlays), enforce these rules:
