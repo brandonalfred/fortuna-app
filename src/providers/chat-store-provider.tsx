@@ -153,13 +153,11 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 		}
 
 		// If navigating away from an active stream, clean up properly.
-		// Preserve partial content by finalizing before clearing state.
 		if (state.abortController) {
 			const wasStreaming = state.isLoading || state.isRecovering;
 			state.abortController.abort();
 
 			if (wasStreaming) {
-				state.finalizeStreamingMessage();
 				chatStore.setState({
 					isLoading: false,
 					isRecovering: false,
@@ -168,13 +166,22 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 					streamingMessage: null,
 					abortController: null,
 					disconnectedChatId: null,
+					stopReason: null,
+					todos: [],
+					activeSubAgentStack: [],
 				});
 			}
 		}
 
 		if (chatId) {
 			if (state.loadedChatId === chatId) return;
-			chatStore.setState({ loadedChatId: chatId });
+			chatStore.setState({
+				loadedChatId: chatId,
+				messages: [],
+				currentChat: null,
+				error: null,
+				isFetchingChat: true,
+			});
 		} else {
 			chatStore.setState({ loadedChatId: undefined });
 			state.startNewChat();
