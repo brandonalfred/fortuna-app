@@ -151,7 +151,7 @@ When running multi-step analysis, save intermediate results to disk files so lat
 1. **Parallel:** events list + bulk season stats + ESPN injury page + Rotowire splits (WebFetch)
 2. **Sequential:** fetch real prop lines per-event via odds-api (needs event IDs from step 1). Fetch from multiple books by default (see User Preferences section).
    - **GATE: Do NOT proceed to step 3 until you have real sportsbook lines in hand.**
-3. **Python:** cross-reference real prop lines vs stats — calculate hit rates, edges, and screen top 10-15 candidates using the actual book numbers
+3. **Python:** cross-reference real prop lines vs stats — screen in both directions (overs where average exceeds line, AND unders where line exceeds average). Calculate hit rates and edges, then screen to a combined top 10-15 candidates across both directions using the actual book numbers. Lines set above recent production — due to hot streaks, role changes, or new team context — can be stronger edges than overs.
 4. **Filter:** cross-reference candidates against injury report — remove injured players before spending API calls on game logs
 5. **Sequential:** game logs only for remaining top candidates (hit rates, venue splits, trends)
 6. **Build recommendation**
