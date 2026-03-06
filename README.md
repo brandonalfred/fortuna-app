@@ -16,10 +16,13 @@ AI-powered sports betting analysis assistant built with the Claude Agent SDK.
 ## Tech Stack
 
 - **Next.js 16** with App Router and React 19
-- **Claude Agent SDK** with Opus 4.5 model
+- **Claude Agent SDK** with Opus 4.6 model
 - **Tailwind CSS v4** + shadcn/ui
 - **Prisma 7** with Neon PostgreSQL
+- **Better Auth** for authentication
+- **Zustand** + **React Query** for state management
 - **Vercel Sandbox** for secure agent execution
+- **Biome** for linting/formatting
 
 ## Getting Started
 
@@ -65,3 +68,7 @@ bun run build     # Production build
 The app streams agent responses via Server-Sent Events (SSE). In development, the Claude Agent SDK runs locally. In production on Vercel, agents run inside isolated sandboxes with per-chat persistence.
 
 See [CLAUDE.md](./CLAUDE.md) for detailed architecture documentation.
+
+## Deployment
+
+Deployed on **Vercel**. Pushes to `main` trigger production builds. Preview deployments are disabled for non-main branches to conserve build minutes — use `vercel deploy` for manual previews.
