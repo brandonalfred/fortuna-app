@@ -175,12 +175,20 @@ export function ChatStoreProvider({ children }: { children: ReactNode }) {
 
 		if (chatId) {
 			if (state.loadedChatId === chatId) return;
+			// Re-read state: the chatData effect may have already populated this chat
+			// from React Query cache before this effect ran (effects fire in definition order).
+			const freshState = chatStore.getState();
+			const alreadyLoaded = freshState.currentChat?.id === chatId;
 			chatStore.setState({
 				loadedChatId: chatId,
-				messages: [],
-				currentChat: null,
-				error: null,
-				isFetchingChat: true,
+				...(alreadyLoaded
+					? {}
+					: {
+							messages: [],
+							currentChat: null,
+							error: null,
+							isFetchingChat: true,
+						}),
 			});
 		} else {
 			chatStore.setState({ loadedChatId: undefined });
