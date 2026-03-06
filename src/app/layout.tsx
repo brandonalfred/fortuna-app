@@ -16,6 +16,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+	metadataBase: new URL("https://fortunabets.ai"),
 	title: "Fortuna - AI Sports Betting Analysis",
 	description:
 		"Data-driven sports betting insights powered by AI. Analyze odds, matchups, and trends across NBA, NFL, MLB, NHL, and more.",
