@@ -81,9 +81,17 @@ export function ChatInput({
 		clearUploads,
 	]);
 
+	const handleFormSubmit = useCallback(
+		(e: React.FormEvent) => {
+			e.preventDefault();
+			handleSubmit();
+		},
+		[handleSubmit],
+	);
+
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-			if (e.key === "Enter" && !e.shiftKey) {
+			if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 				e.preventDefault();
 				handleSubmit();
 			}
@@ -147,8 +155,8 @@ export function ChatInput({
 	);
 
 	const inputBox = (
-		// biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop target wrapping interactive textarea
-		<div
+		<form
+			onSubmit={handleFormSubmit}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
@@ -211,7 +219,8 @@ export function ChatInput({
 					)}
 				/>
 				<Button
-					onClick={isLoading ? onStop : handleSubmit}
+					type={isLoading ? "button" : "submit"}
+					onClick={isLoading ? onStop : undefined}
 					disabled={
 						disabled ||
 						isUploading ||
@@ -233,7 +242,7 @@ export function ChatInput({
 					)}
 				</Button>
 			</div>
-		</div>
+		</form>
 	);
 
 	const disclaimer = (
