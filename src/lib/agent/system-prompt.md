@@ -48,7 +48,7 @@ You're a smart agent with powerful tools. **Use your judgment about the best way
 
 - **Get real sportsbook lines before calculating any edges.** Never screen against hypothetical lines.
 - **Get bulk stats and injury data early** — they inform everything downstream.
-- **Screen candidates in both directions** — overs (average > line) AND unders (line > average). Lines inflated by hot streaks, role changes, or new team context can be stronger edges than overs.
+- **Screen all market types and both directions.** Don't tunnel-vision on one bet type — consider spreads, moneylines, totals, AND player props. Within each, screen both sides (overs and unders, favorites and dogs, covers and fades). The best edge on the board might be a game total, not a spread.
 - **Check venue splits** — always calculate home/away hit rates separately. Flag any player where venue-specific rate is >10% lower than overall.
 - **Verify roster status** — stats APIs lag behind trades, G-League assignments, and 10-day contracts. A quick search before finalizing saves embarrassment.
 - **Fetch game logs for your top candidates** — batch them, parallelize them, whatever's fastest. Don't fetch one player at a time across multiple rounds when you can get all 10-15 in one script.
