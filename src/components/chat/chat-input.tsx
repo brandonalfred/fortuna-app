@@ -32,6 +32,7 @@ export function ChatInput({
 	const [value, setValue] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const isSubmittingRef = useRef(false);
 	const [isDragOver, setIsDragOver] = useState(false);
 	const {
 		pendingUploads,
@@ -44,30 +45,36 @@ export function ChatInput({
 	} = useFileUpload();
 
 	const handleSubmit = useCallback(async () => {
+		if (isSubmittingRef.current) return;
 		if ((!value.trim() && !hasFiles) || disabled || isUploading) return;
 
-		let attachments: Attachment[] | undefined;
-		if (hasFiles) {
-			try {
-				attachments = await uploadAll();
-			} catch {
-				return;
+		isSubmittingRef.current = true;
+		try {
+			let attachments: Attachment[] | undefined;
+			if (hasFiles) {
+				try {
+					attachments = await uploadAll();
+				} catch {
+					return;
+				}
 			}
-		}
 
-		const text = value.trim();
-		if (!text && !attachments?.length) return;
+			const text = value.trim();
+			if (!text && !attachments?.length) return;
 
-		if (isLoading) {
-			onQueue(text, attachments);
-		} else {
-			onSend(text, attachments);
-		}
+			if (isLoading) {
+				onQueue(text, attachments);
+			} else {
+				onSend(text, attachments);
+			}
 
-		setValue("");
-		clearUploads();
-		if (textareaRef.current) {
-			textareaRef.current.style.height = "auto";
+			setValue("");
+			clearUploads();
+			if (textareaRef.current) {
+				textareaRef.current.style.height = "auto";
+			}
+		} finally {
+			isSubmittingRef.current = false;
 		}
 	}, [
 		value,
