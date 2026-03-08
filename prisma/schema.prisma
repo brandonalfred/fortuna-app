@@ -22,11 +22,24 @@ model User {
   banExpires    DateTime? @map("ban_expires")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
+  twoFactorEnabled Boolean?  @default(false) @map("two_factor_enabled")
   chats         Chat[]
   sessions      Session[]
   accounts      Account[]
+  twoFactor     TwoFactor[]
 
   @@map("user")
+}
+
+model TwoFactor {
+  id          String  @id @default(uuid())
+  secret      String
+  backupCodes String  @map("backup_codes")
+  userId      String  @map("user_id")
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factor")
 }
 
 model Session {
