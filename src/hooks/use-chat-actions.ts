@@ -5,6 +5,7 @@ import type {
 	Message,
 	QueuedMessage,
 	StreamingMessage,
+	TodoItem,
 } from "@/lib/types";
 import { useChatStore, useQueueStore } from "@/providers/chat-store-provider";
 
@@ -16,6 +17,7 @@ interface ActiveChatValue {
 	isRecovering: boolean;
 	statusMessage: string | null;
 	messageQueue: QueuedMessage[];
+	todos: TodoItem[];
 	error: string | null;
 	sendMessage: (content: string, attachments?: Attachment[]) => void;
 	stopGeneration: () => void;
@@ -31,6 +33,7 @@ export function useActiveChat(): ActiveChatValue {
 	const isFetchingChat = useChatStore((s) => s.isFetchingChat);
 	const isRecovering = useChatStore((s) => s.isRecovering);
 	const statusMessage = useChatStore((s) => s.statusMessage);
+	const todos = useChatStore((s) => s.todos);
 	const error = useChatStore((s) => s.error);
 	const sendMessage = useChatStore((s) => s.sendMessage);
 	const stopGeneration = useChatStore((s) => s.stopGeneration);
@@ -48,6 +51,7 @@ export function useActiveChat(): ActiveChatValue {
 		isRecovering,
 		statusMessage,
 		messageQueue,
+		todos,
 		error,
 		sendMessage,
 		stopGeneration,

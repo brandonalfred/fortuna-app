@@ -106,6 +106,32 @@ async function clearSpawnLock(chatId: string): Promise<void> {
 	});
 }
 
+export async function logSandboxUsage(
+	sandboxId: string,
+	chatId: string,
+	reason: "error" | "abort" | "user_stop",
+): Promise<void> {
+	try {
+		const stopped = await Sandbox.get({ sandboxId });
+		log.info("Sandbox stopped", {
+			sandboxId,
+			chatId,
+			reason,
+			status: stopped.status,
+			vcpus: SANDBOX_VCPUS,
+			createdAt: stopped.createdAt.toISOString(),
+			activeCpuUsageMs: stopped.activeCpuUsageMs,
+			networkTransfer: stopped.networkTransfer,
+		});
+	} catch (err) {
+		log.warn("Failed to fetch sandbox usage after stop", {
+			sandboxId,
+			chatId,
+			error: err instanceof Error ? err.message : String(err),
+		});
+	}
+}
+
 export async function clearSandboxRefs(chatId: string): Promise<void> {
 	await prisma.chat.update({
 		where: { id: chatId },
@@ -175,7 +201,10 @@ export async function getOrCreateSandbox(
 
 		onStatus?.("initializing", "Initializing environment...");
 		const { sandbox, usedSnapshot } = await createSandbox(snapshotId, onStatus);
-		log.info("Created new sandbox", { sandboxId: sandbox.sandboxId });
+		log.info("Created new sandbox", {
+			sandboxId: sandbox.sandboxId,
+			createdAt: sandbox.createdAt.toISOString(),
+		});
 
 		if (!usedSnapshot) {
 			onStatus?.(

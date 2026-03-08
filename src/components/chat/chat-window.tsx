@@ -46,6 +46,7 @@ export function ChatWindow() {
 		isRecovering,
 		statusMessage,
 		messageQueue,
+		todos,
 		error,
 		sendMessage,
 		stopGeneration,
@@ -109,13 +110,14 @@ export function ChatWindow() {
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="flex-1 overflow-hidden">
+			<div className="relative flex-1 overflow-hidden">
 				<MessageList
 					messages={messages}
 					streamingMessage={streamingMessage}
 					statusMessage={statusMessage}
 					messageQueue={messageQueue}
 					onRemoveQueued={removeQueuedMessage}
+					todos={todos}
 				/>
 			</div>
 			{error && !isBusy && (

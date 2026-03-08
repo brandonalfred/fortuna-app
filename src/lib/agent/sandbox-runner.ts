@@ -1,4 +1,7 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+	AgentDefinition,
+	SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { Sandbox } from "@vercel/sandbox";
 import { createLogger } from "@/lib/logger";
 import type { Attachment, ConversationMessage } from "@/lib/types";
@@ -7,6 +10,7 @@ import { buildFullPrompt } from "./prompt-builder";
 import {
 	clearSandboxRefs,
 	getOrCreateSandbox,
+	logSandboxUsage,
 	SANDBOX_SSE_PORT,
 	SANDBOX_TIMEOUT,
 	type StatusCallback,
@@ -16,6 +20,7 @@ import {
 	AGENT_ALLOWED_TOOLS,
 	AGENT_MODEL,
 	collectEnvVars,
+	getAgentDefinitions,
 	getSystemPrompt,
 } from "./system-prompt";
 
@@ -55,6 +60,7 @@ interface AgentScriptOptions {
 	agentSessionId?: string;
 	envVars?: Record<string, string>;
 	attachments?: Attachment[];
+	agents?: Record<string, AgentDefinition>;
 }
 
 function generateAgentScript(opts: AgentScriptOptions): string {
@@ -65,6 +71,9 @@ function generateAgentScript(opts: AgentScriptOptions): string {
 	const toolsLiteral = JSON.stringify(AGENT_ALLOWED_TOOLS);
 	const resumeLine = opts.agentSessionId
 		? `        resume: ${JSON.stringify(opts.agentSessionId)},`
+		: "";
+	const agentsLine = opts.agents
+		? `        agents: ${JSON.stringify(opts.agents)},`
 		: "";
 
 	const hasEnvVars = opts.envVars && Object.keys(opts.envVars).length > 0;
@@ -119,6 +128,7 @@ async function main() {
         includePartialMessages: true,
         maxThinkingTokens: 10000,
 ${resumeLine}
+${agentsLine}
       },
     });
 
@@ -303,6 +313,7 @@ export async function* streamViaSandbox({
 			agentSessionId: effectiveSessionId,
 			envVars,
 			attachments,
+			agents: getAgentDefinitions(timezone, userFirstName),
 		});
 
 		await writeSandboxEnvFiles(sandbox, envVars);
@@ -382,6 +393,7 @@ export async function* streamViaSandbox({
 		try {
 			log.info("Stopping sandbox due to error...");
 			await sandbox.stop();
+			logSandboxUsage(sandbox.sandboxId, chatId, "error");
 			await clearSandboxRefs(chatId);
 		} catch (stopError) {
 			log.error("Failed to stop sandbox", stopError);
@@ -465,6 +477,7 @@ export async function setupDirectStream(
 	const cleanupOnAbort = () => {
 		sandbox
 			.stop()
+			.then(() => logSandboxUsage(sandbox.sandboxId, chatId, "abort"))
 			.catch((e: unknown) => log.error("Failed to stop sandbox on abort", e));
 		clearSandboxRefs(chatId).catch((e: unknown) =>
 			log.error("Failed to clear refs on abort", e),
@@ -513,6 +526,7 @@ export async function setupDirectStream(
 			maxThinkingTokens: 10000,
 			initialSequenceNum,
 			protectionBypassSecret: protectionBypassSecret ?? null,
+			agents: getAgentDefinitions(timezone, userFirstName),
 		});
 
 		throwIfAborted();

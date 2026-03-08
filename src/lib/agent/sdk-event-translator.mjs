@@ -143,7 +143,7 @@ export class SDKEventTranslator {
 						this._lastEventWasToolUse = true;
 						const { id: toolUseId, name, input } = block;
 						this._toolUses.push({ toolUseId, name, input });
-						if (name !== "Task") {
+						if (name !== "Task" && name !== "Agent") {
 							events.push({
 								type: "tool_use",
 								data: { toolUseId, name, input },
@@ -242,12 +242,18 @@ export class SDKEventTranslator {
 				if (!msg.parent_tool_use_id) break;
 				const text = extractToolResultContent(msg);
 				if (!text) break;
+				const isError = extractIsError(msg.message.content);
+				if (isError) {
+					console.warn(
+						`[Agent] Tool error toolUseId=${msg.parent_tool_use_id}: ${text.slice(0, 500)}`,
+					);
+				}
 				events.push({
 					type: "tool_result",
 					data: {
 						toolUseId: msg.parent_tool_use_id,
 						content: text,
-						isError: extractIsError(msg.message.content),
+						isError,
 					},
 				});
 				break;

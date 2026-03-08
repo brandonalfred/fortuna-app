@@ -14,6 +14,7 @@ import { type StreamAgentOptions, streamViaSandbox } from "./sandbox-runner";
 import {
 	AGENT_ALLOWED_TOOLS,
 	AGENT_MODEL,
+	getAgentDefinitions,
 	getSystemPrompt,
 } from "./system-prompt";
 
@@ -82,6 +83,7 @@ function buildQueryOptions(opts: QueryOptionsInput) {
 				opts.userPreferences,
 			),
 		},
+		agents: getAgentDefinitions(opts.timezone, opts.userFirstName),
 		abortController: opts.abortController,
 		includePartialMessages: true,
 		maxThinkingTokens: 10000,

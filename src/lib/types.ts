@@ -36,12 +36,20 @@ export interface SubAgentUsage {
 	duration_ms: number;
 }
 
+export interface SubAgentToolCall {
+	name: string;
+	summary: string | null;
+	status: "running" | "complete";
+}
+
 export interface SubAgent {
 	taskId: string;
 	description: string;
 	status: "running" | "complete" | "failed" | "stopped";
 	summary?: string;
 	usage?: SubAgentUsage;
+	tools: SubAgentToolCall[];
+	currentToolLabel?: string;
 }
 
 export type ContentSegment =
@@ -163,6 +171,12 @@ export interface Attachment {
 	mimeType: string;
 	size: number;
 	url?: string;
+}
+
+export interface TodoItem {
+	status: "pending" | "in_progress" | "completed";
+	content: string;
+	activeForm: string;
 }
 
 export interface QueuedMessage {
