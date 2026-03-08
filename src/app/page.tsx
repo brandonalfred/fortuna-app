@@ -11,35 +11,35 @@ export const metadata: Metadata = {
 	},
 };
 
-function JsonLd() {
-	const data = [
-		{
-			"@context": "https://schema.org",
-			"@type": "Organization",
-			name: "FortunaBets",
-			url: "https://fortunabets.ai",
-			logo: "https://fortunabets.ai/og-image.png",
-			description:
-				"AI-powered sports betting analysis platform providing data-driven insights across major sports leagues.",
+const JSON_LD = JSON.stringify([
+	{
+		"@context": "https://schema.org",
+		"@type": "Organization",
+		name: "FortunaBets",
+		url: "https://fortunabets.ai",
+		logo: "https://fortunabets.ai/og-image.png",
+		description:
+			"AI-powered sports betting analysis platform providing data-driven insights across major sports leagues.",
+	},
+	{
+		"@context": "https://schema.org",
+		"@type": "WebApplication",
+		name: "Fortuna",
+		url: "https://fortunabets.ai",
+		applicationCategory: "SportsApplication",
+		operatingSystem: "Web",
+		description:
+			"Analyze odds, matchups, and trends across NBA, NFL, MLB, NHL, and more with AI-powered insights.",
+		offers: {
+			"@type": "Offer",
+			price: "0",
+			priceCurrency: "USD",
 		},
-		{
-			"@context": "https://schema.org",
-			"@type": "WebApplication",
-			name: "Fortuna",
-			url: "https://fortunabets.ai",
-			applicationCategory: "SportsApplication",
-			operatingSystem: "Web",
-			description:
-				"Analyze odds, matchups, and trends across NBA, NFL, MLB, NHL, and more with AI-powered insights.",
-			offers: {
-				"@type": "Offer",
-				price: "0",
-				priceCurrency: "USD",
-			},
-		},
-	];
+	},
+]);
 
-	return <script type="application/ld+json">{JSON.stringify(data)}</script>;
+function JsonLd() {
+	return <script type="application/ld+json">{JSON_LD}</script>;
 }
 
 export default function LandingPage() {
