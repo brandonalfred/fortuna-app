@@ -32,6 +32,7 @@ export function ChatInput({
 	const [value, setValue] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const isSubmittingRef = useRef(false);
 	const [isDragOver, setIsDragOver] = useState(false);
 	const {
 		pendingUploads,
@@ -44,30 +45,36 @@ export function ChatInput({
 	} = useFileUpload();
 
 	const handleSubmit = useCallback(async () => {
+		if (isSubmittingRef.current) return;
 		if ((!value.trim() && !hasFiles) || disabled || isUploading) return;
 
-		let attachments: Attachment[] | undefined;
-		if (hasFiles) {
-			try {
-				attachments = await uploadAll();
-			} catch {
-				return;
+		isSubmittingRef.current = true;
+		try {
+			let attachments: Attachment[] | undefined;
+			if (hasFiles) {
+				try {
+					attachments = await uploadAll();
+				} catch {
+					return;
+				}
 			}
-		}
 
-		const text = value.trim();
-		if (!text && !attachments?.length) return;
+			const text = value.trim();
+			if (!text && !attachments?.length) return;
 
-		if (isLoading) {
-			onQueue(text, attachments);
-		} else {
-			onSend(text, attachments);
-		}
+			if (isLoading) {
+				onQueue(text, attachments);
+			} else {
+				onSend(text, attachments);
+			}
 
-		setValue("");
-		clearUploads();
-		if (textareaRef.current) {
-			textareaRef.current.style.height = "auto";
+			setValue("");
+			clearUploads();
+			if (textareaRef.current) {
+				textareaRef.current.style.height = "auto";
+			}
+		} finally {
+			isSubmittingRef.current = false;
 		}
 	}, [
 		value,
@@ -81,9 +88,17 @@ export function ChatInput({
 		clearUploads,
 	]);
 
+	const handleFormSubmit = useCallback(
+		(e: React.FormEvent) => {
+			e.preventDefault();
+			handleSubmit();
+		},
+		[handleSubmit],
+	);
+
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-			if (e.key === "Enter" && !e.shiftKey) {
+			if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 				e.preventDefault();
 				handleSubmit();
 			}
@@ -147,8 +162,8 @@ export function ChatInput({
 	);
 
 	const inputBox = (
-		// biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop target wrapping interactive textarea
-		<div
+		<form
+			onSubmit={handleFormSubmit}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
@@ -211,7 +226,8 @@ export function ChatInput({
 					)}
 				/>
 				<Button
-					onClick={isLoading ? onStop : handleSubmit}
+					type={isLoading ? "button" : "submit"}
+					onClick={isLoading ? onStop : undefined}
 					disabled={
 						disabled ||
 						isUploading ||
@@ -233,7 +249,7 @@ export function ChatInput({
 					)}
 				</Button>
 			</div>
-		</div>
+		</form>
 	);
 
 	const disclaimer = (

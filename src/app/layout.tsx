@@ -16,17 +16,37 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+	metadataBase: new URL("https://fortunabets.ai"),
 	title: "Fortuna - AI Sports Betting Analysis",
 	description:
-		"Get data-driven sports betting insights powered by AI. Analyze odds, matchups, and trends across NBA, NFL, MLB, and more.",
+		"Data-driven sports betting insights powered by AI. Analyze odds, matchups, and trends across NBA, NFL, MLB, NHL, and more.",
 	keywords: [
 		"sports betting",
 		"AI analysis",
 		"odds",
 		"NBA",
 		"NFL",
+		"MLB",
+		"NHL",
+		"sports analytics",
 		"betting insights",
 	],
+	openGraph: {
+		type: "website",
+		siteName: "FortunaBets",
+		url: "https://fortunabets.ai",
+		images: [
+			{
+				url: "/og-image.png",
+				width: 1200,
+				height: 630,
+				alt: "Fortuna - AI-Powered Sports Betting Analysis",
+			},
+		],
+	},
+	twitter: {
+		card: "summary_large_image",
+	},
 };
 
 export default function RootLayout({

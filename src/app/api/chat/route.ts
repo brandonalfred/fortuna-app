@@ -35,6 +35,7 @@ import {
 	isTextMimeType,
 	regenerateAttachmentUrls,
 } from "@/lib/r2";
+import { generateChatTitle } from "@/lib/title-generator";
 import { isInternalTool } from "@/lib/tool-labels";
 import type { Attachment, ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
@@ -72,6 +73,28 @@ interface SystemAgentMessage {
 		tool_uses: number;
 		duration_ms: number;
 	};
+}
+
+function handleTitlePromise(
+	titlePromise: Promise<string | null>,
+	chatId: string,
+	originalTitle: string,
+	sse?: SSEWriter,
+) {
+	titlePromise
+		.then(async (title) => {
+			if (!title) return;
+			if (sse && !sse.isDisconnected()) {
+				sse.send("title_update", { title });
+			}
+			await prisma.chat.update({
+				where: { id: chatId, title: originalTitle },
+				data: { title },
+			});
+		})
+		.catch((err) => {
+			console.warn("[Chat API] Title generation failed:", err);
+		});
 }
 
 function logCacheMetrics(msg: Record<string, unknown>): void {
@@ -197,6 +220,10 @@ export async function POST(req: Request): Promise<Response> {
 					userId: user.id,
 				},
 			}));
+
+		const isNewChat = !existingChat;
+		const titlePromise =
+			isNewChat && message ? generateChatTitle(message) : null;
 
 		console.log(
 			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} v=${isV2 ? 2 : 1} history=${conversationHistory.length}`,
@@ -361,6 +388,10 @@ export async function POST(req: Request): Promise<Response> {
 							streamToken: newStreamToken,
 							mode: "direct",
 						});
+
+						if (titlePromise) {
+							handleTitlePromise(titlePromise, chat.id, chatTitle, sse);
+						}
 					} catch (error) {
 						console.error("[Chat API] Direct stream setup failed:", error);
 						await prisma.chat.update({
@@ -377,6 +408,9 @@ export async function POST(req: Request): Promise<Response> {
 								"Failed to initialize analysis engine. Please try again.",
 						});
 					} finally {
+						if (titlePromise) {
+							await titlePromise.catch(() => null);
+						}
 						try {
 							controller.close();
 						} catch {
@@ -445,6 +479,10 @@ export async function POST(req: Request): Promise<Response> {
 				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
 				sse.send("init", { chatId: chat.id, sessionId });
+
+				if (titlePromise) {
+					handleTitlePromise(titlePromise, chat.id, chatTitle, sse);
+				}
 
 				let fullAssistantContent = "";
 				let fullThinkingContent = "";
