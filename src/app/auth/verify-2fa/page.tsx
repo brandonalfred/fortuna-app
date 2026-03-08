@@ -22,13 +22,22 @@ export default function Verify2FAPage() {
 		setResendCooldown(30);
 		setChannel(ch);
 		setError(null);
-		await fetch("/api/auth/two-factor/send-otp", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"x-otp-channel": ch,
-			},
-		});
+		try {
+			const res = await fetch("/api/auth/two-factor/send-otp", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-otp-channel": ch,
+				},
+			});
+			if (!res.ok) {
+				setError("Failed to send verification code. Please try again.");
+				setResendCooldown(0);
+			}
+		} catch {
+			setError("Failed to send verification code. Please try again.");
+			setResendCooldown(0);
+		}
 	}, []);
 
 	useEffect(() => {

@@ -103,7 +103,7 @@ export default function SecurityPage() {
 		a.href = url;
 		a.download = "fortunabets-backup-codes.txt";
 		a.click();
-		URL.revokeObjectURL(url);
+		setTimeout(() => URL.revokeObjectURL(url), 100);
 	}
 
 	if (isPending) {

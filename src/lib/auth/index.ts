@@ -66,13 +66,9 @@ export const auth = betterAuth({
 					const channel = ctx?.headers?.get("x-otp-channel");
 					const phoneNumber = (user as unknown as { phoneNumber?: string })
 						.phoneNumber;
-					const promise =
-						channel === "phone" && phoneNumber
-							? sendOTPSMS(phoneNumber, otp)
-							: sendOTPEmail(user.email, otp);
-					promise.catch((err) =>
-						console.error("[2FA] Failed to send OTP:", err),
-					);
+					return channel === "phone" && phoneNumber
+						? sendOTPSMS(phoneNumber, otp)
+						: sendOTPEmail(user.email, otp);
 				},
 				period: 3,
 			},

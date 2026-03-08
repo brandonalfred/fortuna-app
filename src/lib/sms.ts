@@ -20,14 +20,17 @@ function normalizePhone(phone: string): string {
 export async function sendOTPSMS(to: string, otp: string) {
 	const phone = normalizePhone(to);
 
-	if (!process.env.TWILIO_ACCOUNT_SID) {
+	if (
+		!process.env.TWILIO_ACCOUNT_SID ||
+		!process.env.TWILIO_VERIFY_SERVICE_SID
+	) {
 		console.log(`[2FA] SMS OTP for ${phone}: ${otp}`);
 		return;
 	}
 
 	const client = getTwilio();
 	await client.verify.v2
-		.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+		.services(process.env.TWILIO_VERIFY_SERVICE_SID)
 		.verifications.create({
 			to: phone,
 			channel: "sms",
