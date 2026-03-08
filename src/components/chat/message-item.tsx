@@ -248,6 +248,9 @@ export function StreamingMessageItem({
 	const lastSeg = collapsed[collapsed.length - 1];
 	const isThinking =
 		lastSeg?.type === "thinking" && lastSeg.isComplete === false;
+	const subAgentsCompleted =
+		lastSeg?.type === "subagent_group" &&
+		lastSeg.agents.every((a) => a.status !== "running");
 
 	return (
 		<div className="animate-message-in flex w-full justify-start">
@@ -259,7 +262,7 @@ export function StreamingMessageItem({
 							segment={segment}
 						/>
 					))}
-					{isStreaming && !isThinking && (
+					{isStreaming && !isThinking && !subAgentsCompleted && (
 						<LoadingIndicator statusMessage={statusMessage} />
 					)}
 				</div>
