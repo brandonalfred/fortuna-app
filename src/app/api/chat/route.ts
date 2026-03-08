@@ -390,7 +390,7 @@ export async function POST(req: Request): Promise<Response> {
 						});
 
 						if (titlePromise) {
-							handleTitlePromise(titlePromise, chat.id, chatTitle);
+							handleTitlePromise(titlePromise, chat.id, chatTitle, sse);
 						}
 					} catch (error) {
 						console.error("[Chat API] Direct stream setup failed:", error);
@@ -408,6 +408,9 @@ export async function POST(req: Request): Promise<Response> {
 								"Failed to initialize analysis engine. Please try again.",
 						});
 					} finally {
+						if (titlePromise) {
+							await titlePromise.catch(() => null);
+						}
 						try {
 							controller.close();
 						} catch {
