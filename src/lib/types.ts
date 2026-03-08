@@ -65,7 +65,8 @@ export interface StreamEvent {
 		| "status"
 		| "chat_created"
 		| "subagent_start"
-		| "subagent_complete";
+		| "subagent_complete"
+		| "title_update";
 	data: unknown;
 }
 
@@ -117,6 +118,10 @@ export interface SubAgentStartEvent {
 	taskId: string;
 	description: string;
 	taskType?: string;
+}
+
+export interface TitleUpdateEvent {
+	title: string;
 }
 
 export interface SubAgentCompleteEvent {

@@ -18,6 +18,7 @@ import type {
 	SubAgentStartEvent,
 	ThinkingDeltaEvent,
 	ThinkingEvent,
+	TitleUpdateEvent,
 	ToolUseEvent,
 } from "@/lib/types";
 import type { QueueStore } from "./queue-store";
@@ -398,6 +399,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					}
 					set({ streamingSegments: segments });
 					get().publishSegments();
+					break;
+				}
+				case "title_update": {
+					const { title } = data as TitleUpdateEvent;
+					const current = state.currentChat;
+					if (current) {
+						set({ currentChat: { ...current, title } });
+					}
 					break;
 				}
 				case "subagent_complete": {

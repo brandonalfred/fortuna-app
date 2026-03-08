@@ -216,6 +216,11 @@ body {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Focus styles */
 .focus-ring {
   outline: none;
