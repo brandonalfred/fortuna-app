@@ -42,7 +42,7 @@ jobs:
           echo "$branches" | jq -e '.branches' > /dev/null 2>&1 \
             || { echo "::error::Unexpected response from Neon API"; exit 1; }
 
-          open_pr_branches=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --json headRefName --jq '.[].headRefName') \
+          open_pr_branches=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json headRefName --jq '.[].headRefName') \
             || { echo "::error::Failed to list open PRs from GitHub"; exit 1; }
 
           echo "$branches" | jq -c '.branches[] | select(.name | startswith("preview/")) | select(.primary != true) | select(.default != true) | {id: .id, name: .name}' | while read -r branch; do
@@ -54,10 +54,10 @@ jobs:
               echo "Keeping '$branch_name' — open PR exists for '$git_branch'"
             else
               echo "Deleting '$branch_name' (id: $branch_id) — no matching open PR for branch '$git_branch'"
-              curl -sf -X DELETE -H "Authorization: Bearer $NEON_API_KEY" \
+              curl -sS --fail-with-body -X DELETE -H "Authorization: Bearer $NEON_API_KEY" \
                 "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$branch_id" \
                 && echo "  Deleted successfully" \
-                || echo "  Failed to delete"
+                || echo "  Failed to delete (see error above)"
               sleep 1
             fi
           done
