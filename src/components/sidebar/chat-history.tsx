@@ -34,6 +34,7 @@ function ChatListContent({
 	const [editingChatId, setEditingChatId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
+	const cancelEditRef = useRef(false);
 
 	useEffect(() => {
 		if (editingChatId && inputRef.current) {
@@ -105,10 +106,17 @@ function ChatListContent({
 									if (e.key === "Enter") {
 										submitEdit(chat.id);
 									} else if (e.key === "Escape") {
+										cancelEditRef.current = true;
 										setEditingChatId(null);
 									}
 								}}
-								onBlur={() => submitEdit(chat.id)}
+								onBlur={() => {
+									if (cancelEditRef.current) {
+										cancelEditRef.current = false;
+										return;
+									}
+									submitEdit(chat.id);
+								}}
 								className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-text-primary outline-none"
 							/>
 						) : (
