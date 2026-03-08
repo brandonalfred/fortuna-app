@@ -24,6 +24,7 @@ import type {
 	SubAgentToolCall,
 	ThinkingDeltaEvent,
 	ThinkingEvent,
+	TitleUpdateEvent,
 	TodoItem,
 	ToolUse,
 	ToolUseEvent,
@@ -72,6 +73,7 @@ interface ChatActions {
 	sendMessage(content: string, attachments?: Attachment[]): Promise<void>;
 	stopGeneration(): void;
 	startNewChat(): void;
+	updateTitle(title: string): void;
 	clearError(): void;
 	setError(error: string | null): void;
 }
@@ -515,6 +517,14 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						});
 						break;
 					}
+					case "title_update": {
+						const { title } = data as TitleUpdateEvent;
+						const current = state.currentChat;
+						if (current) {
+							set({ lastEventAt: now, currentChat: { ...current, title } });
+						}
+						break;
+					}
 					case "subagent_complete": {
 						const {
 							taskId,
@@ -645,6 +655,13 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					todos: [],
 				});
 				callbacks.getQueueStore().clear();
+			},
+
+			updateTitle(title: string) {
+				const current = get().currentChat;
+				if (current) {
+					set({ currentChat: { ...current, title } });
+				}
 			},
 
 			async sendMessage(content, attachments) {
