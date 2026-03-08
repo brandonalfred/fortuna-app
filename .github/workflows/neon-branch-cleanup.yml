@@ -35,7 +35,8 @@ jobs:
           NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          branches=$(curl -sf -H "Authorization: Bearer $NEON_API_KEY" \
+          set -o pipefail
+          branches=$(curl -sS --fail-with-body -H "Authorization: Bearer $NEON_API_KEY" \
             "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches") \
             || { echo "::error::Failed to list Neon branches"; exit 1; }
 
