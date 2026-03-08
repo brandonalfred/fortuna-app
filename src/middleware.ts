@@ -2,11 +2,14 @@ import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
 export function middleware(request: NextRequest) {
+	const sessionCookie = getSessionCookie(request);
+
 	if (request.nextUrl.pathname === "/") {
+		if (sessionCookie) {
+			return NextResponse.redirect(new URL("/new", request.url));
+		}
 		return NextResponse.next();
 	}
-
-	const sessionCookie = getSessionCookie(request);
 	const isAuthPage = request.nextUrl.pathname.startsWith("/auth");
 
 	if (isAuthPage) {
