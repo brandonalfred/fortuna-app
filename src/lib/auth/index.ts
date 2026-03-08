@@ -2,8 +2,10 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
-import { admin } from "better-auth/plugins";
+import { admin, twoFactor } from "better-auth/plugins";
+import { sendOTPEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { sendOTPSMS } from "@/lib/sms";
 import {
 	PASSWORD_MAX_LENGTH,
 	PASSWORD_MIN_LENGTH,
@@ -56,6 +58,28 @@ export const auth = betterAuth({
 		admin({
 			defaultRole: "user",
 			adminRoles: ["admin"],
+		}),
+		twoFactor({
+			skipVerificationOnEnable: true,
+			otpOptions: {
+				sendOTP({ user, otp }, ctx) {
+					const channel = ctx?.headers?.get("x-otp-channel");
+					const phoneNumber = (user as unknown as { phoneNumber?: string })
+						.phoneNumber;
+					const promise =
+						channel === "phone" && phoneNumber
+							? sendOTPSMS(phoneNumber, otp)
+							: sendOTPEmail(user.email, otp);
+					promise.catch((err) =>
+						console.error("[2FA] Failed to send OTP:", err),
+					);
+				},
+				period: 3,
+			},
+			backupCodeOptions: {
+				amount: 10,
+				length: 10,
+			},
 		}),
 	],
 });

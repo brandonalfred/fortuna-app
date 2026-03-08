@@ -252,22 +252,14 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 
 **Troubleshooting type-check failures:** If `bun run type-check` fails with `TS2307: Cannot find module` errors for packages that should be installed (e.g., `zustand`, `@tanstack/react-query`), run `bun install` first to restore missing dependencies from the lockfile.
 
-**Migration requirement:** Every change to `prisma/schema.prisma` MUST include a corresponding migration file. The build runs `prisma migrate deploy` which only applies existing migrations — without a migration file, schema changes will not reach the database. Use `vercel env pull .env --environment preview` to get database credentials, then:
+**Migration requirement:** Every change to `prisma/schema.prisma` MUST include a corresponding migration file. The build runs `prisma migrate deploy` which only applies existing migrations — without a migration file, schema changes will not reach the database.
+
+**dotenv gotcha:** `prisma.config.ts` imports `dotenv/config` which loads `.env`, but the project only has `.env.local`. You must prefix all Prisma CLI commands with `DOTENV_CONFIG_PATH=.env.local` so the database URL is available:
 
 ```bash
-bunx prisma migrate dev --create-only --name <name>    # Generate migration SQL
-bunx prisma migrate dev                                 # Apply migration
-bunx prisma generate                                    # Regenerate client
-```
-
-**Local Development:**
-
-Uses Prisma's PGlite. Start the dev server before running migrations:
-
-```bash
-bunx prisma dev --port 5434              # Run in separate terminal
-bunx prisma migrate dev --name <name>    # Create and apply migration
-bunx prisma generate                     # Regenerate client after schema changes
+DOTENV_CONFIG_PATH=.env.local bunx prisma migrate dev --create-only --name <name>    # Generate migration SQL
+DOTENV_CONFIG_PATH=.env.local bunx prisma migrate dev                                 # Apply migration
+bunx prisma generate                                                                  # Regenerate client
 ```
 
 **Important:** Never use `db push` for production-bound changes - it doesn't create migration files.
@@ -280,7 +272,7 @@ shasum -a 256 prisma/migrations/<migration_name>/migration.sql
 UPDATE _prisma_migrations SET checksum = '<new_sha256>' WHERE migration_name = '<migration_name>';
 ```
 
-**Always use Prisma CLI to create migrations** — never manually create migration directories or SQL files. Use `bunx prisma migrate dev --create-only --name <name>` to generate the migration, review the SQL, then apply with `bunx prisma migrate dev`.
+**Always use Prisma CLI to create migrations** — never manually create migration directories or SQL files. Use `DOTENV_CONFIG_PATH=.env.local bunx prisma migrate dev --create-only --name <name>` to generate the migration, review the SQL, then apply with `DOTENV_CONFIG_PATH=.env.local bunx prisma migrate dev`.
 
 ## Design System
 
