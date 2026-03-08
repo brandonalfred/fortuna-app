@@ -78,6 +78,7 @@ interface SystemAgentMessage {
 function handleTitlePromise(
 	titlePromise: Promise<string | null>,
 	chatId: string,
+	originalTitle: string,
 	sse?: SSEWriter,
 ) {
 	titlePromise
@@ -87,7 +88,7 @@ function handleTitlePromise(
 				sse.send("title_update", { title });
 			}
 			await prisma.chat.update({
-				where: { id: chatId },
+				where: { id: chatId, title: originalTitle },
 				data: { title },
 			});
 		})
@@ -389,7 +390,7 @@ export async function POST(req: Request): Promise<Response> {
 						});
 
 						if (titlePromise) {
-							handleTitlePromise(titlePromise, chat.id);
+							handleTitlePromise(titlePromise, chat.id, chatTitle);
 						}
 					} catch (error) {
 						console.error("[Chat API] Direct stream setup failed:", error);
@@ -477,7 +478,7 @@ export async function POST(req: Request): Promise<Response> {
 				sse.send("init", { chatId: chat.id, sessionId });
 
 				if (titlePromise) {
-					handleTitlePromise(titlePromise, chat.id, sse);
+					handleTitlePromise(titlePromise, chat.id, chatTitle, sse);
 				}
 
 				let fullAssistantContent = "";

@@ -126,7 +126,7 @@ function ChatListContent({
 							>
 								<span
 									key={displayTitle}
-									className="block truncate animate-[fadeIn_0.3s_ease-out]"
+									className="block truncate animate-in fade-in duration-300"
 								>
 									{displayTitle}
 								</span>
@@ -164,7 +164,8 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 	const [isLoading, setIsLoading] = useState(true);
 	const pathname = usePathname();
 	const router = useRouter();
-	const currentStoreChat = useChatStore((s) => s.currentChat);
+	const storeChatId = useChatStore((s) => s.currentChat?.id);
+	const storeChatTitle = useChatStore((s) => s.currentChat?.title);
 
 	const fetchChats = useCallback(async () => {
 		try {
@@ -245,9 +246,7 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 						chats={chats}
 						currentChatId={currentChatId}
 						activeChatTitle={
-							currentStoreChat?.id === currentChatId
-								? currentStoreChat?.title
-								: undefined
+							storeChatId === currentChatId ? storeChatTitle : undefined
 						}
 						onDelete={handleDelete}
 						onTitleEdited={handleTitleEdited}
