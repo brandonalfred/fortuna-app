@@ -3,10 +3,14 @@ name: Neon Branch Cleanup
 on:
   pull_request:
     types: [closed]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
 
 jobs:
   delete-neon-branch:
     name: Delete Neon Preview Branch
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Delete Neon branch
@@ -16,3 +20,47 @@ jobs:
           branch_name: preview/${{ github.head_ref }}
           api_key: ${{ secrets.NEON_API_KEY }}
         continue-on-error: true
+
+  cleanup-stale-branches:
+    name: Cleanup Orphaned Neon Preview Branches
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: List and delete orphaned preview branches
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          branches=$(curl -sS --fail-with-body -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches") \
+            || { echo "::error::Failed to list Neon branches"; exit 1; }
+
+          echo "$branches" | jq -e '.branches' > /dev/null 2>&1 \
+            || { echo "::error::Unexpected response from Neon API"; exit 1; }
+
+          open_pr_branches=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json headRefName --jq '.[].headRefName') \
+            || { echo "::error::Failed to list open PRs from GitHub"; exit 1; }
+
+          echo "$branches" | jq -c '.branches[] | select(.name | startswith("preview/")) | select(.primary != true) | select(.default != true) | {id: .id, name: .name}' | while read -r branch; do
+            branch_id=$(echo "$branch" | jq -r '.id')
+            branch_name=$(echo "$branch" | jq -r '.name')
+            git_branch=$(echo "$branch_name" | sed 's|^preview/||')
+
+            if echo "$open_pr_branches" | grep -qxF "$git_branch"; then
+              echo "Keeping '$branch_name' — open PR exists for '$git_branch'"
+            else
+              echo "Deleting '$branch_name' (id: $branch_id) — no matching open PR for branch '$git_branch'"
+              curl -sS --fail-with-body -X DELETE -H "Authorization: Bearer $NEON_API_KEY" \
+                "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$branch_id" \
+                && echo "  Deleted successfully" \
+                || echo "  Failed to delete (see error above)"
+              sleep 1
+            fi
+          done
+
+          echo "Cleanup complete"
