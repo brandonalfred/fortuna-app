@@ -18,6 +18,7 @@ function JsonLd() {
 			"@type": "Organization",
 			name: "FortunaBets",
 			url: "https://fortunabets.ai",
+			logo: "https://fortunabets.ai/og-image.png",
 			description:
 				"AI-powered sports betting analysis platform providing data-driven insights across major sports leagues.",
 		},

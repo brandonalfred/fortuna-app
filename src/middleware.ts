@@ -28,6 +28,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
 	matcher: [
-		"/((?!api/auth|api/chat/persist|_next/static|_next/image|favicon.ico).*)",
+		"/((?!api/auth|api/chat/persist|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
 	],
 };
