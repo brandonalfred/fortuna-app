@@ -73,6 +73,7 @@ interface ChatActions {
 	sendMessage(content: string, attachments?: Attachment[]): Promise<void>;
 	stopGeneration(): void;
 	startNewChat(): void;
+	updateTitle(title: string): void;
 	clearError(): void;
 	setError(error: string | null): void;
 }
@@ -654,6 +655,13 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					todos: [],
 				});
 				callbacks.getQueueStore().clear();
+			},
+
+			updateTitle(title: string) {
+				const current = get().currentChat;
+				if (current) {
+					set({ currentChat: { ...current, title } });
+				}
 			},
 
 			async sendMessage(content, attachments) {

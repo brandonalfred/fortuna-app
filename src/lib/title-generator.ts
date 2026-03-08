@@ -14,7 +14,7 @@ export async function generateChatTitle(
 		const { text } = await generateText({
 			model: anthropic("claude-haiku-4-5-20251001"),
 			system: TITLE_SYSTEM,
-			prompt: userMessage,
+			prompt: userMessage.slice(0, 500),
 			maxTokens: 50,
 			abortSignal: AbortSignal.timeout(5000),
 		});

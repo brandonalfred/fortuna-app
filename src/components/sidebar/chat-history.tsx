@@ -166,6 +166,7 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 	const router = useRouter();
 	const storeChatId = useChatStore((s) => s.currentChat?.id);
 	const storeChatTitle = useChatStore((s) => s.currentChat?.title);
+	const updateStoreTitle = useChatStore((s) => s.updateTitle);
 
 	const fetchChats = useCallback(async () => {
 		try {
@@ -211,6 +212,9 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 			setChats((prev) =>
 				prev.map((c) => (c.id === chatId ? { ...c, title } : c)),
 			);
+			if (chatId === storeChatId) {
+				updateStoreTitle(title);
+			}
 			try {
 				await fetch(`/api/chats/${chatId}`, {
 					method: "PATCH",
@@ -221,7 +225,7 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 				fetchChats();
 			}
 		},
-		[fetchChats],
+		[fetchChats, storeChatId, updateStoreTitle],
 	);
 
 	return (
