@@ -79,6 +79,11 @@ export const presignRequestSchema = z.object({
 	chatId: z.string().uuid().optional(),
 });
 
+export const generateTitleSchema = z.object({
+	message: z.string().min(1).max(10000),
+	chatId: z.string().uuid(),
+});
+
 export const createChatSchema = z.object({
 	title: z.string().min(1).max(200).optional(),
 });

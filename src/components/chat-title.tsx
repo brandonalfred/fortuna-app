@@ -22,6 +22,7 @@ import { useChatStore } from "@/providers/chat-store-provider";
 
 export function ChatTitle() {
 	const currentChat = useChatStore((s) => s.currentChat);
+	const updateTitle = useChatStore((s) => s.updateTitle);
 	const invalidateChat = useInvalidateChat();
 	const [isRenaming, setIsRenaming] = useState(false);
 	const [editValue, setEditValue] = useState("");
@@ -64,6 +65,7 @@ export function ChatTitle() {
 				body: JSON.stringify({ title: trimmed }),
 			});
 			if (res.ok) {
+				updateTitle(trimmed);
 				invalidateChat(currentChat.id);
 				window.dispatchEvent(new CustomEvent("chat-renamed"));
 			}
@@ -72,7 +74,14 @@ export function ChatTitle() {
 			setIsRenaming(false);
 			setEditValue("");
 		}
-	}, [currentChat, editValue, isSaving, invalidateChat, handleCancel]);
+	}, [
+		currentChat,
+		editValue,
+		isSaving,
+		updateTitle,
+		invalidateChat,
+		handleCancel,
+	]);
 
 	if (!currentChat) return null;
 

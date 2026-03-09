@@ -57,6 +57,7 @@ interface ChatState {
 	abortController: AbortController | null;
 	stopReason: { stopReason: string; subtype: string } | null;
 	todos: TodoItem[];
+	pendingTitleMessage: string | null;
 	disconnectedChatId: string | null;
 	loadedChatId: string | undefined;
 	isCreatingChat: boolean;
@@ -256,6 +257,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			error: null,
 			abortController: null,
 			stopReason: null,
+			pendingTitleMessage: null,
 			disconnectedChatId: null,
 			loadedChatId: undefined,
 			isCreatingChat: false,
@@ -313,6 +315,25 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						if (!state.loadedChatId && !state.isCreatingChat) {
 							set({ isCreatingChat: true });
 							callbacks.onChatCreated?.(initData.chatId);
+						}
+						const pending = get().pendingTitleMessage;
+						if (pending && !state.loadedChatId) {
+							set({ pendingTitleMessage: null });
+							fetch("/api/chats/generate-title", {
+								method: "POST",
+								headers: { "Content-Type": "application/json" },
+								body: JSON.stringify({
+									message: pending,
+									chatId: initData.chatId,
+								}),
+							})
+								.then((res) => res.json())
+								.then(({ title }: { title: string | null }) => {
+									if (title) get().updateTitle(title);
+								})
+								.catch((err) =>
+									console.warn("[title-generation] failed:", err),
+								);
 						}
 						break;
 					}
@@ -653,6 +674,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					streamingMessage: null,
 					activeSubAgentStack: [],
 					isRecovering: false,
+					pendingTitleMessage: null,
 					todos: [],
 				});
 				callbacks.getQueueStore().clear();
@@ -710,16 +732,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				let aborted = false;
 
 				if (isNewChat && chatId && content.trim()) {
-					fetch("/api/chats/generate-title", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ message: content, chatId }),
-					})
-						.then((res) => res.json())
-						.then(({ title }: { title: string | null }) => {
-							if (title) get().updateTitle(title);
-						})
-						.catch((err) => console.warn("[title-generation] failed:", err));
+					set({ pendingTitleMessage: content });
 				}
 
 				try {

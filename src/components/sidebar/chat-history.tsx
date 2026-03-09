@@ -19,7 +19,6 @@ interface ChatListContentProps {
 	currentChatId?: string;
 	activeChatTitle?: string;
 	onDelete: (e: React.MouseEvent, chatId: string) => void;
-	onTitleEdited: (chatId: string, title: string) => void;
 }
 
 function groupChatsByDate(chats: Chat[]): { label: string; chats: Chat[] }[] {
@@ -139,8 +138,6 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 	const router = useRouter();
 	const storeChatId = useChatStore((s) => s.currentChat?.id);
 	const storeChatTitle = useChatStore((s) => s.currentChat?.title);
-	const updateStoreTitle = useChatStore((s) => s.updateTitle);
-
 	const fetchChats = useCallback(async () => {
 		try {
 			const response = await fetch("/api/chats");
@@ -186,27 +183,6 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 		[currentChatId, router],
 	);
 
-	const handleTitleEdited = useCallback(
-		async (chatId: string, title: string) => {
-			setChats((prev) =>
-				prev.map((c) => (c.id === chatId ? { ...c, title } : c)),
-			);
-			if (chatId === storeChatId) {
-				updateStoreTitle(title);
-			}
-			try {
-				await fetch(`/api/chats/${chatId}`, {
-					method: "PATCH",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ title }),
-				});
-			} catch {
-				fetchChats();
-			}
-		},
-		[fetchChats, storeChatId, updateStoreTitle],
-	);
-
 	return (
 		<div className="flex h-full flex-col bg-bg-secondary">
 			<ScrollArea className="flex-1 overflow-hidden">
@@ -219,7 +195,6 @@ export function ChatHistory({ currentChatId }: ChatHistoryProps) {
 							storeChatId === currentChatId ? storeChatTitle : undefined
 						}
 						onDelete={handleDelete}
-						onTitleEdited={handleTitleEdited}
 					/>
 				</div>
 			</ScrollArea>

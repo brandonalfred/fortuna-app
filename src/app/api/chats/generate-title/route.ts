@@ -1,6 +1,7 @@
-import { getAuthenticatedUser, unauthorized } from "@/lib/api";
+import { badRequest, getAuthenticatedUser, unauthorized } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { generateChatTitle } from "@/lib/title-generator";
+import { generateTitleSchema } from "@/lib/validations/chat";
 
 export async function POST(req: Request): Promise<Response> {
 	const user = await getAuthenticatedUser();
@@ -8,13 +9,16 @@ export async function POST(req: Request): Promise<Response> {
 		return unauthorized();
 	}
 
-	const { message, chatId } = (await req.json()) as {
-		message: string;
-		chatId?: string;
-	};
+	const body = await req.json();
+	const parsed = generateTitleSchema.safeParse(body);
+	if (!parsed.success) {
+		return badRequest("Invalid request", parsed.error.flatten());
+	}
+
+	const { message, chatId } = parsed.data;
 	const title = await generateChatTitle(message);
 
-	if (title && chatId) {
+	if (title) {
 		await prisma.chat
 			.update({
 				where: { id: chatId, userId: user.id },
