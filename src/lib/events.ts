@@ -139,6 +139,7 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 				const activeAgent = findActiveSubAgent();
 				if (activeAgent) {
 					const toolCall: SubAgentToolCall = {
+						id: crypto.randomUUID(),
 						name: data.name ?? "",
 						summary: getToolSummary(data.name ?? "", data.input),
 						status: "complete",
