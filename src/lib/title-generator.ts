@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 
 const anthropic = createAnthropic({
-	apiKey: process.env.CLAUDE_CODE_OAUTH_TOKEN,
+	apiKey: process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim(),
 });
 
 const TITLE_SYSTEM = `Generate a short, descriptive title (2-6 words) for a conversation that starts with the following message. Return ONLY the title text, nothing else. No quotes, no punctuation at the end.`;
