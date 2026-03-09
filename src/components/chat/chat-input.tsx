@@ -26,7 +26,7 @@ export function ChatInput({
 	onQueue,
 	isLoading,
 	disabled,
-	placeholder = "Ask about odds, matchups, trends...",
+	placeholder = "Ask about odds, matchups...",
 	variant = "bottom",
 }: ChatInputProps) {
 	const [value, setValue] = useState("");
@@ -221,6 +221,7 @@ export function ChatInput({
 						"text-text-primary placeholder:text-text-tertiary",
 						"focus-visible:ring-0 focus-visible:border-0",
 						"font-body",
+						"[field-sizing:normal]",
 					)}
 				/>
 				<Button

@@ -76,19 +76,21 @@ export function ChatWindow() {
 
 	if (isEmpty) {
 		return (
-			<div className="flex h-full flex-col items-center justify-center px-4">
-				<h1 className="font-display text-2xl sm:text-3xl text-text-primary mb-3 text-center">
-					Welcome to FortunaBets
-					{!isPending && session?.user?.firstName && (
-						<span className="animate-message-in">
-							, {capitalize(session.user.firstName)}
-						</span>
-					)}
-				</h1>
-				<p className="text-text-secondary text-center max-w-md mb-8">
-					Ask about any game. Get AI-powered odds, matchups, and
-					insights—instantly.
-				</p>
+			<div className="flex h-full flex-col items-center justify-end px-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+				<div className="flex flex-1 flex-col items-center justify-center">
+					<h1 className="font-display text-2xl sm:text-3xl text-text-primary mb-3 text-center">
+						Welcome to FortunaBets
+						{!isPending && session?.user?.firstName && (
+							<span className="animate-message-in">
+								, {capitalize(session.user.firstName)}
+							</span>
+						)}
+					</h1>
+					<p className="text-text-secondary text-center max-w-md mb-8">
+						Ask about any game. Get AI-powered odds, matchups, and
+						insights—instantly.
+					</p>
+				</div>
 				{error && (
 					<ErrorBanner
 						message={error}
