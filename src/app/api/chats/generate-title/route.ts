@@ -20,7 +20,9 @@ export async function POST(req: Request): Promise<Response> {
 				where: { id: chatId, userId: user.id },
 				data: { title },
 			})
-			.catch((err) => console.warn("[title-generation] DB update failed:", err));
+			.catch((err) =>
+				console.warn("[title-generation] DB update failed:", err),
+			);
 	}
 
 	return Response.json({ title });

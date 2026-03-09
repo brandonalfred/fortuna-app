@@ -719,9 +719,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						.then(({ title }: { title: string | null }) => {
 							if (title) get().updateTitle(title);
 						})
-						.catch((err) =>
-							console.warn("[title-generation] failed:", err),
-						);
+						.catch((err) => console.warn("[title-generation] failed:", err));
 				}
 
 				try {
