@@ -59,7 +59,7 @@ export default function SettingsPage() {
 			<div className="flex-1 px-4 py-6">
 				<div className="mx-auto max-w-md space-y-6">
 					<div className="flex flex-col items-center gap-3">
-						<div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-primary text-xl font-medium text-text-inverse">
+						<div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-primary text-lg font-medium text-text-inverse">
 							{initials}
 						</div>
 					</div>
@@ -74,7 +74,7 @@ export default function SettingsPage() {
 					<button
 						type="button"
 						onClick={() => router.push("/settings/profile")}
-						className="flex w-full items-center gap-3 rounded-lg bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
+						className="flex w-full items-center gap-3 rounded-xl bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
 					>
 						<div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-tertiary">
 							<User className="h-4 w-4 text-text-secondary" />
@@ -90,7 +90,7 @@ export default function SettingsPage() {
 						<button
 							type="button"
 							onClick={() => router.push("/admin")}
-							className="flex w-full items-center gap-3 rounded-lg bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
+							className="flex w-full items-center gap-3 rounded-xl bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
 						>
 							<div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-muted">
 								<LayoutDashboard className="h-4 w-4 text-accent-primary" />
@@ -110,14 +110,14 @@ export default function SettingsPage() {
 					<button
 						type="button"
 						onClick={handleSignOut}
-						className="flex w-full items-center gap-3 rounded-lg bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
+						className="flex w-full items-center gap-3 rounded-xl bg-bg-secondary p-4 transition-colors hover:bg-bg-tertiary"
 					>
-						<div className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10">
-							<LogOut className="h-4 w-4 text-red-500" />
+						<div className="flex h-9 w-9 items-center justify-center rounded-full bg-error-subtle">
+							<LogOut className="h-4 w-4 text-error" />
 						</div>
 						<div className="flex-1 text-left">
-							<p className="text-sm font-medium text-red-500">Sign Out</p>
-							<p className="text-xs text-red-400">End your session</p>
+							<p className="text-sm font-medium text-error">Sign Out</p>
+							<p className="text-xs text-error/70">End your session</p>
 						</div>
 					</button>
 				</div>

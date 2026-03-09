@@ -106,7 +106,7 @@ export default function ProfilePage() {
 						</p>
 					</div>
 
-					<div className="rounded-lg bg-bg-secondary p-4">
+					<div className="rounded-xl bg-bg-secondary p-4">
 						<textarea
 							value={value}
 							onChange={(e) => {
@@ -119,7 +119,7 @@ export default function ProfilePage() {
 						/>
 						<div className="mt-2 flex items-center justify-between">
 							<span
-								className={`text-xs ${overLimit ? "text-red-400" : "text-text-tertiary"}`}
+								className={`text-xs ${overLimit ? "text-error" : "text-text-tertiary"}`}
 							>
 								{charCount}/{PREFERENCES_MAX_LENGTH}
 							</span>
@@ -128,10 +128,10 @@ export default function ProfilePage() {
 
 					{status && (
 						<div
-							className={`rounded-lg px-3 py-2 text-xs ${
+							className={`rounded-xl px-3 py-2 text-xs ${
 								status.type === "success"
-									? "bg-green-900/30 text-green-400"
-									: "bg-red-900/30 text-red-400"
+									? "bg-success-subtle text-success"
+									: "bg-error-subtle text-error"
 							}`}
 						>
 							{status.message}

@@ -169,41 +169,43 @@ export function MessageList({
 		<div
 			ref={scrollContainerRef}
 			onScroll={handleScroll}
-			className="flex flex-col gap-4 p-4 h-full overflow-y-auto"
+			className="flex flex-col gap-6 px-3 sm:px-4 py-6 h-full overflow-y-auto"
 		>
-			{messages.map((message, index) => {
-				const shouldAnimate = !seenMessageIds.current.has(message.id);
-				seenMessageIds.current.add(message.id);
-				return (
-					<div
-						key={message.id}
-						ref={getMessageRef(index)}
-						className="scroll-mt-4"
-					>
-						<MessageItem message={message} animate={shouldAnimate} />
+			<div className="mx-auto w-full max-w-3xl flex flex-col gap-6">
+				{messages.map((message, index) => {
+					const shouldAnimate = !seenMessageIds.current.has(message.id);
+					seenMessageIds.current.add(message.id);
+					return (
+						<div
+							key={message.id}
+							ref={getMessageRef(index)}
+							className="scroll-mt-4"
+						>
+							<MessageItem message={message} animate={shouldAnimate} />
+						</div>
+					);
+				})}
+				{streamingMessage?.isStreaming && (
+					<StreamingMessageItem
+						segments={streamingMessage.segments}
+						isStreaming
+						statusMessage={statusMessage}
+					/>
+				)}
+				{messageQueue.map((msg) => (
+					<QueuedMessageItem
+						key={msg.id}
+						content={msg.content}
+						onCancel={() => onRemoveQueued(msg.id)}
+					/>
+				))}
+				{todos.length > 0 && (
+					<div className="flex w-full justify-start">
+						<TodoWidget todos={todos} />
 					</div>
-				);
-			})}
-			{streamingMessage?.isStreaming && (
-				<StreamingMessageItem
-					segments={streamingMessage.segments}
-					isStreaming
-					statusMessage={statusMessage}
-				/>
-			)}
-			{messageQueue.map((msg) => (
-				<QueuedMessageItem
-					key={msg.id}
-					content={msg.content}
-					onCancel={() => onRemoveQueued(msg.id)}
-				/>
-			))}
-			{todos.length > 0 && (
-				<div className="flex w-full justify-start">
-					<TodoWidget todos={todos} />
-				</div>
-			)}
-			<div ref={bottomRef} />
+				)}
+				<div ref={bottomRef} />
+			</div>
 		</div>
 	);
 }

@@ -103,7 +103,7 @@ function buildChatObject(
 	return {
 		id: chatId,
 		sessionId,
-		title: existing?.title || "",
+		title: existing?.title || "Untitled",
 		createdAt: existing?.createdAt || new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		messages: existing?.messages || [],
@@ -687,6 +687,11 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 				const abortController = new AbortController();
 
+				const isNewChat = !state.loadedChatId && !state.isCreatingChat;
+				const chatId =
+					state.currentChat?.id ||
+					(isNewChat ? crypto.randomUUID() : undefined);
+
 				set({
 					messages: [...state.messages, userMessage],
 					isLoading: true,
@@ -694,11 +699,30 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					streamingSegments: [],
 					streamingMessage: { segments: [], isStreaming: true },
 					abortController,
+					...(isNewChat &&
+						chatId && {
+							currentChat: buildChatObject(chatId, "", null),
+						}),
 				});
 
 				const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 				let receivedDone = false;
 				let aborted = false;
+
+				if (isNewChat && chatId && content.trim()) {
+					fetch("/api/chats/generate-title", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ message: content, chatId }),
+					})
+						.then((res) => res.json())
+						.then(({ title }: { title: string | null }) => {
+							if (title) get().updateTitle(title);
+						})
+						.catch((err) =>
+							console.warn("[title-generation] failed:", err),
+						);
+				}
 
 				try {
 					const currentState = get();
@@ -707,7 +731,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({
 							message: content,
-							chatId: currentState.currentChat?.id,
+							chatId,
 							sessionId: currentState.sessionId,
 							timezone: userTimezone,
 							attachments: attachments?.map(
@@ -745,8 +769,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 
 					const contentType = response.headers.get("content-type") || "";
 					const streamMode = response.headers.get("X-Stream-Mode");
-					const isNewChat =
-						!currentState.loadedChatId && !currentState.isCreatingChat;
 
 					if (streamMode === "setup") {
 						const setupReader = response.body?.getReader();

@@ -168,12 +168,10 @@ export function ChatInput({
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
 			className={cn(
-				"relative flex flex-col overflow-hidden rounded-lg",
-				"border bg-bg-input",
-				isDragOver
-					? "border-accent-primary ring-1 ring-accent-primary"
-					: "border-border-default",
-				"focus-within:border-border-focus focus-within:ring-1 focus-within:ring-border-focus",
+				"relative flex flex-col overflow-hidden rounded-2xl",
+				"border border-border-subtle/50 bg-bg-elevated shadow-float",
+				isDragOver && "border-accent-primary ring-1 ring-accent-primary",
+				"focus-within:shadow-float-focus",
 			)}
 		>
 			{pendingUploads.length > 0 && (
@@ -197,7 +195,7 @@ export function ChatInput({
 					onClick={() => fileInputRef.current?.click()}
 					disabled={disabled}
 					className={cn(
-						"absolute left-2.5 bottom-2.5 flex h-7 w-7 items-center justify-center rounded-md",
+						"absolute left-3 bottom-3 flex h-7 w-7 items-center justify-center rounded-md",
 						"text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary",
 						"transition-colors",
 						"disabled:opacity-50",
@@ -218,7 +216,7 @@ export function ChatInput({
 					enterKeyHint="send"
 					rows={1}
 					className={cn(
-						"min-h-[44px] max-h-[200px] resize-none py-3 pl-10 pr-12",
+						"min-h-[48px] max-h-[200px] resize-none py-3 pl-11 pr-14",
 						"border-0 rounded-none bg-transparent shadow-none",
 						"text-text-primary placeholder:text-text-tertiary",
 						"focus-visible:ring-0 focus-visible:border-0",
@@ -235,7 +233,7 @@ export function ChatInput({
 					}
 					size="icon"
 					className={cn(
-						"absolute right-2.5 bottom-2.5 h-7 w-7 shrink-0",
+						"absolute right-3 bottom-3 h-8 w-8 shrink-0 rounded-lg",
 						"bg-accent-primary hover:bg-accent-hover",
 						"text-text-inverse",
 						"transition-all duration-200",
@@ -245,7 +243,7 @@ export function ChatInput({
 					{isLoading ? (
 						<Square className="h-3.5 w-3.5" />
 					) : (
-						<ArrowUp className="h-3.5 w-3.5" />
+						<ArrowUp className="h-4 w-4" />
 					)}
 				</Button>
 			</div>
@@ -253,14 +251,14 @@ export function ChatInput({
 	);
 
 	const disclaimer = (
-		<p className="mt-2 text-center text-xs text-text-tertiary">
+		<p className="mt-2 text-center text-[11px] text-text-tertiary/70">
 			Fortuna can make mistakes. Verify important information.
 		</p>
 	);
 
 	if (variant === "centered") {
 		return (
-			<div className="w-full max-w-2xl">
+			<div className="w-full max-w-2xl animate-fade-up">
 				{inputBox}
 				{disclaimer}
 			</div>
@@ -268,7 +266,7 @@ export function ChatInput({
 	}
 
 	return (
-		<div className="border-t border-border-subtle bg-bg-primary p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+		<div className="px-3 sm:px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
 			<div className="mx-auto max-w-3xl">
 				{inputBox}
 				{disclaimer}
