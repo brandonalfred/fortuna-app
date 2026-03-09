@@ -449,8 +449,8 @@ function SubAgentCard({ agent }: { agent: SubAgent }) {
 			)}
 			{hasTools && (
 				<div className="mt-0.5 ml-5">
-					{visibleTools.map((tool, i) => (
-						<SubAgentToolLine key={`${tool.name}-${i}`} tool={tool} />
+					{visibleTools.map((tool) => (
+						<SubAgentToolLine key={tool.id} tool={tool} />
 					))}
 					{overflowCount > 0 && (
 						<span className="text-[11px] text-text-tertiary font-mono py-0.5">

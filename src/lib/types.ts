@@ -37,6 +37,7 @@ export interface SubAgentUsage {
 }
 
 export interface SubAgentToolCall {
+	id: string;
 	name: string;
 	summary: string | null;
 	status: "running" | "complete";

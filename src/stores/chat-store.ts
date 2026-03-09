@@ -405,6 +405,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 								const agents = seg.agents.map((a) => {
 									if (a.taskId !== topId) return a;
 									const toolCall: SubAgentToolCall = {
+										id: crypto.randomUUID(),
 										name: toolData.name,
 										summary: getToolSummary(toolData.name, toolData.input),
 										status: "running",
