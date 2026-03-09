@@ -5,7 +5,9 @@ interface BrandLogoProps {
 }
 
 export function AlphaTag() {
-	return <span className="text-xs text-text-tertiary font-sans">(alpha)</span>;
+	return (
+		<span className="text-[10px] text-text-tertiary/60 font-sans">(alpha)</span>
+	);
 }
 
 export function BrandLogo({ className }: BrandLogoProps) {

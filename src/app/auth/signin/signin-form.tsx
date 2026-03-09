@@ -45,9 +45,9 @@ export function SignInForm() {
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
-			<div className="w-full max-w-sm space-y-8">
+			<div className="w-full max-w-sm space-y-8 rounded-2xl bg-bg-secondary/50 border border-border-subtle/30 p-8">
 				<div className="text-center">
-					<h1 className="font-display text-3xl text-text-primary">
+					<h1 className="font-display text-2xl text-text-primary">
 						Welcome back
 					</h1>
 					<p className="mt-2 text-text-secondary">

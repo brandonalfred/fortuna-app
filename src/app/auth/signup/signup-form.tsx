@@ -119,9 +119,9 @@ export function SignUpForm() {
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
-			<div className="w-full max-w-sm space-y-8">
+			<div className="w-full max-w-sm space-y-8 rounded-2xl bg-bg-secondary/50 border border-border-subtle/30 p-8">
 				<div className="text-center">
-					<h1 className="font-display text-3xl text-text-primary">
+					<h1 className="font-display text-2xl text-text-primary">
 						Create an account
 					</h1>
 					<p className="mt-2 text-text-secondary">
@@ -235,9 +235,7 @@ export function SignUpForm() {
 								{requirementResults.map((req) => (
 									<li
 										key={req.label}
-										className={
-											req.met ? "text-green-500" : "text-text-tertiary"
-										}
+										className={req.met ? "text-success" : "text-text-tertiary"}
 									>
 										{req.met ? "\u2713" : "\u2717"} {req.label}
 									</li>
@@ -271,7 +269,7 @@ export function SignUpForm() {
 						</div>
 						{confirmPassword.length > 0 && (
 							<p
-								className={`text-xs mt-1 ${passwordsMatch ? "text-green-500" : "text-red-500"}`}
+								className={`text-xs mt-1 ${passwordsMatch ? "text-success" : "text-error"}`}
 							>
 								{passwordsMatch
 									? "\u2713 Passwords match"

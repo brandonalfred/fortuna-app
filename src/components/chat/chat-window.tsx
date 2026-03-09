@@ -77,12 +77,11 @@ export function ChatWindow() {
 	if (isEmpty) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-4">
-				<h1 className="font-display text-4xl text-text-primary mb-3 text-center">
+				<h1 className="font-display text-2xl sm:text-3xl text-text-primary mb-3 text-center">
 					Welcome to FortunaBets
 					{!isPending && session?.user?.firstName && (
 						<span className="animate-message-in">
-							,<br />
-							{capitalize(session.user.firstName)}
+							, {capitalize(session.user.firstName)}
 						</span>
 					)}
 				</h1>

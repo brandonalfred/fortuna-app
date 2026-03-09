@@ -76,7 +76,7 @@ model Verification {
 
 model Chat {
   id        String    @id @default(uuid())
-  title     String    @default("New Chat")
+  title     String    @default("Untitled")
   sessionId String    @unique @map("session_id")
   sandboxId       String?   @map("sandbox_id")
   agentSessionId  String?   @map("agent_session_id")

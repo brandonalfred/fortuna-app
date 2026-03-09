@@ -8,10 +8,13 @@
   --bg-secondary: #1c1c1f;
   --bg-tertiary: #252528;
   --bg-input: #1a1a1d;
+  --bg-elevated: #1e1e22;
+  --bg-message-user: #1d2828;
+  --bg-message-assistant: #19191c;
 
   /* Borders & Dividers */
-  --border-subtle: #2a2a2e;
-  --border-default: #3a3a3f;
+  --border-subtle: #242428;
+  --border-default: #2e2e33;
   --border-focus: #4a9e9e;
 
   /* Text Hierarchy */
@@ -43,6 +46,8 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --shadow-float: 0 4px 24px -4px rgb(0 0 0 / 0.5), 0 1px 4px -1px rgb(0 0 0 / 0.3), inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  --shadow-float-focus: 0 4px 28px -4px rgb(0 0 0 / 0.6), 0 1px 4px -1px rgb(0 0 0 / 0.4), inset 0 1px 0 0 rgb(255 255 255 / 0.04);
 
   /* Transitions */
   --transition-fast: 150ms ease;
@@ -59,6 +64,8 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
 }
 
 @theme inline {
@@ -66,6 +73,9 @@
   --color-bg-secondary: var(--bg-secondary);
   --color-bg-tertiary: var(--bg-tertiary);
   --color-bg-input: var(--bg-input);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-message-user: var(--bg-message-user);
+  --color-bg-message-assistant: var(--bg-message-assistant);
 
   --color-border-subtle: var(--border-subtle);
   --color-border-default: var(--border-default);
@@ -100,6 +110,11 @@
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-3xl: var(--radius-3xl);
+
+  --shadow-float: var(--shadow-float);
+  --shadow-float-focus: var(--shadow-float-focus);
 }
 
 /* Base styles */
@@ -118,8 +133,8 @@ body {
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -229,6 +244,21 @@ body {
 
 .animate-todo-in {
   animation: todoIn 200ms ease-out;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 400ms ease-out;
 }
 
 /* Focus styles */

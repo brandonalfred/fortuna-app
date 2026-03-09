@@ -81,8 +81,10 @@ function collapseToolSegments(segments: ContentSegment[]): ContentSegment[] {
 	return result;
 }
 
+const BUBBLE_BASE = "max-w-[90%] sm:max-w-[80%] min-w-0 rounded-2xl px-4";
+
 const PROSE_CLASSES =
-	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:border prose-pre:border-border-subtle prose-pre:overflow-x-auto prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
+	"prose prose-invert prose-sm max-w-none font-body leading-relaxed prose-headings:text-text-primary prose-headings:font-heading prose-headings:mt-6 prose-headings:mb-3 prose-p:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-accent-primary prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-tertiary prose-pre:overflow-x-auto prose-a:text-accent-primary prose-a:no-underline hover:prose-a:underline";
 
 type AttachmentWithUrl = Attachment & { url: string };
 
@@ -214,8 +216,10 @@ export function MessageItem({ message, animate = true }: MessageItemProps) {
 		>
 			<div
 				className={cn(
-					"max-w-[85%] min-w-0 rounded-lg px-4 py-3",
-					isUser ? "bg-accent-muted text-text-primary" : "text-text-primary",
+					BUBBLE_BASE,
+					isUser
+						? "bg-bg-message-user text-text-primary py-2.5"
+						: "bg-bg-message-assistant text-text-primary py-3",
 				)}
 			>
 				<div className={PROSE_CLASSES}>
@@ -254,7 +258,12 @@ export function StreamingMessageItem({
 
 	return (
 		<div className="animate-message-in flex w-full justify-start">
-			<div className="max-w-[85%] min-w-0 rounded-lg px-4 py-3 text-text-primary">
+			<div
+				className={cn(
+					BUBBLE_BASE,
+					"bg-bg-message-assistant py-3 text-text-primary",
+				)}
+			>
 				<div className={PROSE_CLASSES}>
 					{collapsed.map((segment, idx) => (
 						<SegmentRenderer
@@ -282,7 +291,12 @@ export function QueuedMessageItem({
 }: QueuedMessageItemProps) {
 	return (
 		<div className="animate-message-in flex w-full justify-end">
-			<div className="group relative max-w-[85%] rounded-lg px-4 py-3 bg-accent-muted/60 border border-dashed border-accent-primary/30">
+			<div
+				className={cn(
+					BUBBLE_BASE,
+					"group relative py-3 bg-bg-message-user/60 border border-dashed border-accent-primary/30",
+				)}
+			>
 				<p className="font-body text-sm text-text-secondary">{content}</p>
 				<div className="mt-1.5 flex items-center gap-1.5">
 					<Clock className="h-3 w-3 text-text-tertiary" />
@@ -423,7 +437,7 @@ function SubAgentCard({ agent }: { agent: SubAgent }) {
 	const Chevron = showSummary ? ChevronDown : ChevronRight;
 
 	return (
-		<div className="ml-3 my-1 border-l-2 border-border-subtle pl-3">
+		<div className="ml-3 my-1 border-l border-border-subtle/50 pl-3">
 			<button
 				type="button"
 				onClick={() =>
@@ -557,13 +571,13 @@ function ToolUsePill({ tool }: ToolUsePillProps) {
 				onClick={() => setExpanded(!expanded)}
 				className={cn(
 					"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-mono",
-					"bg-tool-bg border border-tool-border text-tool-text",
-					"transition-colors hover:bg-tool-bg/80 cursor-pointer",
+					"bg-bg-tertiary/50 border border-border-subtle/50 text-text-secondary",
+					"transition-colors hover:bg-bg-tertiary cursor-pointer",
 					isRunning && "animate-subtle-pulse",
 					isInterrupted && "opacity-60 border-border-subtle",
 				)}
 			>
-				<Chevron className="h-3 w-3 shrink-0" />
+				<Chevron className="h-2.5 w-2.5 shrink-0" />
 				<span>{label}</span>
 				{isRunning && (
 					<span className="h-1.5 w-1.5 rounded-full bg-accent-primary animate-pulse" />
@@ -578,7 +592,7 @@ function ToolUsePill({ tool }: ToolUsePillProps) {
 				</p>
 			)}
 			{expanded && tool.input != null && (
-				<pre className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3 text-xs text-text-secondary font-mono overflow-x-auto max-w-lg whitespace-pre-wrap break-words">
+				<pre className="mt-2 rounded-xl bg-bg-secondary p-3 text-xs text-text-secondary font-mono overflow-x-auto max-w-lg whitespace-pre-wrap break-words">
 					{formatToolInput(tool.input)}
 				</pre>
 			)}
@@ -605,16 +619,16 @@ function ThinkingBlock({ thinking }: ThinkingBlockProps) {
 			<button
 				type="button"
 				onClick={() => setExpanded(!expanded)}
-				className="flex items-center gap-2 py-1 text-sm transition-colors hover:text-text-secondary"
+				className="flex items-center gap-2 py-1 text-xs transition-colors hover:text-text-secondary"
 			>
-				<Chevron className="h-3.5 w-3.5 text-text-muted shrink-0" />
-				<span className="text-text-muted truncate">
+				<Chevron className="h-3 w-3 text-text-tertiary shrink-0" />
+				<span className="text-text-tertiary truncate">
 					{expanded ? "Reasoning" : summary}
 				</span>
 			</button>
 			{expanded && (
-				<div className="mt-2 rounded-lg border border-border-subtle bg-bg-tertiary/30 p-3">
-					<div className="text-sm text-text-secondary whitespace-pre-wrap break-words font-body leading-relaxed">
+				<div className="mt-2 border-l-2 border-accent-primary/30 pl-3">
+					<div className="text-xs text-text-tertiary whitespace-pre-wrap break-words font-body leading-relaxed">
 						{thinking}
 					</div>
 				</div>
