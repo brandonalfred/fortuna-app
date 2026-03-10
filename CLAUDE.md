@@ -87,9 +87,12 @@ src/
 │   │   ├── new/page.tsx           # New chat page
 │   │   └── chat/[id]/page.tsx     # Existing chat page (by ID)
 │   ├── auth/                      # Auth pages (signin, signup)
+│   ├── admin/                     # Admin panel (role-gated user management)
 │   ├── api/
 │   │   ├── chat/route.ts         # SSE streaming endpoint for agent responses
-│   │   └── chats/                # Chat CRUD operations
+│   │   ├── chats/                # Chat CRUD + title generation
+│   │   ├── uploads/presign/      # Cloudflare R2 presigned URL generation
+│   │   └── user/preferences/     # User preferences CRUD
 │   ├── globals.css               # Tailwind v4 theme with design tokens
 │   └── layout.tsx                # Root layout with fonts
 ├── components/
@@ -222,7 +225,7 @@ The Vercel Sandbox API does exact-match on snapshot IDs, so a trailing `\n` caus
 
 ## Middleware
 
-`src/middleware.ts` handles route protection using `better-auth/cookies` `getSessionCookie()`. Unauthenticated users are redirected to `/auth/signin`. Excludes `/api/auth`, `_next/static`, `_next/image`, and `favicon.ico`.
+`src/middleware.ts` handles route protection using `better-auth/cookies` `getSessionCookie()`. Unauthenticated users are redirected to `/auth/signin`. Authenticated users visiting `/` or `/auth/*` are redirected to `/new`. Excludes `/api/auth`, `/api/chat/persist`, `_next/static`, `_next/image`, `favicon.ico`, `robots.txt`, and `sitemap.xml`.
 
 ## Testing
 
@@ -241,12 +244,20 @@ Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`)
 - Run `bun run lint:prisma` to verify naming conventions
 
 **Database models:**
-- `User` - Users with email, name, firstName, lastName, phoneNumber, emailVerified
+- `User` - Users with email, name, firstName, lastName, phoneNumber, emailVerified, role (`"user"` | `"admin"`), preferences (JSON text)
 - `Session` - Database sessions with token, expiry, IP address, user agent
 - `Account` - Auth provider accounts (email/password stored here)
 - `Verification` - Email verification tokens
-- `Chat` - Chat sessions with `sessionId` (agent session), optional `sandboxId` (Vercel Sandbox), and optional `agentSessionId` (SDK session resume)
-- `Message` - Messages with `role`, `content`, optional `thinking`, and tool metadata
+- `Chat` - Chat sessions with streaming/sandbox state:
+  - `sessionId` — unique agent session identifier
+  - `sandboxId` / `agentSessionId` — Vercel Sandbox instance and SDK session (for resume)
+  - `executorStatus` — sandbox lifecycle state
+  - `isProcessing` — whether a stream is currently active
+  - `storageVersion` — schema version for event storage
+  - `lastSequenceNum` — cursor for ChatEvent ordering
+  - `streamToken` / `persistToken` — unique tokens for stream dedup and persistence
+- `ChatEvent` - Append-only SSE event log per chat (`type`, `data` JSON, `sequenceNum`). Used for replaying chat state and persistence. Indexed on `(chatId, sequenceNum)`.
+- `Message` - Messages with `role`, `content`, optional `thinking`, and tool metadata (`toolName`, `toolInput`)
 
 **Important:** After a fresh `bun install` or any schema change, run `bunx prisma generate` before `bun run type-check` or `bun run lint:check` — the generated Prisma client is not committed and must be regenerated locally.
 
@@ -281,6 +292,15 @@ UPDATE _prisma_migrations SET checksum = '<new_sha256>' WHERE migration_name = '
 ```
 
 **Always use Prisma CLI to create migrations** — never manually create migration directories or SQL files. Use `bunx prisma migrate dev --create-only --name <name>` to generate the migration, review the SQL, then apply with `bunx prisma migrate dev`.
+
+## Utility Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/verify-migrations.ts` | Runs during build to verify all migrations applied successfully |
+| `scripts/patch-agent-sdk.js` | Runs via `postinstall` to patch the Claude Agent SDK |
+| `scripts/seed-admin.ts` | Sets admin role on a user: `bun scripts/seed-admin.ts` |
+| `scripts/create-sandbox-snapshot.ts` | Creates Vercel Sandbox snapshots (also runs via GitHub Action on 5-day schedule) |
 
 ## Design System
 
