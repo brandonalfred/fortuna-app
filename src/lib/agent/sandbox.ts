@@ -244,7 +244,7 @@ export async function getOrCreateSandbox(
 					cmd: "bash",
 					args: [
 						"-c",
-						"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel libatk-bridge libdrm libxkbcommon mesa-libgbm nss alsa-lib",
+						"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel at-spi2-atk libdrm libxkbcommon mesa-libgbm nss alsa-lib",
 					],
 					sudo: true,
 				},
@@ -276,11 +276,13 @@ export async function getOrCreateSandbox(
 			);
 
 			onStatus?.("installing", "Installing browser dependencies (5/5)...");
+			// scrapling install --force uses apt-get internally which doesn't work on AL2023
+			// System deps are already installed above; just install the browsers directly
 			await runSandboxCommand(
 				sandbox,
 				{
 					cmd: "bash",
-					args: ["-c", "scrapling install --force"],
+					args: ["-c", "python3 -m playwright install chromium firefox"],
 					sudo: true,
 				},
 				"Installing Scrapling browser dependencies",
