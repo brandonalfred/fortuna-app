@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { createLogger } from "@/lib/logger";
 
-const log = createLogger("TitleGeneration");
+const log = createLogger("TitleGenerator");
 
 const anthropic = createAnthropic({
 	apiKey: process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim(),
