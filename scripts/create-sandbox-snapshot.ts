@@ -120,10 +120,19 @@ async function createSnapshot(): Promise<void> {
 	const results = await Promise.all(
 		verifications.map((v) => sandbox.runCommand(v.options)),
 	);
+	let anyFailed = false;
 	for (let i = 0; i < verifications.length; i++) {
 		const ok = results[i].exitCode === 0;
 		console.log(`${verifications[i].name} verify: ${ok ? "OK" : "FAIL"}`);
-		if (!ok) console.log(`  output: ${await results[i].stdout()}`);
+		if (!ok) {
+			console.log(`  stderr: ${await results[i].stderr()}`);
+			anyFailed = true;
+		}
+	}
+	if (anyFailed) {
+		throw new Error(
+			"One or more verifications failed — aborting snapshot creation",
+		);
 	}
 
 	console.log("\nCreating snapshot (this will stop the sandbox)...");
