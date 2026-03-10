@@ -491,7 +491,7 @@ function SubAgentGroup({ agents }: { agents: SubAgent[] }) {
 	if (allDone) {
 		label = `Ran ${agents.length} agent${agents.length > 1 ? "s" : ""}`;
 	} else if (doneCount > 0) {
-		label = `Running ${agents.length} agents... (${doneCount} of ${agents.length} complete)`;
+		label = `Running ${agents.length} agents... (${doneCount} of ${agents.length} done)`;
 	} else {
 		label = `Running ${runningCount} agent${runningCount > 1 ? "s" : ""}...`;
 	}
