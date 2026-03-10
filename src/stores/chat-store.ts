@@ -511,7 +511,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					case "subagent_start": {
 						const { taskId, description } = data as SubAgentStartEvent;
 						const segments = [...state.streamingSegments];
-						const lastSeg = segments[segments.length - 1];
 
 						const newAgent: SubAgent = {
 							taskId,
@@ -520,10 +519,18 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							tools: [],
 						};
 
-						if (lastSeg?.type === "subagent_group") {
-							segments[segments.length - 1] = {
-								...lastSeg,
-								agents: [...lastSeg.agents, newAgent],
+						// Find the most recent subagent_group with running agents
+						const groupIdx = segments.findLastIndex(
+							(s) =>
+								s.type === "subagent_group" &&
+								s.agents.some((a) => a.status === "running"),
+						);
+						const group = groupIdx !== -1 ? segments[groupIdx] : null;
+
+						if (group?.type === "subagent_group") {
+							segments[groupIdx] = {
+								...group,
+								agents: [...group.agents, newAgent],
 							};
 						} else {
 							segments.push({
