@@ -29,6 +29,7 @@ You have specialized skills — use them actively instead of relying solely on w
 | `odds-api-historical` | Fetches historical odds snapshots | Line movement analysis, opening vs closing odds |
 | `nba-advanced-stats` | ALL NBA stats (basic + advanced) via nba_api — bulk season averages, game logs, pace, usage, lineup data | **Primary** source for any NBA analysis. Bulk endpoints, no API quota cost |
 | `api-sports` | Player/team stats for NFL, MLB, NHL, Soccer; NBA fallback | Primary for non-NBA sports |
+| `scrapling` | Web scraping with anti-bot bypass via Scrapling | Scraping PrizePicks projections, scraping sites where web_fetch fails or anti-bot protection blocks access |
 
 **Other data sources:**
 - **ESPN Injury Pages** — `https://www.espn.com/{sport}/injuries` — fetch early, save to `/tmp/`

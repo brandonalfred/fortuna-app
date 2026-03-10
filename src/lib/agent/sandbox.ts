@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Sandbox } from "@vercel/sandbox";
 import ms from "ms";
 import { createLogger } from "@/lib/logger";
@@ -212,7 +213,7 @@ export async function getOrCreateSandbox(
 				"Setting up fresh environment (this may take a moment)...",
 			);
 
-			onStatus?.("installing", "Installing core tools (1/4)...");
+			onStatus?.("installing", "Installing core tools (1/5)...");
 			await runSandboxCommand(
 				sandbox,
 				{
@@ -222,7 +223,7 @@ export async function getOrCreateSandbox(
 				"Installing Claude Code CLI",
 			);
 
-			onStatus?.("installing", "Installing SDKs (2/4)...");
+			onStatus?.("installing", "Installing SDKs (2/5)...");
 			await runSandboxCommand(
 				sandbox,
 				{
@@ -236,21 +237,21 @@ export async function getOrCreateSandbox(
 				"Installing SDKs",
 			);
 
-			onStatus?.("installing", "Installing system tools (3/4)...");
+			onStatus?.("installing", "Installing system tools (3/5)...");
 			await runSandboxCommand(
 				sandbox,
 				{
 					cmd: "bash",
 					args: [
 						"-c",
-						"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
+						"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel libatk-bridge libdrm libxkbcommon mesa-libgbm nss alsa-lib",
 					],
 					sudo: true,
 				},
 				"Installing Python 3, pip, and system tools",
 			);
 
-			onStatus?.("installing", "Installing analysis packages (4/4)...");
+			onStatus?.("installing", "Installing analysis packages (4/5)...");
 			await runSandboxCommand(
 				sandbox,
 				{
@@ -266,11 +267,23 @@ export async function getOrCreateSandbox(
 							"scikit-learn",
 							"duckdb",
 							"nba_api",
+							'"scrapling[all]"',
 						].join(" "),
 					],
 					sudo: true,
 				},
 				"Installing Python packages",
+			);
+
+			onStatus?.("installing", "Installing browser dependencies (5/5)...");
+			await runSandboxCommand(
+				sandbox,
+				{
+					cmd: "bash",
+					args: ["-c", "scrapling install --force"],
+					sudo: true,
+				},
+				"Installing Scrapling browser dependencies",
 			);
 		}
 
@@ -280,17 +293,22 @@ export async function getOrCreateSandbox(
 
 		for (const skill of skills) {
 			const skillDir = `/vercel/sandbox/.claude/skills/${skill.name}`;
+			const dirs = [
+				...new Set(
+					skill.files.map((f) => path.dirname(`${skillDir}/${f.relativePath}`)),
+				),
+			];
 			await sandbox.runCommand({
 				cmd: "mkdir",
-				args: ["-p", skillDir],
+				args: ["-p", ...dirs],
 			});
-			await sandbox.writeFiles([
-				{
-					path: `${skillDir}/SKILL.md`,
-					content: Buffer.from(skill.content),
-				},
-			]);
-			log.debug(`Copied skill: ${skill.name}`);
+			await sandbox.writeFiles(
+				skill.files.map((file) => ({
+					path: `${skillDir}/${file.relativePath}`,
+					content: file.content,
+				})),
+			);
+			log.debug(`Copied skill: ${skill.name} (${skill.files.length} files)`);
 		}
 
 		await releaseSpawnLock(chatId, sandbox.sandboxId);

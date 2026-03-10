@@ -98,9 +98,14 @@ export function getSystemPrompt(
 	});
 }
 
+export interface SkillFileEntry {
+	relativePath: string;
+	content: Buffer;
+}
+
 export interface SkillFile {
 	name: string;
-	content: string;
+	files: SkillFileEntry[];
 }
 
 function getSubAgentPrompt(timezone?: string, userFirstName?: string): string {
@@ -127,9 +132,33 @@ export function getAgentDefinitions(
 				"odds-api-historical",
 				"nba-advanced-stats",
 				"api-sports",
+				"scrapling",
 			],
 		},
 	};
+}
+
+const IGNORED_NAMES = new Set(["__MACOSX", ".DS_Store"]);
+
+function collectSkillFiles(skillDir: string): SkillFileEntry[] {
+	const items = fs.readdirSync(skillDir, {
+		withFileTypes: true,
+		recursive: true,
+	});
+	return items
+		.filter(
+			(item) =>
+				!item.isDirectory() &&
+				!item.name.startsWith(".") &&
+				!IGNORED_NAMES.has(item.name),
+		)
+		.map((item) => {
+			const fullPath = path.join(item.parentPath, item.name);
+			return {
+				relativePath: path.relative(skillDir, fullPath),
+				content: fs.readFileSync(fullPath),
+			};
+		});
 }
 
 export function getSkillFiles(): SkillFile[] {
@@ -141,11 +170,12 @@ export function getSkillFiles(): SkillFile[] {
 
 	for (const entry of entries) {
 		if (!entry.isDirectory()) continue;
-		const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
+		const skillDir = path.join(skillsDir, entry.name);
+		const skillPath = path.join(skillDir, "SKILL.md");
 		if (!fs.existsSync(skillPath)) continue;
 		skills.push({
 			name: entry.name,
-			content: fs.readFileSync(skillPath, "utf-8"),
+			files: collectSkillFiles(skillDir),
 		});
 	}
 
