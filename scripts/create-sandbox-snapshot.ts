@@ -6,9 +6,13 @@ async function runStep(
 	description: string,
 	options: { cmd: string; args: string[]; sudo?: boolean },
 ): Promise<void> {
+	const start = Date.now();
 	console.log(`\n${description}...`);
 	const result = await sandbox.runCommand(options);
-	console.log(`Exit code: ${result.exitCode}`);
+	const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+	console.log(
+		`  ${result.exitCode === 0 ? "OK" : "FAIL"} (${elapsed}s)`,
+	);
 
 	if (result.exitCode !== 0) {
 		const stderr = await result.stderr();
@@ -47,7 +51,7 @@ async function createSnapshot(): Promise<void> {
 		cmd: "bash",
 		args: [
 			"-c",
-			"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel",
+			"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel at-spi2-atk libdrm libxkbcommon mesa-libgbm nss alsa-lib",
 		],
 		sudo: true,
 	});
@@ -65,33 +69,75 @@ async function createSnapshot(): Promise<void> {
 				"scikit-learn",
 				"duckdb",
 				"nba_api",
+				'"scrapling[all]"',
 			].join(" "),
 		],
 		sudo: true,
 	});
 
-	console.log("\nVerifying installations...");
-	const verifyNode = await sandbox.runCommand({
-		cmd: "node",
-		args: [
-			"-e",
-			"require('@anthropic-ai/claude-agent-sdk'); console.log('SDK loaded successfully')",
-		],
-	});
-	console.log("Node SDK verify:", verifyNode.exitCode === 0 ? "OK" : "FAIL");
-
-	const verifyPython = await sandbox.runCommand({
-		cmd: "python3",
+	// scrapling install --force uses apt-get internally which doesn't work on AL2023
+	// System deps are already installed above; just install the browsers directly
+	// PLAYWRIGHT_BROWSERS_PATH=0 installs alongside the Python package (world-readable)
+	await runStep(sandbox, "Installing browser binaries (Playwright)", {
+		cmd: "bash",
 		args: [
 			"-c",
-			"import pandas, numpy, scipy, duckdb; print('Python packages loaded successfully')",
+			"PLAYWRIGHT_BROWSERS_PATH=0 python3 -m playwright install chromium firefox",
 		],
+		sudo: true,
 	});
-	console.log(
-		"Python verify:",
-		verifyPython.exitCode === 0 ? "OK" : "FAIL",
+
+	console.log("\nVerifying installations...");
+	const verifications = [
+		{
+			name: "Node SDK",
+			options: {
+				cmd: "node",
+				args: [
+					"-e",
+					"require('@anthropic-ai/claude-agent-sdk'); console.log('SDK loaded successfully')",
+				],
+			},
+		},
+		{
+			name: "Python",
+			options: {
+				cmd: "python3",
+				args: [
+					"-c",
+					"import pandas, numpy, scipy, duckdb; print('Python packages loaded successfully')",
+				],
+			},
+		},
+		{
+			name: "Scrapling + Browser",
+			options: {
+				cmd: "bash",
+				args: [
+					"-c",
+					"PLAYWRIGHT_BROWSERS_PATH=0 python3 -c \"from scrapling.fetchers import StealthyFetcher; from playwright.sync_api import sync_playwright; pw = sync_playwright().start(); br = pw.chromium.launch(headless=True); br.close(); pw.stop(); print('StealthyFetcher + Chromium OK')\"",
+				],
+			},
+		},
+	];
+
+	const results = await Promise.all(
+		verifications.map((v) => sandbox.runCommand(v.options)),
 	);
-	console.log("Python output:", await verifyPython.stdout());
+	let anyFailed = false;
+	for (let i = 0; i < verifications.length; i++) {
+		const ok = results[i].exitCode === 0;
+		console.log(`${verifications[i].name} verify: ${ok ? "OK" : "FAIL"}`);
+		if (!ok) {
+			console.log(`  stderr: ${await results[i].stderr()}`);
+			anyFailed = true;
+		}
+	}
+	if (anyFailed) {
+		throw new Error(
+			"One or more verifications failed — aborting snapshot creation",
+		);
+	}
 
 	console.log("\nCreating snapshot (this will stop the sandbox)...");
 	const snapshot = await sandbox.snapshot();
