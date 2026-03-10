@@ -180,9 +180,13 @@ export function eventsToMessages(events: ChatEvent[]): Message[] {
 					status: "running",
 					tools: [],
 				};
-				const lastSeg = currentSegments.at(-1);
-				if (lastSeg?.type === "subagent_group") {
-					lastSeg.agents.push(agent);
+				const group = currentSegments.findLast(
+					(s) =>
+						s.type === "subagent_group" &&
+						s.agents.some((a) => a.status === "running"),
+				);
+				if (group?.type === "subagent_group") {
+					group.agents.push(agent);
 				} else {
 					currentSegments.push({
 						type: "subagent_group",

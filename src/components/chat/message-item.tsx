@@ -483,17 +483,23 @@ function SubAgentCard({ agent }: { agent: SubAgent }) {
 }
 
 function SubAgentGroup({ agents }: { agents: SubAgent[] }) {
-	const allDone = agents.every((a) => a.status !== "running");
 	const runningCount = agents.filter((a) => a.status === "running").length;
+	const doneCount = agents.length - runningCount;
+	const allDone = runningCount === 0;
+
+	let label: string;
+	if (allDone) {
+		label = `Ran ${agents.length} agent${agents.length > 1 ? "s" : ""}`;
+	} else if (doneCount > 0) {
+		label = `Running ${agents.length} agents... (${doneCount} of ${agents.length} complete)`;
+	} else {
+		label = `Running ${runningCount} agent${runningCount > 1 ? "s" : ""}...`;
+	}
 
 	return (
 		<div className="my-2">
 			<div className="flex items-center gap-1.5 text-xs font-mono text-text-muted">
-				<span>
-					{allDone
-						? `Ran ${agents.length} agent${agents.length > 1 ? "s" : ""}`
-						: `Running ${runningCount} agent${runningCount > 1 ? "s" : ""}...`}
-				</span>
+				<span>{label}</span>
 				{!allDone && (
 					<Loader2 className="h-3 w-3 animate-spin text-accent-primary" />
 				)}
