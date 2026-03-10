@@ -1,5 +1,8 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("TitleGeneration");
 
 const anthropic = createAnthropic({
 	apiKey: process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim(),
@@ -21,7 +24,7 @@ export async function generateChatTitle(
 
 		return text.trim() || null;
 	} catch (err) {
-		console.warn("[Title Generator] Failed:", err);
+		log.error("Claude API failed", err);
 		return null;
 	}
 }

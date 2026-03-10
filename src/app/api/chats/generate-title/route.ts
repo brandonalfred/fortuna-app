@@ -1,7 +1,10 @@
 import { badRequest, getAuthenticatedUser, unauthorized } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { generateChatTitle } from "@/lib/title-generator";
 import { generateTitleSchema } from "@/lib/validations/chat";
+
+const log = createLogger("TitleGeneration");
 
 export async function POST(req: Request): Promise<Response> {
 	const user = await getAuthenticatedUser();
@@ -16,7 +19,9 @@ export async function POST(req: Request): Promise<Response> {
 	}
 
 	const { message, chatId } = parsed.data;
+	log.info("Generating title", { chatId, messageLen: message.length });
 	const title = await generateChatTitle(message);
+	log.info("Title result", { chatId, title: title ?? "null" });
 
 	if (title) {
 		await prisma.chat
@@ -24,9 +29,7 @@ export async function POST(req: Request): Promise<Response> {
 				where: { id: chatId, userId: user.id },
 				data: { title },
 			})
-			.catch((err) =>
-				console.warn("[title-generation] DB update failed:", err),
-			);
+			.catch((err) => log.error("DB update failed", err));
 	}
 
 	return Response.json({ title });
