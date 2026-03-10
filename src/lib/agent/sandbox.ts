@@ -278,11 +278,15 @@ export async function getOrCreateSandbox(
 			onStatus?.("installing", "Installing browser dependencies (5/5)...");
 			// scrapling install --force uses apt-get internally which doesn't work on AL2023
 			// System deps are already installed above; just install the browsers directly
+			// PLAYWRIGHT_BROWSERS_PATH=0 installs alongside the Python package (world-readable)
 			await runSandboxCommand(
 				sandbox,
 				{
 					cmd: "bash",
-					args: ["-c", "python3 -m playwright install chromium firefox"],
+					args: [
+						"-c",
+						"PLAYWRIGHT_BROWSERS_PATH=0 python3 -m playwright install chromium firefox",
+					],
 					sudo: true,
 				},
 				"Installing Scrapling browser dependencies",

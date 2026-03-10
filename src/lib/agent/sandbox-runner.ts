@@ -252,6 +252,10 @@ async function verifyPythonPackages(sandbox: Sandbox): Promise<void> {
 
 const AGENT_ENV_KEYS = ["ODDS_API_KEY", "API_SPORTS_KEY", "WEBSHARE_PROXY_URL"];
 
+// Browsers installed with PLAYWRIGHT_BROWSERS_PATH=0 live alongside the Python package;
+// scrapling needs this env var at runtime to find them
+const STATIC_ENV: Record<string, string> = { PLAYWRIGHT_BROWSERS_PATH: "0" };
+
 interface ResolvedSandbox {
 	sandbox: Sandbox;
 	sandboxReused: boolean;
@@ -303,7 +307,7 @@ export async function* streamViaSandbox({
 			? prompt
 			: buildFullPrompt(prompt, conversationHistory);
 
-		const envVars = collectEnvVars(AGENT_ENV_KEYS);
+		const envVars = { ...STATIC_ENV, ...collectEnvVars(AGENT_ENV_KEYS) };
 
 		const script = generateAgentScript({
 			fullPrompt: effectivePrompt,
@@ -501,7 +505,7 @@ export async function setupDirectStream(
 			? prompt
 			: buildFullPrompt(prompt, conversationHistory);
 
-		const envVars = collectEnvVars(AGENT_ENV_KEYS);
+		const envVars = { ...STATIC_ENV, ...collectEnvVars(AGENT_ENV_KEYS) };
 		await writeSandboxEnvFiles(sandbox, envVars);
 
 		throwIfAborted();

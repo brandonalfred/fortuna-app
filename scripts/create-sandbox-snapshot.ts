@@ -77,9 +77,13 @@ async function createSnapshot(): Promise<void> {
 
 	// scrapling install --force uses apt-get internally which doesn't work on AL2023
 	// System deps are already installed above; just install the browsers directly
+	// PLAYWRIGHT_BROWSERS_PATH=0 installs alongside the Python package (world-readable)
 	await runStep(sandbox, "Installing browser binaries (Playwright)", {
 		cmd: "bash",
-		args: ["-c", "python3 -m playwright install chromium firefox"],
+		args: [
+			"-c",
+			"PLAYWRIGHT_BROWSERS_PATH=0 python3 -m playwright install chromium firefox",
+		],
 		sudo: true,
 	});
 
@@ -106,12 +110,12 @@ async function createSnapshot(): Promise<void> {
 			},
 		},
 		{
-			name: "Scrapling",
+			name: "Scrapling + Browser",
 			options: {
-				cmd: "python3",
+				cmd: "bash",
 				args: [
 					"-c",
-					"from scrapling.fetchers import StealthyFetcher; print('StealthyFetcher OK')",
+					"PLAYWRIGHT_BROWSERS_PATH=0 python3 -c \"from scrapling.fetchers import StealthyFetcher; from playwright.sync_api import sync_playwright; pw = sync_playwright().start(); br = pw.chromium.launch(headless=True); br.close(); pw.stop(); print('StealthyFetcher + Chromium OK')\"",
 				],
 			},
 		},
