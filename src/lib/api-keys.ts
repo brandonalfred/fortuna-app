@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 export const API_KEY_PREFIX = "ftn_";
 
+if (process.env.NODE_ENV === "production" && !process.env.API_KEY_HASH_SECRET) {
+	throw new Error("[startup] API_KEY_HASH_SECRET must be set in production");
+}
+
 export function generateApiKey(): {
 	rawKey: string;
 	keyHash: string;
@@ -22,9 +26,6 @@ export function hashApiKey(key: string): string {
 	const pepper = process.env.API_KEY_HASH_SECRET;
 	if (pepper) {
 		return createHmac("sha256", pepper).update(key).digest("hex");
-	}
-	if (process.env.NODE_ENV === "production") {
-		throw new Error("API_KEY_HASH_SECRET must be set in production");
 	}
 	return createHash("sha256").update(key).digest("hex");
 }

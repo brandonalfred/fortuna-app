@@ -1,13 +1,14 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
-import { API_KEY_PREFIX } from "@/lib/api-keys";
+
+const API_KEY_HEADER_RE = /^bearer\s+ftn_/i;
 
 export function middleware(request: NextRequest) {
 	const sessionCookie = getSessionCookie(request);
 	const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
-	const hasApiKey = request.headers
-		.get("authorization")
-		?.startsWith(`Bearer ${API_KEY_PREFIX}`);
+	const hasApiKey = API_KEY_HEADER_RE.test(
+		request.headers.get("authorization") ?? "",
+	);
 
 	if (request.nextUrl.pathname === "/") {
 		if (sessionCookie) {
