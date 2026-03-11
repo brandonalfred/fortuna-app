@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { Session } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -19,6 +19,15 @@ export function generateApiKey(): {
 }
 
 export function hashApiKey(key: string): string {
+	const pepper = process.env.API_KEY_HASH_SECRET;
+	if (pepper) {
+		return createHmac("sha256", pepper).update(key).digest("hex");
+	}
+	if (process.env.NODE_ENV === "production") {
+		console.warn(
+			"[API Key] API_KEY_HASH_SECRET is not set — falling back to plain SHA-256",
+		);
+	}
 	return createHash("sha256").update(key).digest("hex");
 }
 
