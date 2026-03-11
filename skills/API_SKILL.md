@@ -239,16 +239,20 @@ def main():
         sys.exit(1)
 
     chat_id = None
-    message = " ".join(sys.argv[1:])
+    args = sys.argv[1:]
+
+    if "--chat-id" in args:
+        idx = args.index("--chat-id")
+        if idx + 1 >= len(args):
+            print("Error: --chat-id requires a UUID argument", file=sys.stderr)
+            sys.exit(1)
+        chat_id = args[idx + 1]
+        args = args[:idx] + args[idx + 2:]
+
+    message = " ".join(args)
     if not message:
         print("Usage: python3 fortuna_chat.py [--chat-id UUID] <message>", file=sys.stderr)
         sys.exit(1)
-
-    if "--chat-id" in sys.argv:
-        idx = sys.argv.index("--chat-id")
-        chat_id = sys.argv[idx + 1]
-        args = sys.argv[1:idx] + sys.argv[idx + 2:]
-        message = " ".join(args)
 
     resp = post_chat(message, chat_id)
     content_type = resp.getheader("Content-Type", "")
