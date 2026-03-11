@@ -193,12 +193,19 @@ def post_chat(message, chat_id=None):
 
 
 def read_sse_lines(resp):
-    """Read SSE lines using readline() for efficient line-buffered streaming."""
+    """Read SSE lines byte-by-byte — readline() blocks on chunked transfer encoding."""
+    buf = b""
     while True:
-        raw = resp.readline()
-        if not raw:
+        byte = resp.read(1)
+        if not byte:
+            if buf:
+                yield buf.decode("utf-8", errors="replace")
             break
-        yield raw.decode("utf-8", errors="replace").rstrip("\r\n")
+        if byte == b"\n":
+            yield buf.decode("utf-8", errors="replace").rstrip("\r")
+            buf = b""
+        else:
+            buf += byte
 
 
 def extract_stream_info(resp):
