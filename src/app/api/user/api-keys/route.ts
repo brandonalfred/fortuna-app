@@ -4,7 +4,7 @@ import {
 	serverError,
 	unauthorized,
 } from "@/lib/api";
-import { generateApiKey } from "@/lib/api-keys";
+import { activeKeyWhere, generateApiKey } from "@/lib/api-keys";
 import { prisma } from "@/lib/prisma";
 import { createApiKeySchema } from "@/lib/validations/api-key";
 
@@ -25,11 +25,7 @@ export async function POST(req: Request): Promise<Response> {
 
 		const apiKey = await prisma.$transaction(async (tx) => {
 			const activeCount = await tx.apiKey.count({
-				where: {
-					userId: user.id,
-					revokedAt: null,
-					OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-				},
+				where: activeKeyWhere(user.id),
 			});
 			if (activeCount >= MAX_ACTIVE_KEYS) {
 				return null;
@@ -74,11 +70,7 @@ export async function GET(): Promise<Response> {
 		if (!user) return unauthorized();
 
 		const keys = await prisma.apiKey.findMany({
-			where: {
-				userId: user.id,
-				revokedAt: null,
-				OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-			},
+			where: activeKeyWhere(user.id),
 			orderBy: { createdAt: "desc" },
 			select: {
 				id: true,

@@ -29,6 +29,14 @@ export function hashApiKey(key: string): string {
 	return createHash("sha256").update(key).digest("hex");
 }
 
+export function activeKeyWhere(userId: string) {
+	return {
+		userId,
+		revokedAt: null,
+		OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+	};
+}
+
 export function isApiKeyFormat(value: string): boolean {
 	return (
 		value.startsWith(API_KEY_PREFIX) && value.length > API_KEY_PREFIX.length
