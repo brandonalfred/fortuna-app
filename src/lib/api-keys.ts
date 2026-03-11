@@ -24,9 +24,7 @@ export function hashApiKey(key: string): string {
 		return createHmac("sha256", pepper).update(key).digest("hex");
 	}
 	if (process.env.NODE_ENV === "production") {
-		console.warn(
-			"[API Key] API_KEY_HASH_SECRET is not set — falling back to plain SHA-256",
-		);
+		throw new Error("API_KEY_HASH_SECRET must be set in production");
 	}
 	return createHash("sha256").update(key).digest("hex");
 }

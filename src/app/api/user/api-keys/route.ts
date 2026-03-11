@@ -25,7 +25,11 @@ export async function POST(req: Request): Promise<Response> {
 
 		const apiKey = await prisma.$transaction(async (tx) => {
 			const activeCount = await tx.apiKey.count({
-				where: { userId: user.id, revokedAt: null },
+				where: {
+					userId: user.id,
+					revokedAt: null,
+					OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+				},
 			});
 			if (activeCount >= MAX_ACTIVE_KEYS) {
 				return null;
@@ -70,7 +74,11 @@ export async function GET(): Promise<Response> {
 		if (!user) return unauthorized();
 
 		const keys = await prisma.apiKey.findMany({
-			where: { userId: user.id, revokedAt: null },
+			where: {
+				userId: user.id,
+				revokedAt: null,
+				OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+			},
 			orderBy: { createdAt: "desc" },
 			select: {
 				id: true,

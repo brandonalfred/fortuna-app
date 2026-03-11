@@ -34,6 +34,9 @@ export async function getAuthenticatedUser(): Promise<Session["user"] | null> {
 	try {
 		const hdrs = await headers();
 
+		// API key auth takes precedence — if a Bearer ftn_ token is present,
+		// we resolve it and return the result (even if null). We intentionally
+		// do NOT fall back to session-cookie auth to avoid ambiguous identity.
 		const authHeader = hdrs.get("authorization");
 		if (authHeader) {
 			const token = authHeader.replace(/^Bearer\s+/i, "");
