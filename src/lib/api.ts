@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { isApiKeyFormat, resolveUserFromApiKey } from "@/lib/api-keys";
 import { auth, type Session } from "@/lib/auth";
 
 export function unauthorized(): Response {
@@ -31,8 +32,21 @@ export function serverError(error: unknown): Response {
 
 export async function getAuthenticatedUser(): Promise<Session["user"] | null> {
 	try {
+		const hdrs = await headers();
+
+		// API key auth takes precedence — if a Bearer ftn_ token is present,
+		// we resolve it and return the result (even if null). We intentionally
+		// do NOT fall back to session-cookie auth to avoid ambiguous identity.
+		const authHeader = hdrs.get("authorization");
+		if (authHeader) {
+			const token = authHeader.replace(/^Bearer\s+/i, "");
+			if (isApiKeyFormat(token)) {
+				return resolveUserFromApiKey(token);
+			}
+		}
+
 		const session = await auth.api.getSession({
-			headers: await headers(),
+			headers: hdrs,
 		});
 		if (!session?.user?.id) {
 			return null;
