@@ -193,33 +193,29 @@ def post_chat(message, chat_id=None):
 
 
 def read_sse_lines(resp):
-    """Read SSE lines byte-by-byte to avoid blocking on partial buffers."""
-    buf = b""
+    """Read SSE lines using readline() for efficient line-buffered streaming."""
     while True:
-        byte = resp.read(1)
-        if not byte:
-            if buf:
-                yield buf.decode("utf-8", errors="replace")
+        raw = resp.readline()
+        if not raw:
             break
-        if byte == b"\n":
-            yield buf.decode("utf-8", errors="replace").rstrip("\r")
-            buf = b""
-        else:
-            buf += byte
+        yield raw.decode("utf-8", errors="replace").rstrip("\r\n")
 
 
 def extract_stream_info(resp):
     """Parse setup SSE to get streamUrl and streamToken."""
     for line in read_sse_lines(resp):
         if line.startswith("data: "):
-            data = json.loads(line[6:])
+            try:
+                data = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
             if "streamUrl" in data:
                 return data["streamUrl"], data["streamToken"]
     return None, None
 
 
 def stream_response(stream_url, stream_token):
-    """Connect to streamUrl and collect all delta text."""
+    """Connect to streamUrl and collect all events."""
     parsed = urllib.parse.urlparse(stream_url)
     ctx = ssl.create_default_context()
     conn = http.client.HTTPSConnection(parsed.hostname, timeout=TIMEOUT, context=ctx)
@@ -228,6 +224,10 @@ def stream_response(stream_url, stream_token):
     })
     resp = conn.getresponse()
     text = ""
+    thinking = ""
+    tool_calls = []
+    subagents = []
+    result_meta = {}
     current_event = ""
     for line in read_sse_lines(resp):
         if line.startswith("event: "):
@@ -237,13 +237,36 @@ def stream_response(stream_url, stream_token):
                 data = json.loads(line[6:])
             except json.JSONDecodeError:
                 continue
-            if "text" in data:
+            if current_event == "delta" and "text" in data:
                 text += data["text"]
-            if current_event == "done":
+            elif current_event == "thinking_delta" and "thinking" in data:
+                thinking += data["thinking"]
+            elif current_event == "thinking" and "thinking" in data:
+                thinking = data["thinking"]
+            elif current_event == "tool_use":
+                tool_calls.append(data)
+            elif current_event == "subagent_start":
+                subagents.append(data)
+            elif current_event == "subagent_complete":
+                for sa in subagents:
+                    if sa.get("taskId") == data.get("taskId"):
+                        sa.update(data)
+                        break
+            elif current_event == "result":
+                result_meta = data
+            elif current_event == "error":
+                print(f"Error: {data.get('message', data)}", file=sys.stderr)
+            elif current_event == "done":
                 break
         elif line.startswith(":"):
             continue  # keepalive comment
-    return text
+    return {
+        "text": text,
+        "thinking": thinking,
+        "tool_calls": tool_calls,
+        "subagents": subagents,
+        "result": result_meta,
+    }
 
 
 def main():
@@ -284,8 +307,24 @@ def main():
         print("Error: No streamUrl received", file=sys.stderr)
         sys.exit(1)
 
-    result = stream_response(stream_url, stream_token)
-    print(result)
+    response = stream_response(stream_url, stream_token)
+
+    # Print the text response
+    print(response["text"])
+
+    # Print metadata to stderr for programmatic use
+    if response["tool_calls"]:
+        print(f"\n--- Tool Calls ({len(response['tool_calls'])}) ---", file=sys.stderr)
+        for tc in response["tool_calls"]:
+            print(f"  {tc.get('name', 'unknown')}: {json.dumps(tc.get('input', ''))[:100]}", file=sys.stderr)
+    if response["subagents"]:
+        print(f"\n--- Sub-agents ({len(response['subagents'])}) ---", file=sys.stderr)
+        for sa in response["subagents"]:
+            print(f"  {sa.get('description', 'unknown')} — {sa.get('status', 'started')}", file=sys.stderr)
+    if response["result"]:
+        r = response["result"]
+        print(f"\n--- Result ---", file=sys.stderr)
+        print(f"  Duration: {r.get('duration_ms', 0)/1000:.1f}s | Cost: ${r.get('cost_usd', 0):.4f} | Stop: {r.get('stop_reason', 'unknown')}", file=sys.stderr)
 
 
 if __name__ == "__main__":
