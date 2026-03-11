@@ -1,6 +1,8 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
+// Duplicates API_KEY_PREFIX ("ftn_") from api-keys.ts — can't import it here
+// because that module pulls in node:crypto and prisma, unavailable at the Edge.
 const API_KEY_HEADER_RE = /^bearer\s+ftn_/i;
 
 export function middleware(request: NextRequest) {
