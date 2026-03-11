@@ -192,21 +192,25 @@ def post_chat(message, chat_id=None):
     return conn.getresponse()
 
 
-def parse_sse_lines(resp):
-    buf = ""
+def read_sse_lines(resp):
+    """Read SSE lines byte-by-byte to avoid blocking on partial buffers."""
+    buf = b""
     while True:
-        chunk = resp.read(4096)
-        if not chunk:
+        byte = resp.read(1)
+        if not byte:
+            if buf:
+                yield buf.decode("utf-8", errors="replace")
             break
-        buf += chunk.decode("utf-8", errors="replace")
-        while "\n" in buf:
-            line, buf = buf.split("\n", 1)
-            yield line.rstrip("\r")
+        if byte == b"\n":
+            yield buf.decode("utf-8", errors="replace").rstrip("\r")
+            buf = b""
+        else:
+            buf += byte
 
 
 def extract_stream_info(resp):
     """Parse setup SSE to get streamUrl and streamToken."""
-    for line in parse_sse_lines(resp):
+    for line in read_sse_lines(resp):
         if line.startswith("data: "):
             data = json.loads(line[6:])
             if "streamUrl" in data:
@@ -224,12 +228,21 @@ def stream_response(stream_url, stream_token):
     })
     resp = conn.getresponse()
     text = ""
-    for line in parse_sse_lines(resp):
-        if not line.startswith("data: "):
-            continue
-        data = json.loads(line[6:])
-        if "text" in data:
-            text += data["text"]
+    current_event = ""
+    for line in read_sse_lines(resp):
+        if line.startswith("event: "):
+            current_event = line[7:]
+        elif line.startswith("data: "):
+            try:
+                data = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+            if "text" in data:
+                text += data["text"]
+            if current_event == "done":
+                break
+        elif line.startswith(":"):
+            continue  # keepalive comment
     return text
 
 
@@ -262,6 +275,7 @@ def main():
         stream_url, stream_token = info["streamUrl"], info["streamToken"]
     elif "text/event-stream" in content_type:
         stream_url, stream_token = extract_stream_info(resp)
+        resp.close()
     else:
         print(f"Unexpected Content-Type: {content_type}", file=sys.stderr)
         sys.exit(1)
