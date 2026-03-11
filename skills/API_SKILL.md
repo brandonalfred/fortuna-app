@@ -210,7 +210,7 @@ def extract_stream_info(resp):
             except json.JSONDecodeError:
                 continue
             if "streamUrl" in data:
-                return data["streamUrl"], data["streamToken"]
+                return data["streamUrl"], data.get("streamToken", "")
     return None, None
 
 
@@ -232,6 +232,8 @@ def stream_response(stream_url, stream_token):
     for line in read_sse_lines(resp):
         if line.startswith("event: "):
             current_event = line[7:]
+            if current_event == "done":
+                break
         elif line.startswith("data: "):
             try:
                 data = json.loads(line[6:])
@@ -256,8 +258,6 @@ def stream_response(stream_url, stream_token):
                 result_meta = data
             elif current_event == "error":
                 print(f"Error: {data.get('message', data)}", file=sys.stderr)
-            elif current_event == "done":
-                break
         elif line.startswith(":"):
             continue  # keepalive comment
     return {
