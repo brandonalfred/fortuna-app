@@ -18,8 +18,8 @@ import {
 	getSystemPrompt,
 } from "./system-prompt";
 
-export type { Query, StreamAgentOptions };
 export { extractThinkingFromMessage } from "./message-extraction";
+export type { Query, StreamAgentOptions };
 
 function getClaudeCodeCliPath(): string {
 	const cliPath = path.join(

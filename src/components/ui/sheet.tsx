@@ -128,12 +128,12 @@ function SheetDescription({
 
 export {
 	Sheet,
-	SheetTrigger,
 	SheetClose,
-	SheetPortal,
-	SheetOverlay,
 	SheetContent,
-	SheetHeader,
-	SheetTitle,
 	SheetDescription,
+	SheetHeader,
+	SheetOverlay,
+	SheetPortal,
+	SheetTitle,
+	SheetTrigger,
 };
