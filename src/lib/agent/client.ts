@@ -21,7 +21,7 @@ import {
 export { extractThinkingFromMessage } from "./message-extraction";
 export type { Query, StreamAgentOptions };
 
-function getClaudeCodeCliPath(): string {
+export function getClaudeCodeCliPath(): string {
 	const cliPath = path.join(
 		process.cwd(),
 		"node_modules/@anthropic-ai/claude-agent-sdk/cli.js",
