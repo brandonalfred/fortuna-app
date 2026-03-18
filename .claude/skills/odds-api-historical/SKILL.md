@@ -1,6 +1,6 @@
 ---
 name: odds-api-historical
-description: Query historical betting odds snapshots from The Odds API
+description: Use when analyzing line movement, comparing opening vs closing odds, tracking steam moves, or checking how a line has shifted over time. Use when a user asks about odds history, reverse line movement, or "where did this line open?"
 ---
 
 # The Odds API - Historical Data

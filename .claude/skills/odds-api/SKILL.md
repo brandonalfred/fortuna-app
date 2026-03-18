@@ -1,6 +1,6 @@
 ---
 name: odds-api
-description: Fetch live sports betting odds from The Odds API
+description: Use when you need current betting lines, spreads, totals, moneylines, or player props from sportsbooks. Use when comparing odds across books, finding the best price, or checking what markets are available for a game. Use when building parlays or analyzing any bet that needs real sportsbook lines.
 ---
 
 # The Odds API

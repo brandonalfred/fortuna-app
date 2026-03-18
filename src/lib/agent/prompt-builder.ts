@@ -4,18 +4,14 @@ import type {
 	ConversationToolUse,
 } from "@/lib/types";
 
-const MAX_TOOL_INPUT_SUMMARY_LENGTH = 50;
-
-function summarizeToolInput(input: unknown): string {
-	if (typeof input === "string") {
-		return input.slice(0, MAX_TOOL_INPUT_SUMMARY_LENGTH);
+function formatToolInput(input: unknown): string {
+	if (input == null) return "";
+	if (typeof input === "string") return input;
+	try {
+		return JSON.stringify(input);
+	} catch {
+		return String(input);
 	}
-	if (input && typeof input === "object") {
-		const obj = input as Record<string, unknown>;
-		if (typeof obj.query === "string") return obj.query;
-		if (typeof obj.name === "string") return obj.name;
-	}
-	return "";
 }
 
 function formatToolsWithResults(
@@ -28,8 +24,8 @@ function formatToolsWithResults(
 
 	return tools
 		.map((tool) => {
-			const summary = summarizeToolInput(tool.input);
-			const label = summary ? `${tool.name}("${summary}")` : tool.name;
+			const inputStr = formatToolInput(tool.input);
+			const label = inputStr ? `${tool.name}(${inputStr})` : tool.name;
 			const result = tool.toolUseId ? resultMap.get(tool.toolUseId) : undefined;
 			if (!result) return `[Tool: ${label}]`;
 
