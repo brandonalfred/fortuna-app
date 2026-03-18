@@ -1,6 +1,6 @@
 ---
 name: nba-advanced-stats
-description: Primary source for ALL NBA stats — season averages, game logs, advanced metrics, pace, usage, lineup analysis via nba_api
+description: Use FIRST for any NBA analysis — player averages, game logs, hit rates, trends, advanced stats, pace, usage, lineup data. Use when calculating prop hit rates, screening parlay candidates, checking venue splits, analyzing blowout game scripts, or comparing player performance. Bulk endpoints (all 500+ players in one call) with no API quota cost. Fall back to api-sports only if this fails.
 ---
 
 # NBA Stats (nba_api) — Primary NBA Data Source

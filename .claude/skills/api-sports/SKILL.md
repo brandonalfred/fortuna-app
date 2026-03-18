@@ -1,6 +1,6 @@
 ---
 name: api-sports
-description: Query player/team stats from API-Sports for multi-sport betting analysis (NBA, NFL, MLB, NHL, Soccer)
+description: Use when you need player or team stats for NFL, MLB, NHL, or Soccer. Also use as a fallback for NBA stats when nba-advanced-stats fails. Use when checking player game logs, season averages, team standings, or injury data for non-NBA sports.
 ---
 
 # API-Sports Integration
