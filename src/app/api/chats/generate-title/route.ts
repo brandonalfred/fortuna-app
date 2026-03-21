@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { generateChatTitle } from "@/lib/title-generator";
 import { generateTitleSchema } from "@/lib/validations/chat";
 
+export const maxDuration = 10;
+
 const log = createLogger("TitleGeneration");
 
 export async function POST(req: Request): Promise<Response> {
