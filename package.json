@@ -17,7 +17,7 @@
     "@ai-sdk/anthropic": "^3.0.58",
     "@anthropic-ai/claude-agent-sdk": "0.2.62",
     "@aws-sdk/client-s3": "3.1014.0",
-    "@aws-sdk/s3-request-presigner": "3.1009.0",
+    "@aws-sdk/s3-request-presigner": "3.1014.0",
     "@neondatabase/serverless": "^1.0.2",
     "@prisma/adapter-neon": "7.5.0",
     "@prisma/client": "7.5.0",
