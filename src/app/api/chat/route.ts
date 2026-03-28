@@ -126,6 +126,19 @@ function createSSEWriter(
 	};
 }
 
+function pipeTitleUpdate(
+	titlePromise: Promise<string | null> | null,
+	sse: SSEWriter,
+): void {
+	if (titlePromise) {
+		titlePromise.then((title) => {
+			if (title && !sse.isDisconnected()) {
+				sse.send("title_update", { title });
+			}
+		});
+	}
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
@@ -349,6 +362,7 @@ export async function POST(req: Request): Promise<Response> {
 
 					try {
 						sse.send("chat_created", { chatId: chat.id, sessionId });
+						pipeTitleUpdate(titlePromise, sse);
 
 						const SETUP_TIMEOUT_MS = 120_000;
 						const timeoutHandle = setTimeout(() => {
@@ -470,14 +484,7 @@ export async function POST(req: Request): Promise<Response> {
 				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
 				sse.send("init", { chatId: chat.id, sessionId });
-
-				if (titlePromise) {
-					titlePromise.then((title) => {
-						if (title && !sse.isDisconnected()) {
-							sse.send("title_update", { title });
-						}
-					});
-				}
+				pipeTitleUpdate(titlePromise, sse);
 
 				let fullAssistantContent = "";
 				let fullThinkingContent = "";
