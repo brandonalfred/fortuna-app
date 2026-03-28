@@ -792,6 +792,8 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 								}
 							} else if (event.type === "status") {
 								get().handleEvent("status", event.data);
+							} else if (event.type === "title_update") {
+								get().handleEvent("title_update", event.data);
 							} else if (event.type === "ready") {
 								streamInfo = event.data as SandboxStreamInfo;
 							} else if (event.type === "error") {
