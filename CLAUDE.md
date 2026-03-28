@@ -231,6 +231,30 @@ The Vercel Sandbox API does exact-match on snapshot IDs, so a trailing `\n` caus
 
 No test suite exists yet. If adding tests, conventions will need to be established from scratch.
 
+### Local Sandbox Testing
+
+Use this when testing changes that may behave differently in production — agent execution, SSE streaming, persistence callbacks, or sandbox lifecycle. Local dev runs the agent directly via the SDK; production runs it inside a Vercel Sandbox. This setup gives production parity without deploying.
+
+1. Start a Cloudflare tunnel (generates a new URL each time):
+```bash
+brew install cloudflared                              # one-time
+cloudflared tunnel --url http://localhost:3000         # note the URL
+```
+
+2. Update `.env.local` with the tunnel URL:
+```
+BETTER_AUTH_URL="https://<tunnel-url>.trycloudflare.com"
+```
+
+3. Start the dev server with sandbox mode:
+```bash
+VERCEL=1 bun dev
+```
+
+The tunnel allows the remote sandbox to POST persistence events back to your local server.
+
+**Cleanup:** Stop the tunnel (`Ctrl+C`), restore `BETTER_AUTH_URL` to `http://localhost:3000` in `.env.local`, and restart the dev server.
+
 ## Path Aliases
 
 Use `@/` for imports from `src/` (e.g., `@/components/ui/button`, `@/lib/utils`).

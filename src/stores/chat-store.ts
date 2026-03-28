@@ -57,7 +57,6 @@ interface ChatState {
 	abortController: AbortController | null;
 	stopReason: { stopReason: string; subtype: string } | null;
 	todos: TodoItem[];
-	pendingTitleMessage: string | null;
 	disconnectedChatId: string | null;
 	loadedChatId: string | undefined;
 	isCreatingChat: boolean;
@@ -208,55 +207,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			};
 		}
 
-		function fireTitleGeneration(
-			chatIdForTitle: string,
-			source: "setup-stream" | "sandbox-connect" | "init-event",
-		): void {
-			const pending = get().pendingTitleMessage;
-			if (!pending) return;
-			log.info("Title generation triggered", {
-				chatId: chatIdForTitle,
-				source,
-				messageLen: pending.length,
-			});
-			set({ pendingTitleMessage: null });
-			fetch("/api/chats/generate-title", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ message: pending, chatId: chatIdForTitle }),
-			})
-				.then((res) => {
-					if (!res.ok) {
-						log.warn("Title generation API error", {
-							chatId: chatIdForTitle,
-							status: res.status,
-						});
-						return { title: null };
-					}
-					return res.json();
-				})
-				.then(({ title }: { title: string | null }) => {
-					if (title) {
-						log.info("Title generated successfully", {
-							chatId: chatIdForTitle,
-							title,
-						});
-						get().updateTitle(title);
-					} else {
-						log.warn("Title generation returned null", {
-							chatId: chatIdForTitle,
-						});
-					}
-				})
-				.catch((err) =>
-					log.warn("Title generation fetch failed", {
-						chatId: chatIdForTitle,
-						source,
-						error: String(err),
-					}),
-				);
-		}
-
 		async function connectToSandboxStream(
 			info: SandboxStreamInfo,
 			abortController: AbortController,
@@ -271,7 +221,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			if (isNewChat) {
 				set({ isCreatingChat: true });
 				callbacks.onChatCreated?.(info.chatId);
-				fireTitleGeneration(info.chatId, "sandbox-connect");
 			}
 
 			const sseResponse = await fetch(`${info.streamUrl}/stream`, {
@@ -307,7 +256,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			error: null,
 			abortController: null,
 			stopReason: null,
-			pendingTitleMessage: null,
 			disconnectedChatId: null,
 			loadedChatId: undefined,
 			isCreatingChat: false,
@@ -365,9 +313,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 						if (!state.loadedChatId && !state.isCreatingChat) {
 							set({ isCreatingChat: true });
 							callbacks.onChatCreated?.(initData.chatId);
-						}
-						if (!state.loadedChatId) {
-							fireTitleGeneration(initData.chatId, "init-event");
 						}
 						break;
 					}
@@ -715,7 +660,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 					streamingMessage: null,
 					activeSubAgentStack: [],
 					isRecovering: false,
-					pendingTitleMessage: null,
 					todos: [],
 				});
 				callbacks.getQueueStore().clear();
@@ -771,16 +715,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 				const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 				let receivedDone = false;
 				let aborted = false;
-
-				if (isNewChat && chatId && content.trim()) {
-					log.info("Setting pendingTitleMessage", {
-						chatId,
-						isNewChat,
-						loadedChatId: state.loadedChatId,
-						isCreatingChat: state.isCreatingChat,
-					});
-					set({ pendingTitleMessage: content });
-				}
 
 				try {
 					const currentState = get();
@@ -855,7 +789,6 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 								if (isNewChat) {
 									chatAlreadyRouted = true;
 									callbacks.onChatCreated?.(newChatId);
-									fireTitleGeneration(newChatId, "setup-stream");
 								}
 							} else if (event.type === "status") {
 								get().handleEvent("status", event.data);

@@ -35,6 +35,7 @@ import {
 	isTextMimeType,
 	regenerateAttachmentUrls,
 } from "@/lib/r2";
+import { generateChatTitle } from "@/lib/title-generator";
 import { isInternalTool } from "@/lib/tool-labels";
 import type { Attachment, ConversationMessage } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
@@ -202,6 +203,22 @@ export async function POST(req: Request): Promise<Response> {
 		console.log(
 			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} v=${isV2 ? 2 : 1} history=${conversationHistory.length}`,
 		);
+
+		if (!existingChat && message) {
+			(async () => {
+				try {
+					const title = await generateChatTitle(message);
+					if (title) {
+						await prisma.chat.update({
+							where: { id: chat.id },
+							data: { title },
+						});
+					}
+				} catch (e) {
+					console.warn("[Chat API] Title generation failed:", e);
+				}
+			})();
+		}
 
 		await prisma.chat.update({
 			where: { id: chat.id },
