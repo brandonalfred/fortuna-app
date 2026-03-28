@@ -204,20 +204,27 @@ export async function POST(req: Request): Promise<Response> {
 			`[Chat API] ${existingChat ? "Resuming" : "Created"} chat=${chat.id} session=${sessionId} v=${isV2 ? 2 : 1} history=${conversationHistory.length}`,
 		);
 
-		if (!existingChat && message) {
-			(async () => {
-				try {
-					const title = await generateChatTitle(message);
-					if (title) {
-						await prisma.chat.update({
+		const titlePromise =
+			!existingChat && message
+				? generateChatTitle(message).catch((e) => {
+						console.warn("[Chat API] Title generation failed:", e);
+						return null;
+					})
+				: null;
+
+		if (titlePromise) {
+			titlePromise.then(async (title) => {
+				if (title) {
+					await prisma.chat
+						.update({
 							where: { id: chat.id },
 							data: { title },
-						});
-					}
-				} catch (e) {
-					console.warn("[Chat API] Title generation failed:", e);
+						})
+						.catch((e) =>
+							console.warn("[Chat API] Title DB update failed:", e),
+						);
 				}
-			})();
+			});
 		}
 
 		await prisma.chat.update({
@@ -463,6 +470,14 @@ export async function POST(req: Request): Promise<Response> {
 				const agentStream = agentQuery ?? streamAgentResponse(agentOptions);
 
 				sse.send("init", { chatId: chat.id, sessionId });
+
+				if (titlePromise) {
+					titlePromise.then((title) => {
+						if (title && !sse.isDisconnected()) {
+							sse.send("title_update", { title });
+						}
+					});
+				}
 
 				let fullAssistantContent = "";
 				let fullThinkingContent = "";
