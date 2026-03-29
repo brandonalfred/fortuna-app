@@ -21,7 +21,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@prisma/adapter-neon": "7.5.0",
     "@prisma/client": "7.5.0",
-    "@tailwindcss/typography": "0.5.16",
+    "@tailwindcss/typography": "0.5.19",
     "@tanstack/react-query": "5.90.21",
     "@vercel/sandbox": "^1.9.0",
     "ai": "^6.0.134",
