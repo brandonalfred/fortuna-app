@@ -4,7 +4,7 @@ import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 
-export const AGENT_MODEL = "claude-opus-4-6";
+export const AGENT_MODEL = "claude-opus-4-7";
 
 export const AGENT_ALLOWED_TOOLS = [
 	"Read",
