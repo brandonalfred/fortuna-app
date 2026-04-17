@@ -14,7 +14,7 @@
     "postinstall": "prisma generate && node scripts/patch-agent-sdk.js"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/anthropic": "^3.0.64",
     "@anthropic-ai/claude-agent-sdk": "0.2.62",
     "@aws-sdk/client-s3": "3.1014.0",
     "@aws-sdk/s3-request-presigner": "3.1014.0",
