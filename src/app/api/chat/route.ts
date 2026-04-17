@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { activeSessions } from "@/lib/agent/active-sessions";
+import {
+	detectAuthError,
+	INVALID_TOKEN_MESSAGE,
+} from "@/lib/agent/auth-error.mjs";
 import type { Query } from "@/lib/agent/client";
 import {
 	createLocalAgentQuery,
@@ -52,22 +56,6 @@ function toUserFriendlyError(error: unknown): string {
 	}
 
 	return "Something went wrong. Please try again.";
-}
-
-const INVALID_TOKEN_MESSAGE =
-	"Your Claude OAuth token was rejected. Update it in Settings → Profile.";
-
-function detectAuthError(error: unknown): boolean {
-	const msg = (
-		error instanceof Error ? error.message : String(error)
-	).toLowerCase();
-	return (
-		msg.includes("401") ||
-		msg.includes("403") ||
-		msg.includes("invalid_api_key") ||
-		msg.includes("authentication") ||
-		msg.includes("oauth")
-	);
 }
 
 function sendAgentError(sse: SSEWriter, error: unknown, fallback: string) {

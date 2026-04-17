@@ -15,7 +15,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth/client";
 import { useSessionContext } from "@/lib/auth/session-context";
-import { PREFERENCES_MAX_LENGTH } from "@/lib/validations/user";
+import {
+	CLAUDE_TOKEN_PREFIX,
+	PREFERENCES_MAX_LENGTH,
+} from "@/lib/validations/user";
 
 export default function ProfilePage() {
 	const { session, isPending } = useSessionContext();
@@ -162,11 +165,17 @@ export default function ProfilePage() {
 }
 
 function ClaudeTokenSection({ hasToken }: { hasToken: boolean }) {
+	const router = useRouter();
 	const [token, setToken] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmRemove, setConfirmRemove] = useState(false);
 	const [removing, setRemoving] = useState(false);
+
+	const refreshSession = useCallback(async () => {
+		await authClient.getSession({ query: { disableCookieCache: true } });
+		router.refresh();
+	}, [router]);
 
 	const handleSave = useCallback(async () => {
 		if (!token.trim() || submitting) return;
@@ -183,27 +192,27 @@ function ClaudeTokenSection({ hasToken }: { hasToken: boolean }) {
 				throw new Error(data?.message ?? "Failed to save token");
 			}
 			setToken("");
-			await authClient.getSession({ query: { disableCookieCache: true } });
+			await refreshSession();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to save token");
 		} finally {
 			setSubmitting(false);
 		}
-	}, [token, submitting]);
+	}, [token, submitting, refreshSession]);
 
 	const handleRemove = useCallback(async () => {
 		setRemoving(true);
 		try {
 			const res = await fetch("/api/user/claude-token", { method: "DELETE" });
 			if (!res.ok) throw new Error("Failed to remove token");
-			await authClient.getSession({ query: { disableCookieCache: true } });
+			await refreshSession();
 			setConfirmRemove(false);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to remove token");
 		} finally {
 			setRemoving(false);
 		}
-	}, []);
+	}, [refreshSession]);
 
 	return (
 		<section className="space-y-4">
@@ -245,7 +254,7 @@ function ClaudeTokenSection({ hasToken }: { hasToken: boolean }) {
 								setToken(e.target.value);
 								setError(null);
 							}}
-							placeholder="sk-ant-oat01-..."
+							placeholder={`${CLAUDE_TOKEN_PREFIX}...`}
 							autoComplete="off"
 							spellCheck={false}
 						/>

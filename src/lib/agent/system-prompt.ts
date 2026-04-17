@@ -35,6 +35,12 @@ function formatCurrentDate(timezone: string): string {
 	return `${dateFormatter.format(now)} ${ianaLabel}`;
 }
 
+export const AGENT_ENV_KEYS = [
+	"ODDS_API_KEY",
+	"API_SPORTS_KEY",
+	"WEBSHARE_PROXY_URL",
+];
+
 export function collectEnvVars(keys: string[]): Record<string, string> {
 	return Object.fromEntries(
 		keys

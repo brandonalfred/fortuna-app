@@ -36,6 +36,10 @@ export async function writeSSEServerFiles(
 		path.join(agentDir, "sdk-event-translator.mjs"),
 		"utf-8",
 	);
+	const authErrorSource = fs.readFileSync(
+		path.join(agentDir, "auth-error.mjs"),
+		"utf-8",
+	);
 
 	await sandbox.writeFiles([
 		{
@@ -45,6 +49,10 @@ export async function writeSSEServerFiles(
 		{
 			path: "/vercel/sandbox/sdk-event-translator.mjs",
 			content: Buffer.from(translatorSource),
+		},
+		{
+			path: "/vercel/sandbox/auth-error.mjs",
+			content: Buffer.from(authErrorSource),
 		},
 		{
 			path: "/vercel/sandbox/sse-config.json",

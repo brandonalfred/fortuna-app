@@ -119,7 +119,7 @@ export interface DoneEvent {
 	sessionId: string;
 }
 
-export type ErrorCode = "invalid_token" | "token_required" | "unknown";
+export type ErrorCode = "invalid_token" | "token_required";
 
 export interface ErrorEvent {
 	message: string;

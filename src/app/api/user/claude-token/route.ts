@@ -4,8 +4,7 @@ import {
 	serverError,
 	unauthorized,
 } from "@/lib/api";
-import { encryptSecret } from "@/lib/crypto";
-import { prisma } from "@/lib/prisma";
+import { setUserClaudeToken } from "@/lib/user-token";
 import { validateClaudeToken } from "@/lib/validate-claude-token";
 import { claudeTokenSchema } from "@/lib/validations/user";
 
@@ -34,13 +33,7 @@ export async function POST(req: Request): Promise<Response> {
 			);
 		}
 
-		await prisma.user.update({
-			where: { id: user.id },
-			data: {
-				claudeOauthTokenEncrypted: encryptSecret(parsed.data.token),
-				hasClaudeToken: true,
-			},
-		});
+		await setUserClaudeToken(user.id, parsed.data.token);
 
 		return Response.json({ ok: true });
 	} catch (error) {
@@ -54,13 +47,7 @@ export async function DELETE(): Promise<Response> {
 		const user = await getAuthenticatedUser();
 		if (!user) return unauthorized();
 
-		await prisma.user.update({
-			where: { id: user.id },
-			data: {
-				claudeOauthTokenEncrypted: null,
-				hasClaudeToken: false,
-			},
-		});
+		await setUserClaudeToken(user.id, null);
 
 		return Response.json({ ok: true });
 	} catch (error) {

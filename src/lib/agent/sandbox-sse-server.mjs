@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { detectAuthError, INVALID_TOKEN_MESSAGE } from "./auth-error.mjs";
 import { SDKEventTranslator } from "./sdk-event-translator.mjs";
 
 const config = JSON.parse(
@@ -264,18 +265,12 @@ async function runAgent() {
 		}
 	} catch (err) {
 		console.error("[SSE Server] Agent error:", err);
-		const msg = (err?.message ?? String(err)).toLowerCase();
-		const isAuth =
-			msg.includes("401") ||
-			msg.includes("403") ||
-			msg.includes("invalid_api_key") ||
-			msg.includes("authentication") ||
-			msg.includes("oauth");
+		const isAuth = detectAuthError(err);
 		sendEvent({
 			type: "error",
 			data: {
 				message: isAuth
-					? "Your Claude OAuth token was rejected. Update it in Settings → Profile."
+					? INVALID_TOKEN_MESSAGE
 					: "The analysis encountered an unexpected error.",
 				...(isAuth && { code: "invalid_token" }),
 			},

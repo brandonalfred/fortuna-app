@@ -13,10 +13,16 @@ import { buildFullPrompt } from "./prompt-builder";
 import { type StreamAgentOptions, streamViaSandbox } from "./sandbox-runner";
 import {
 	AGENT_ALLOWED_TOOLS,
+	AGENT_ENV_KEYS,
 	AGENT_MODEL,
+	collectEnvVars,
 	getAgentDefinitions,
 	getSystemPrompt,
 } from "./system-prompt";
+
+// Local SDK execution spawns subprocesses (Bash tool, etc.), so PATH/HOME must
+// be inherited. Sandbox execution gets these from the sandbox process itself.
+const LOCAL_AGENT_ENV_KEYS = [...AGENT_ENV_KEYS, "PATH", "HOME"];
 
 export { extractThinkingFromMessage } from "./message-extraction";
 export type { Query, StreamAgentOptions };
@@ -86,7 +92,7 @@ function buildQueryOptions(opts: QueryOptionsInput) {
 		},
 		agents: getAgentDefinitions(opts.timezone, opts.userFirstName),
 		env: {
-			...(process.env as Record<string, string>),
+			...collectEnvVars(LOCAL_AGENT_ENV_KEYS),
 			CLAUDE_CODE_OAUTH_TOKEN: opts.claudeOauthToken,
 		},
 		abortController: opts.abortController,
