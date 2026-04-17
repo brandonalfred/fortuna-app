@@ -176,8 +176,8 @@ Each chat gets its own ephemeral Vercel Sandbox instance (5-hour timeout). Sandb
 - The Odds API integration (live and historical odds via skills)
 - Code execution for analysis scripts
 - File operations within sandboxed workspace
-- Adaptive thinking (Opus 4.6 default)
-- Model: `claude-opus-4-6`
+- Adaptive thinking (Opus 4.7 default)
+- Model: `claude-opus-4-7`
 
 ### SSE Event Protocol
 
