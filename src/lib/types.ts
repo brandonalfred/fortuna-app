@@ -119,8 +119,11 @@ export interface DoneEvent {
 	sessionId: string;
 }
 
+export type ErrorCode = "invalid_token" | "token_required" | "unknown";
+
 export interface ErrorEvent {
 	message: string;
+	code?: ErrorCode;
 }
 
 export interface SubAgentStartEvent {

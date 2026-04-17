@@ -60,6 +60,7 @@ async function* singleMessageStream(
 interface QueryOptionsInput {
 	workspacePath: string;
 	abortController: AbortController;
+	claudeOauthToken: string;
 	timezone?: string;
 	userFirstName?: string;
 	userPreferences?: string;
@@ -84,6 +85,10 @@ function buildQueryOptions(opts: QueryOptionsInput) {
 			),
 		},
 		agents: getAgentDefinitions(opts.timezone, opts.userFirstName),
+		env: {
+			...(process.env as Record<string, string>),
+			CLAUDE_CODE_OAUTH_TOKEN: opts.claudeOauthToken,
+		},
 		abortController: opts.abortController,
 		includePartialMessages: true,
 		maxThinkingTokens: 10000,
@@ -94,6 +99,7 @@ function buildQueryOptions(opts: QueryOptionsInput) {
 export function createLocalAgentQuery({
 	prompt,
 	workspacePath,
+	claudeOauthToken,
 	conversationHistory = [],
 	abortController = new AbortController(),
 	timezone,
@@ -111,6 +117,7 @@ export function createLocalAgentQuery({
 		options: buildQueryOptions({
 			workspacePath,
 			abortController,
+			claudeOauthToken,
 			timezone,
 			userFirstName,
 			userPreferences,

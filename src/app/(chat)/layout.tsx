@@ -3,7 +3,9 @@
 import { useParams, usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { Header } from "@/components/header";
+import { InvalidTokenModal } from "@/components/invalid-token-modal";
 import { ChatHistory } from "@/components/sidebar/chat-history";
+import { TokenGate } from "@/components/token-gate";
 import {
 	Sheet,
 	SheetContent,
@@ -53,6 +55,9 @@ export default function ChatLayout({ children }: ChatLayoutProps) {
 
 							<main className="flex-1 overflow-hidden">{children}</main>
 						</div>
+						<TokenGate>
+							<InvalidTokenModal />
+						</TokenGate>
 					</div>
 				</ChatStoreProvider>
 			</SessionProvider>

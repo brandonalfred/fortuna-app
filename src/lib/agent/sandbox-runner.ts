@@ -42,6 +42,7 @@ export interface StreamAgentOptions {
 	prompt: string;
 	workspacePath: string;
 	chatId: string;
+	claudeOauthToken: string;
 	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
 	timezone?: string;
@@ -289,6 +290,7 @@ async function resolveSandbox(
 export async function* streamViaSandbox({
 	prompt,
 	chatId,
+	claudeOauthToken,
 	conversationHistory = [],
 	timezone,
 	userFirstName,
@@ -338,7 +340,7 @@ export async function* streamViaSandbox({
 			cmd: "node",
 			args: ["agent-runner.mjs"],
 			env: {
-				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken,
 				BASH_ENV: "/vercel/sandbox/.agent-env.sh",
 				...envVars,
 			},
@@ -442,6 +444,7 @@ export async function setupDirectStream(
 	const {
 		prompt,
 		chatId,
+		claudeOauthToken,
 		conversationHistory = [],
 		timezone,
 		userFirstName,
@@ -546,7 +549,7 @@ export async function setupDirectStream(
 			cmd: "node",
 			args: ["sandbox-sse-server.mjs"],
 			env: {
-				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken,
 				BASH_ENV: "/vercel/sandbox/.agent-env.sh",
 				...envVars,
 			},

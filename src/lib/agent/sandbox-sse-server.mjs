@@ -264,9 +264,21 @@ async function runAgent() {
 		}
 	} catch (err) {
 		console.error("[SSE Server] Agent error:", err);
+		const msg = (err?.message ?? String(err)).toLowerCase();
+		const isAuth =
+			msg.includes("401") ||
+			msg.includes("403") ||
+			msg.includes("invalid_api_key") ||
+			msg.includes("authentication") ||
+			msg.includes("oauth");
 		sendEvent({
 			type: "error",
-			data: { message: "The analysis encountered an unexpected error." },
+			data: {
+				message: isAuth
+					? "Your Claude OAuth token was rejected. Update it in Settings → Profile."
+					: "The analysis encountered an unexpected error.",
+				...(isAuth && { code: "invalid_token" }),
+			},
 		});
 		sendEvent({
 			type: "done",

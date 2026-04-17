@@ -77,6 +77,7 @@ export async function resolveUserFromApiKey(
 		lastName: user.lastName,
 		phoneNumber: user.phoneNumber,
 		preferences: user.preferences ?? undefined,
+		hasClaudeToken: user.hasClaudeToken,
 		emailVerified: user.emailVerified,
 		image: user.image,
 		role: user.role,

@@ -2,6 +2,7 @@
 
 import type {
 	Attachment,
+	ErrorCode,
 	Message,
 	QueuedMessage,
 	StreamingMessage,
@@ -19,6 +20,7 @@ interface ActiveChatValue {
 	messageQueue: QueuedMessage[];
 	todos: TodoItem[];
 	error: string | null;
+	errorCode: ErrorCode | null;
 	sendMessage: (content: string, attachments?: Attachment[]) => void;
 	stopGeneration: () => void;
 	queueMessage: (content: string, attachments?: Attachment[]) => void;
@@ -35,6 +37,7 @@ export function useActiveChat(): ActiveChatValue {
 	const statusMessage = useChatStore((s) => s.statusMessage);
 	const todos = useChatStore((s) => s.todos);
 	const error = useChatStore((s) => s.error);
+	const errorCode = useChatStore((s) => s.errorCode);
 	const sendMessage = useChatStore((s) => s.sendMessage);
 	const stopGeneration = useChatStore((s) => s.stopGeneration);
 	const clearError = useChatStore((s) => s.clearError);
@@ -53,6 +56,7 @@ export function useActiveChat(): ActiveChatValue {
 		messageQueue,
 		todos,
 		error,
+		errorCode,
 		sendMessage,
 		stopGeneration,
 		queueMessage,
