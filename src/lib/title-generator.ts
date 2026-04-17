@@ -4,14 +4,12 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("TitleGenerator");
 
-const anthropic = createAnthropic({
-	apiKey: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
-});
-
 export async function generateChatTitle(
 	userMessage: string,
+	apiKey: string,
 ): Promise<string | null> {
 	try {
+		const anthropic = createAnthropic({ apiKey });
 		const { text } = await generateText({
 			model: anthropic("claude-haiku-4-5-20251001"),
 			system: "You are a title generator. Output only the title, nothing else.",

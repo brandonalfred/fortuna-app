@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { detectAuthError, INVALID_TOKEN_MESSAGE } from "./auth-error.mjs";
 import { SDKEventTranslator } from "./sdk-event-translator.mjs";
 
 const config = JSON.parse(
@@ -264,9 +265,15 @@ async function runAgent() {
 		}
 	} catch (err) {
 		console.error("[SSE Server] Agent error:", err);
+		const isAuth = detectAuthError(err);
 		sendEvent({
 			type: "error",
-			data: { message: "The analysis encountered an unexpected error." },
+			data: {
+				message: isAuth
+					? INVALID_TOKEN_MESSAGE
+					: "The analysis encountered an unexpected error.",
+				...(isAuth && { code: "invalid_token" }),
+			},
 		});
 		sendEvent({
 			type: "done",

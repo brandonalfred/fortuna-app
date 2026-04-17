@@ -13,6 +13,7 @@ import type {
 	ContentSegment,
 	DeltaEvent,
 	DoneEvent,
+	ErrorCode,
 	ErrorEvent,
 	Message,
 	ResultEvent,
@@ -54,6 +55,7 @@ interface ChatState {
 	currentChat: Chat | null;
 	sessionId: string | null;
 	error: string | null;
+	errorCode: ErrorCode | null;
 	abortController: AbortController | null;
 	stopReason: { stopReason: string; subtype: string } | null;
 	todos: TodoItem[];
@@ -254,6 +256,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			currentChat: null,
 			sessionId: null,
 			error: null,
+			errorCode: null,
 			abortController: null,
 			stopReason: null,
 			disconnectedChatId: null,
@@ -484,6 +487,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							lastEventAt: now,
 							statusMessage: null,
 							error: errorData.message,
+							errorCode: errorData.code ?? null,
 						});
 						break;
 					}
@@ -743,6 +747,29 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 							window.location.href = "/auth/signin";
 							return;
 						}
+						if (response.status === 403) {
+							const body = await response
+								.json()
+								.catch(
+									() => null as { error?: string; message?: string } | null,
+								);
+							if (body?.error === "token_required") {
+								set({
+									messages: get().messages.filter(
+										(m) => m.id !== userMessage.id,
+									),
+									streamingMessage: null,
+									streamingSegments: [],
+									error:
+										body.message ??
+										"Connect your Claude OAuth token to continue.",
+									errorCode: "token_required",
+								});
+								callbacks.getQueueStore().clear();
+								receivedDone = true;
+								return;
+							}
+						}
 						if (response.status === 409) {
 							log.warn("409 conflict — re-enqueuing message", {
 								chatId: get().currentChat?.id,
@@ -935,7 +962,7 @@ export function createChatStore(callbacks: ChatStoreCallbacks) {
 			},
 
 			clearError() {
-				set({ error: null });
+				set({ error: null, errorCode: null });
 			},
 
 			setError(error) {

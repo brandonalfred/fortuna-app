@@ -18,6 +18,7 @@ import {
 import { writeSSEServerFiles } from "./sandbox-sse-setup";
 import {
 	AGENT_ALLOWED_TOOLS,
+	AGENT_ENV_KEYS,
 	AGENT_MODEL,
 	collectEnvVars,
 	getAgentDefinitions,
@@ -42,6 +43,7 @@ export interface StreamAgentOptions {
 	prompt: string;
 	workspacePath: string;
 	chatId: string;
+	claudeOauthToken: string;
 	conversationHistory?: ConversationMessage[];
 	abortController?: AbortController;
 	timezone?: string;
@@ -250,8 +252,6 @@ async function verifyPythonPackages(sandbox: Sandbox): Promise<void> {
 	}
 }
 
-const AGENT_ENV_KEYS = ["ODDS_API_KEY", "API_SPORTS_KEY", "WEBSHARE_PROXY_URL"];
-
 // Browsers installed with PLAYWRIGHT_BROWSERS_PATH=0 live alongside the Python package;
 // scrapling needs this env var at runtime to find them
 const STATIC_ENV: Record<string, string> = { PLAYWRIGHT_BROWSERS_PATH: "0" };
@@ -289,6 +289,7 @@ async function resolveSandbox(
 export async function* streamViaSandbox({
 	prompt,
 	chatId,
+	claudeOauthToken,
 	conversationHistory = [],
 	timezone,
 	userFirstName,
@@ -338,7 +339,7 @@ export async function* streamViaSandbox({
 			cmd: "node",
 			args: ["agent-runner.mjs"],
 			env: {
-				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken,
 				BASH_ENV: "/vercel/sandbox/.agent-env.sh",
 				...envVars,
 			},
@@ -442,6 +443,7 @@ export async function setupDirectStream(
 	const {
 		prompt,
 		chatId,
+		claudeOauthToken,
 		conversationHistory = [],
 		timezone,
 		userFirstName,
@@ -546,7 +548,7 @@ export async function setupDirectStream(
 			cmd: "node",
 			args: ["sandbox-sse-server.mjs"],
 			env: {
-				CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN!,
+				CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken,
 				BASH_ENV: "/vercel/sandbox/.agent-env.sh",
 				...envVars,
 			},

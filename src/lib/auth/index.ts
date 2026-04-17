@@ -36,6 +36,7 @@ export const auth = betterAuth({
 			lastName: { type: "string", required: true },
 			phoneNumber: { type: "string", required: true },
 			preferences: { type: "string", required: false },
+			hasClaudeToken: { type: "boolean", input: false },
 		},
 	},
 	hooks: {

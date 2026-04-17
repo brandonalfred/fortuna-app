@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { activeSessions } from "@/lib/agent/active-sessions";
+import {
+	detectAuthError,
+	INVALID_TOKEN_MESSAGE,
+} from "@/lib/agent/auth-error.mjs";
 import type { Query } from "@/lib/agent/client";
 import {
 	createLocalAgentQuery,
@@ -35,9 +39,10 @@ import {
 	isTextMimeType,
 	regenerateAttachmentUrls,
 } from "@/lib/r2";
+import { requireUserClaudeToken } from "@/lib/require-token";
 import { generateChatTitle } from "@/lib/title-generator";
 import { isInternalTool } from "@/lib/tool-labels";
-import type { Attachment, ConversationMessage } from "@/lib/types";
+import type { Attachment, ConversationMessage, ErrorCode } from "@/lib/types";
 import { sendMessageSchema } from "@/lib/validations/chat";
 
 function toUserFriendlyError(error: unknown): string {
@@ -51,6 +56,17 @@ function toUserFriendlyError(error: unknown): string {
 	}
 
 	return "Something went wrong. Please try again.";
+}
+
+function sendAgentError(sse: SSEWriter, error: unknown, fallback: string) {
+	if (detectAuthError(error)) {
+		sse.send("error", {
+			message: INVALID_TOKEN_MESSAGE,
+			code: "invalid_token" satisfies ErrorCode,
+		});
+	} else {
+		sse.send("error", { message: fallback });
+	}
 }
 
 interface SSEWriter {
@@ -150,6 +166,12 @@ export async function POST(req: Request): Promise<Response> {
 			return unauthorized();
 		}
 
+		const tokenGate = await requireUserClaudeToken(user.id);
+		if (!tokenGate.ok) {
+			return tokenGate.response;
+		}
+		const userClaudeToken = tokenGate.token;
+
 		const body = await req.json();
 		const parsed = sendMessageSchema.safeParse(body);
 
@@ -219,7 +241,7 @@ export async function POST(req: Request): Promise<Response> {
 
 		const titlePromise =
 			!existingChat && message
-				? generateChatTitle(message).catch((e) => {
+				? generateChatTitle(message, userClaudeToken).catch((e) => {
 						console.warn("[Chat API] Title generation failed:", e);
 						return null;
 					})
@@ -373,6 +395,7 @@ export async function POST(req: Request): Promise<Response> {
 							prompt: agentPrompt,
 							workspacePath,
 							chatId: chat.id,
+							claudeOauthToken: userClaudeToken,
 							conversationHistory,
 							timezone,
 							userFirstName: user.firstName ?? undefined,
@@ -411,10 +434,11 @@ export async function POST(req: Request): Promise<Response> {
 								isProcessing: false,
 							},
 						});
-						sse.send("error", {
-							message:
-								"Failed to initialize analysis engine. Please try again.",
-						});
+						sendAgentError(
+							sse,
+							error,
+							"Failed to initialize analysis engine. Please try again.",
+						);
 					} finally {
 						try {
 							controller.close();
@@ -467,6 +491,7 @@ export async function POST(req: Request): Promise<Response> {
 					prompt: agentPrompt,
 					workspacePath,
 					chatId: chat.id,
+					claudeOauthToken: userClaudeToken,
 					conversationHistory,
 					abortController,
 					timezone,
@@ -806,7 +831,7 @@ export async function POST(req: Request): Promise<Response> {
 				} catch (error) {
 					if (!abortController.signal.aborted) {
 						console.error("[Chat API] Stream error:", error);
-						sse.send("error", { message: toUserFriendlyError(error) });
+						sendAgentError(sse, error, toUserFriendlyError(error));
 					}
 				} finally {
 					if (heartbeatInterval) clearInterval(heartbeatInterval);

@@ -14,6 +14,8 @@ model User {
   lastName      String    @map("last_name")
   phoneNumber   String    @map("phone_number")
   preferences   String?   @map("preferences") @db.Text
+  claudeOauthTokenEncrypted String?  @map("claude_oauth_token_encrypted") @db.Text
+  hasClaudeToken            Boolean  @default(false) @map("has_claude_token")
   emailVerified Boolean   @default(false) @map("email_verified")
   image         String?
   role          String?   @default("user")
