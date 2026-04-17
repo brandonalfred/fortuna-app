@@ -173,7 +173,7 @@ function ClaudeTokenSection({ hasToken }: { hasToken: boolean }) {
 	const [removing, setRemoving] = useState(false);
 
 	const refreshSession = useCallback(async () => {
-		await authClient.getSession({ query: { disableCookieCache: true } });
+		authClient.$store.notify("$sessionSignal");
 		router.refresh();
 	}, [router]);
 
@@ -221,8 +221,12 @@ function ClaudeTokenSection({ hasToken }: { hasToken: boolean }) {
 					Claude OAuth Token
 				</h3>
 				<p className="mt-1 text-xs text-text-tertiary">
-					Fortuna runs the agent with your Claude account. Paste a token from
-					your Claude Max plan to enable chat.
+					Run{" "}
+					<code className="font-mono text-text-secondary">
+						claude setup-token
+					</code>{" "}
+					in your terminal, sign in, and paste the{" "}
+					<code className="font-mono">{CLAUDE_TOKEN_PREFIX}</code> token below.
 				</p>
 			</div>
 
@@ -231,7 +235,7 @@ function ClaudeTokenSection({ hasToken }: { hasToken: boolean }) {
 					<>
 						<div className="flex items-center justify-between gap-3">
 							<span className="font-mono text-sm text-text-secondary">
-								sk-ant-•••••••connected
+								sk-ant-••••••• connected
 							</span>
 							<Button
 								variant="outline"

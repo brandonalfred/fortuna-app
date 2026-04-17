@@ -31,18 +31,13 @@ export function TokenGate({ children }: TokenGateProps) {
 				</p>
 
 				<div className="mt-4 rounded-xl bg-bg-tertiary px-3 py-3 text-xs text-text-tertiary">
-					Sign in to{" "}
-					<a
-						href="https://claude.ai/settings/keys"
-						target="_blank"
-						rel="noreferrer noopener"
-						className="text-accent-primary underline"
-					>
-						claude.ai
-					</a>
-					, create an OAuth token (starts with{" "}
-					<code className="font-mono">{CLAUDE_TOKEN_PREFIX}</code>), and paste
-					it on the next screen.
+					Run{" "}
+					<code className="font-mono text-text-secondary">
+						claude setup-token
+					</code>{" "}
+					in your terminal, sign in, then copy the token (starts with{" "}
+					<code className="font-mono">{CLAUDE_TOKEN_PREFIX}</code>) and paste it
+					on the next screen.
 				</div>
 
 				<Button
