@@ -51,7 +51,7 @@ async function createSnapshot(): Promise<void> {
 		cmd: "bash",
 		args: [
 			"-c",
-			"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel at-spi2-atk libdrm libxkbcommon mesa-libgbm nss alsa-lib",
+			"dnf install -y python3 python3-pip python3-devel jq sqlite libxml2-devel libxslt-devel at-spi2-atk libdrm libxkbcommon mesa-libgbm nss alsa-lib libXcomposite libXdamage libXfixes libXrandr cairo cups-libs pango",
 		],
 		sudo: true,
 	});
