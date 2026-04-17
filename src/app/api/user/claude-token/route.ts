@@ -29,7 +29,7 @@ export async function POST(req: Request): Promise<Response> {
 						: "Could not validate the token. Try again.";
 			return Response.json(
 				{ ok: false, code: result.reason, message },
-				{ status: 400 },
+				{ status: result.reason === "rate_limited" ? 429 : 400 },
 			);
 		}
 

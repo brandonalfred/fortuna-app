@@ -6,7 +6,6 @@ const KEYWORDS = [
 	"invalid api key",
 	"authentication_error",
 	"oauth token",
-	"unauthorized",
 ];
 
 export const INVALID_TOKEN_MESSAGE =
