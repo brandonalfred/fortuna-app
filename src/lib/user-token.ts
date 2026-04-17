@@ -9,7 +9,11 @@ export async function getUserClaudeToken(
 		select: { claudeOauthTokenEncrypted: true },
 	});
 	if (!user?.claudeOauthTokenEncrypted) return null;
-	return decryptSecret(user.claudeOauthTokenEncrypted);
+	try {
+		return decryptSecret(user.claudeOauthTokenEncrypted);
+	} catch {
+		return null;
+	}
 }
 
 export async function setUserClaudeToken(
