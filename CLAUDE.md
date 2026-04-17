@@ -197,8 +197,7 @@ Each chat gets its own ephemeral Vercel Sandbox instance (5-hour timeout). Sandb
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string (Prisma format) |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Fallback Claude Agent SDK OAuth token (per-user tokens take precedence) |
-| `TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte key for AES-256-GCM encryption of stored OAuth tokens. Generate with `openssl rand -base64 32`. Required at startup. |
+| `TOKEN_ENCRYPTION_KEY` | AES-256 key for encrypting user OAuth tokens (`openssl rand -base64 32`) |
 | `ODDS_API_KEY` | The Odds API key for betting odds |
 | `API_SPORTS_KEY` | API-Sports.io key for player/team statistics |
 | `WORKSPACE_ROOT` | Agent workspace root (default: `./workspace`) |
